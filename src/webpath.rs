@@ -215,10 +215,11 @@ impl WebPath {
         if !path.starts_with(prefix) {
             return Err(ParseError::IllegalPath);
         }
-        let plen = prefix.len();
+        let pflen = prefix.len();
         if prefix.ends_with(b"/") {
-            prefix = &prefix[..plen-1];
-        } else if path[plen] != b'/' {
+            prefix = &prefix[..pflen-1];
+        } else if path.len() != pflen &&
+                  (path.len() < pflen || path[pflen] != b'/') {
             return Err(ParseError::IllegalPath);
         }
         Ok(WebPath{
