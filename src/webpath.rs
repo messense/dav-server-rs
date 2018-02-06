@@ -6,6 +6,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path,PathBuf};
 
 use hyper;
+use mime_guess;
 
 use super::DavError;
 
@@ -368,6 +369,19 @@ impl WebPath {
             self.path.push(b'/');
         }
         self.path.extend_from_slice(b);
+    }
+
+    pub(crate) fn get_mime_type_str(&self) -> &'static str {
+        let name = self.file_name();
+        let d = name.rsplitn(2, |&c| c == b'.').collect::<Vec<&[u8]>>();
+        if d.len() > 1 {
+            if let Ok(ext) = std::str::from_utf8(d[0]) {
+                if let Some(t) = mime_guess::get_mime_type_str(ext) {
+                    return t;
+                }
+            }
+        }
+        "application/octet-stream"
     }
 }
 

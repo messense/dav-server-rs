@@ -18,7 +18,8 @@ impl super::DavHandler {
         let head = req.method == hyper::method::Method::Head;
 
         // open file and get metadata.
-        let mut file = self.fs.open(&self.path(&req), OpenOptions::read())
+        let path = self.path(&req);
+        let mut file = self.fs.open(&path, OpenOptions::read())
             .map_err(|e| fserror(&mut res, e))?;
         let meta = file.metadata();
         if !meta.is_file() {
@@ -96,6 +97,8 @@ impl super::DavHandler {
         }
 
         // set content-length and start.
+        res.headers_mut().set_raw("Content-Type",
+                                   vec!(path.get_mime_type_str().as_bytes().to_vec()));
         res.headers_mut().set(hyper::header::ContentLength(count));
         res.headers_mut().set(hyper::header::AcceptRanges(vec![hyper::header::RangeUnit::Bytes]));
 

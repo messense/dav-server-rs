@@ -13,6 +13,7 @@ extern crate sha2;
 extern crate url;
 extern crate xmltree;
 extern crate uuid;
+extern crate mime_guess;
 
 mod errors;
 mod headers;

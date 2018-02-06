@@ -294,7 +294,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         (e, true)
     }
 
-    fn build_prop(&self, prop: &Element, meta: &DavMetaData, docontent: bool) -> (Element, bool) {
+    fn build_prop(&self, prop: &Element, path: &WebPath, meta: &DavMetaData, docontent: bool) -> (Element, bool) {
         match prop.name.as_str() {
             "creationdate" => {
                 if let Ok(time) = meta.created() {
@@ -314,7 +314,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                 return if meta.is_dir() {
                     self.build_elem(docontent, prop, "httpd/unix-directory")
                 } else {
-                    self.build_elem(docontent, prop, "text/plain")
+                    self.build_elem(docontent, prop, path.get_mime_type_str())
                 };
             },
             "getlastmodified" => {
@@ -369,7 +369,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         let mut found = Element::new2("D:prop");
         let mut notfound = Element::new2("D:prop");
         for mut p in &self.props {
-            let (e, ok) = self.build_prop(p, meta, self.name != "propname");
+            let (e, ok) = self.build_prop(p, path, meta, self.name != "propname");
             if ok {
                 found.push(e);
             } else {
