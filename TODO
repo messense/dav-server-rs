@@ -1,0 +1,15 @@
+
+- If header support in conditional.rs
+- Add a real locksystem interface, and a "memls"
+- Add a real propsystem interface, and a "memps"
+- Finish "memfs"
+
+- score 100% against the litmus test :)
+
+- move filesystem interface to pathbuf
+
+- add documentation
+- add tests, tests ...
+
+- port to hyper 0.11
+

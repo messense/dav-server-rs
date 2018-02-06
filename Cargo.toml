@@ -1,0 +1,24 @@
+[package]
+name = "webdav-lib"
+version = "0.1.0"
+authors = ["Miquel van Smoorenburg <mikevs@xs4all.net>"]
+
+[lib]
+name = "webdav_lib"
+path = "src/lib.rs"
+
+[dependencies]
+hyper = "0.10"
+log = "0.3"
+serde = "1.0"
+serde_derive = "1.0"
+env_logger = "0.4"
+xml-rs = "0.6"
+url = "1.6"
+regex = "0.2"
+libc = "0.2"
+time = "0.1"
+sha2 = "0.7"
+xmltree = "0.7"
+uuid = { version = "0.4", features = ["use_std", "v4"] }
+lazy_static = "1.0"
