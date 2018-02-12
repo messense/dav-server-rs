@@ -3,8 +3,11 @@ use std;
 use std::time::{SystemTime,UNIX_EPOCH};
 use std::io::{Read,Write,Seek};
 use std::fmt::Debug;
+use std::collections::HashMap;
 
-use super::webpath::WebPath;
+use webpath::WebPath;
+use xmltree::Element;
+use hyper::status::StatusCode;
 
 macro_rules! notimplemented {
     ($method:expr) => {
@@ -52,6 +55,11 @@ pub trait DavFileSystem : Debug + Sync + Send {
 
     // helper so that clone() works.
     fn box_clone(&self) -> Box<DavFileSystem>;
+}
+
+pub trait DavProps : Debug {
+    fn patch_props(&mut self, path: &WebPath, set: &Element, del: &Element) -> FsResult<HashMap<StatusCode, Vec<Element>>>;
+    fn get_props(&self, path: &WebPath) -> FsResult<Vec<Element>>;
 }
 
 // generic Clone, calls implementation-specific box_clone().
