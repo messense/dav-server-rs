@@ -8,8 +8,9 @@ use hyper;
 use hyper::header::{Header, HeaderFormat,EntityTag};
 
 use url;
+use regex::Regex;
 
-use super::systemtime_to_timespec;
+use systemtime_to_timespec;
 
 header! { (WWWAuthenticate, "WWW-Authenticate") => [String] }
 header! { (DAV, "DAV") => [String] }
@@ -18,6 +19,10 @@ header! { (ContentType, "Content-Type") => [String] }
 header! { (LockToken, "Lock-Token") => [String] }
 header! { (XLitmus, "X-Litmus") => [String] }
 header! { (ContentLocation, "Content-Location") => [String] }
+
+lazy_static! {
+   static ref RE_URL : Regex = Regex::new(r"https?://[^/]*([^#?]+).*$").unwrap();
+}
 
 #[derive(Debug,Copy,Clone,PartialEq)]
 pub enum Depth {
@@ -57,7 +62,7 @@ impl HeaderFormat for Depth {
 }
 
 #[derive(Debug,Clone,PartialEq)]
-pub struct Destination(pub url::Url);
+pub struct Destination(pub String);
 
 impl Header for Destination {
     fn header_name() -> &'static str {
@@ -66,9 +71,21 @@ impl Header for Destination {
 
     fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<Destination> {
         if raw.len() == 1 {
-            let s = String::from_utf8_lossy(raw[0].as_slice());
-            let url = url::Url::parse(&s).map_err(|_|hyper::Error::Header)?;
-            return Ok(Destination(url));
+            let s = match std::str::from_utf8(raw[0].as_slice()) {
+                Ok(s) => s,
+                Err(_) => return Err(hyper::Error::Header),
+            };
+            if s.starts_with("/") {
+                return Ok(Destination(s.to_string()));
+            }
+            match RE_URL.captures(s) {
+                Some(caps) => {
+                    if let Some(path) = caps.get(1) {
+                        return Ok(Destination(path.as_str().to_string()));
+                    }
+                }
+                _ => {},
+            }
         }
         Err(hyper::Error::Header)
     }

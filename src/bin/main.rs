@@ -10,8 +10,8 @@
 //  simon   simon       simon       <crate>/davdata/simon 
 //
 
-#[macro_use]
-extern crate hyper;
+#[macro_use] extern crate hyper;
+#[macro_use] extern crate clap;
 extern crate log;
 extern crate env_logger;
 extern crate webdav_lib;
@@ -22,27 +22,30 @@ use hyper::status::StatusCode;
 
 use webdav_lib as dav;
 use dav::DavHandler;
-//use dav::localfs;
+use dav::localfs;
 use dav::memfs;
 use dav::fs::DavFileSystem;
 
 header! { (WWWAuthenticate, "WWW-Authenticate") => [String] }
 
 #[derive(Debug)]
-struct DirInfo<'a> {
-    dirpath:   &'a str,
-    prefix:    &'a str,
-}
-
-#[derive(Debug)]
 struct Server {
-    fs:     Box<DavFileSystem>,
+    fs:             Option<Box<DavFileSystem>>,
+    directory:      String,
+    do_accounts:    bool,
 }
 
 impl Server {
-    pub fn new() -> Self {
+    pub fn new(directory: String, do_accounts: bool) -> Self {
+        let fs : Option<Box<DavFileSystem>> = if directory != "" {
+            None
+        } else {
+            Some(memfs::MemFs::new())
+        };
         Server{
-            fs:     memfs::MemFs::new()
+            fs:             fs,
+            directory:      directory,
+            do_accounts:    do_accounts,
         }
     }
 }
@@ -67,12 +70,45 @@ fn authenticate(req: &Request, res: &mut Response, user: &str, pass: &str) -> bo
     }
 }
 
-impl Handler for Server {
-    fn handle<'a, 'k>(&'a self, req: Request<'a, 'k>, mut res: Response<'a>) {
+impl Server {
 
-        // Get request path.
+    fn auth(&self, req: &Request, mut res: &mut Response, path: String) -> Result<(&str, &str), ()> {
+
+        // path can start with "/public" (no authentication needed)
+        // or "/username". known users are "mike" and "simon".
+        //
         // NOTE we no not percent-decode here, if this was a real
         // application that would be bad.
+        let x = path.splitn(3, "/").collect::<Vec<&str>>();
+        let (prefix, dir) = match x[1] {
+            "public" => ("/public", "public" ),
+            "mike" => {
+                if !authenticate(&req, &mut res, "mike", "mike") {
+                    return Err(());
+                }
+                ("/mike", "mike")
+            },
+            "simon" => {
+                if !authenticate(&req, &mut res, "simon", "simon") {
+                    return Err(());
+                }
+                ("/simon", "simon")
+            },
+            _ => {
+                *res.status_mut() = StatusCode::Forbidden;
+                return Err(());
+            }
+        };
+        Ok((prefix, dir))
+    }
+}
+
+impl Handler for Server {
+
+    //fn handle<'a, 'k>(&'a self, req: Request<'a, 'k>, mut res: Response<'a>) {
+    fn handle(&self, req: Request, mut res: Response) {
+
+        // Get request path.
         let path = match req.uri {
             hyper::uri::RequestUri::AbsolutePath(ref s) => s.to_string(),
             _ => {
@@ -81,42 +117,25 @@ impl Handler for Server {
             }
         };
 
-        // path can start with "/public" (no authentication needed)
-        // or "/username". known users are "mike" and "simon".
-        let x = path.splitn(3, "/").collect::<Vec<&str>>();
-        let dirinfo = match x[1] {
-            "public" => DirInfo {
-                dirpath: "../davdata/public",
-                prefix: "/public",
-            },
-            "mike" => {
-                if !authenticate(&req, &mut res, "mike", "mike") {
-                    return;
-                }
-                DirInfo {
-                    dirpath: "../davdata/mike",
-                    prefix: "/mike",
-                }
-            },
-            "simon" => {
-                if !authenticate(&req, &mut res, "simon", "simon") {
-                    return;
-                }
-                DirInfo {
-                    dirpath: "../davdata/simon",
-                    prefix: "/simon",
-                }
-            },
-            _ => {
-                *res.status_mut() = StatusCode::Forbidden;
-                return
+        // handle logins.
+        let (dir, prefix) = if self.do_accounts {
+            match self.auth(&req, &mut res, path) {
+                Ok((d, p)) => (self.directory.clone() + "/" + d, p),
+                Err(_) => return,
             }
+        } else {
+            (self.directory.clone(), "/")
         };
 
-        // build davhandler
-        //let fs = localfs::LocalFs::new(dirinfo.dirpath);
-        let dav = DavHandler::new(dirinfo.prefix, self.fs.clone());
+        // memfs or localfs.
+        let (fs, prefix) : (Box<DavFileSystem>, &str) = if let Some(ref fs) = self.fs {
+            ((*fs).clone(), "/")
+        } else {
+            (localfs::LocalFs::new(dir), prefix)
+        };
 
+        // instantiate and run a new handler.
+        let dav = DavHandler::new(prefix, fs);
         dav.handle(req, res);
     }
 }
@@ -124,7 +143,25 @@ impl Handler for Server {
 fn main() {
     env_logger::init().unwrap();
 
-    let server = hyper::server::Server::http("0.0.0.0:4918").unwrap();
-    server.handle_threads(Server::new(), 8).unwrap();
+    let matches = clap_app!(webdav_lib =>
+        (version: "0.1")
+        (@arg PORT: -p --port +takes_value "port to listen on (4918)")
+        (@arg DIR: -d --dir +takes_value "local directory to serve")
+        (@arg mem: -m --memfs "serve from ephemeral memory filesystem")
+        (@arg accounts: -a --accounts "with fake mike/simon accounts")
+    ).get_matches();
+
+    let (dir, name) = match matches.value_of("DIR") {
+        Some(dir) => (dir, dir),
+        None => ("", "memory filesystem"),
+    };
+
+    let port = matches.value_of("PORT").unwrap_or("4918");
+    let port = "0.0.0.0:".to_string() + port;
+    let hyper_server = hyper::server::Server::http(&port).unwrap();
+    let dav_server = Server::new(dir.to_string(), matches.is_present("accounts"));
+
+    println!("Serving {} on {}", name, port);
+    hyper_server.handle_threads(dav_server, 8).unwrap();
 }
 

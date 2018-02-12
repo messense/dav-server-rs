@@ -6,6 +6,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path,PathBuf};
 
 use hyper;
+use hyper::status::StatusCode;
 use mime_guess;
 
 use super::DavError;
@@ -26,6 +27,7 @@ impl std::fmt::Display for WebPath {
 pub enum ParseError {
     InvalidPath,
     IllegalPath,
+    Forbidden,
 }
 
 impl Error for ParseError {
@@ -46,6 +48,7 @@ impl From<ParseError> for DavError {
         match e {
             ParseError::InvalidPath => DavError::InvalidPath,
             ParseError::IllegalPath => DavError::IllegalPath,
+            ParseError::Forbidden => DavError::Status(StatusCode::Forbidden),
         }
     }
 }
@@ -191,7 +194,11 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
     for segment in segments {
         match segment {
             b"." | b"" => {},
-            b".." => { v.pop(); v.pop(); },
+            b".." => {
+                if v.len() < 2 {
+                    return Err(ParseError::Forbidden);
+                }
+                v.pop(); v.pop(); },
             s => {
                 if let Err(e) = valid_segment(s) {
                     Err(e)?;
@@ -369,14 +376,6 @@ impl WebPath {
     }
 
     pub(crate) fn push_segment(&mut self, b: &[u8]) {
-        if !self.is_collection() {
-            self.path.push(b'/');
-        }
-        self.path.extend_from_slice(b);
-    }
-
-    pub(crate) fn push_osstr<P: AsRef<OsStr>>(&mut self, path: P) {
-        let b = path.as_ref().as_bytes();
         if !self.is_collection() {
             self.path.push(b'/');
         }

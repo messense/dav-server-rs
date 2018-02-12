@@ -249,7 +249,7 @@ impl super::DavHandler {
         // decode and validate destination.
         let dest = req.headers.get::<headers::Destination>()
                     .ok_or(statuserror(&mut res, SC::BadRequest))?;
-        let dest = match WebPath::from_url(&dest.0, &self.prefix) {
+        let dest = match WebPath::from_str(&dest.0, &self.prefix) {
             Err(webpath::ParseError::IllegalPath) => Err(statuserror(&mut res, SC::BadGateway)),
             Err(e) => Err(daverror(&mut res, e)),
             Ok(d) => Ok(d),
