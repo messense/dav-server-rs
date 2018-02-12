@@ -49,6 +49,16 @@ pub trait DavFileSystem : Debug + Sync + Send {
     fn copy(&self, _from: &WebPath, _to: &WebPath) -> FsResult<()> {
         notimplemented!("copy")
     }
+
+    // helper so that clone() works.
+    fn box_clone(&self) -> Box<DavFileSystem>;
+}
+
+// generic Clone, calls implementation-specific box_clone().
+impl Clone for Box<DavFileSystem> {
+    fn clone(&self) -> Box<DavFileSystem> {
+        self.box_clone()
+    }
 }
 
 pub trait DavReadDir : Iterator<Item=Box<DavDirEntry>> + Debug {

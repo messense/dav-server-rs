@@ -22,7 +22,7 @@ use sha2::{self,Digest};
 use webpath::WebPath;
 use fs::*;
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct LocalFs {
     basedir:    PathBuf,
 }
@@ -58,6 +58,12 @@ impl LocalFs {
 }
 
 impl DavFileSystem for LocalFs {
+
+    // boilerplate helper so that clone() works.
+    fn box_clone(&self) -> Box<DavFileSystem> {
+        Box::new((*self).clone())
+    }
+
     fn metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>> {
         match std::fs::metadata(self.fspath(path)) {
             Ok(meta) => Ok(Box::new(LocalFsMetaData(meta))),

@@ -25,9 +25,11 @@ mod method_props;
 mod multierror;
 mod conditional;
 mod xmltree_ext;
+mod tree;
 
 pub mod fs;
 pub mod localfs;
+pub mod memfs;
 pub mod webpath;
 
 use hyper::header::Date;
