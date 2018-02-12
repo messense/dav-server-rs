@@ -10,6 +10,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::time::{Duration,UNIX_EPOCH,SystemTime};
 use std::io::ErrorKind;
+use std::os::unix::ffi::OsStrExt;
 
 use libc;
 
@@ -41,7 +42,7 @@ struct LocalFsReadDir {
 #[derive(Debug)]
 struct LocalFsDirEntry {
     entry:      std::fs::DirEntry,
-    path:       WebPath,
+    name:       Vec<u8>,
 }
 
 impl LocalFs {
@@ -133,10 +134,8 @@ impl Iterator for LocalFsReadDir {
             Some(Err(_)) => { return None },
             None => { return None },
         };
-        let mut path = self.path.to_owned();
-        path.push_osstr(entry.file_name());
         Some(Box::new(LocalFsDirEntry{
-            path:   path,
+            name:   entry.file_name().as_bytes().to_vec(),
             entry:  entry,
         }))
     }
@@ -150,8 +149,8 @@ impl DavDirEntry for LocalFsDirEntry {
         }
     }
 
-    fn path(&self) -> WebPath {
-        self.path.clone()
+    fn name(&self) -> Vec<u8> {
+        self.name.clone()
     }
 
     fn is_dir(&self) -> FsResult<bool> { Ok(self.entry.file_type()?.is_dir()) }

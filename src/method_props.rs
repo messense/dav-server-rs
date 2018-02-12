@@ -133,11 +133,12 @@ impl DavHandler {
                     continue;
                 }
             };
-            let mut path = dirent.path();
+            let mut npath = path.clone();
+            npath.push_segment(&dirent.name());
             if meta.is_dir() {
-                path.add_slash();
+                npath.add_slash();
             }
-            propwriter.write_liveprops(&path, meta.as_ref())?;
+            propwriter.write_liveprops(&npath, meta.as_ref())?;
         }
         Ok(())
     }

@@ -22,7 +22,9 @@ use hyper::status::StatusCode;
 
 use webdav_lib as dav;
 use dav::DavHandler;
-use dav::localfs;
+//use dav::localfs;
+use dav::memfs;
+use dav::fs::DavFileSystem;
 
 header! { (WWWAuthenticate, "WWW-Authenticate") => [String] }
 
@@ -33,11 +35,15 @@ struct DirInfo<'a> {
 }
 
 #[derive(Debug)]
-struct Server {}
+struct Server {
+    fs:     Box<DavFileSystem>,
+}
 
 impl Server {
     pub fn new() -> Self {
-        Server{}
+        Server{
+            fs:     memfs::MemFs::new()
+        }
     }
 }
 
@@ -108,8 +114,8 @@ impl Handler for Server {
         };
 
         // build davhandler
-        let fs = localfs::LocalFs::new(dirinfo.dirpath);
-        let dav = DavHandler::new(dirinfo.prefix, fs);
+        //let fs = localfs::LocalFs::new(dirinfo.dirpath);
+        let dav = DavHandler::new(dirinfo.prefix, self.fs.clone());
 
         dav.handle(req, res);
     }

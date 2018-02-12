@@ -252,6 +252,14 @@ impl WebPath {
         WebPath::from_str(url.path(), prefix)
     }
 
+    // from raw slice
+    pub fn from_raw(b: &[u8], prefix: &str) -> Self {
+        WebPath{
+            prefix: prefix.as_bytes().to_vec(),
+            path: b.to_vec(),
+        }
+    }
+
     pub fn is_star(&self) -> bool {
         self.path == b"*"
     }
@@ -282,6 +290,10 @@ impl WebPath {
         }
         let os_string = OsStr::from_bytes(b).to_owned();
         PathBuf::from(os_string)
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.path.as_slice()
     }
 
     // as OS specific Path, relative (remove first slash)

@@ -91,12 +91,13 @@ impl super::DavHandler {
                 Err(e) => { result = Err(add_status(&mut res, path, e)); continue },
             };
 
-            let mut path = dirent.path();
-            path.add_slash_if(meta.is_dir());
+            let mut npath = path.clone();
+            npath.push_segment(&dirent.name());
+            npath.add_slash_if(meta.is_dir());
 
             // do the actual work. If this fails with a non-fs related error,
             // return immediately.
-            if let Err(e) = self.delete_items(&mut res, depth, meta, &path) {
+            if let Err(e) = self.delete_items(&mut res, depth, meta, &npath) {
                 match e {
                     DavError::Status(_) => {
                         result = Err(e);
@@ -203,15 +204,17 @@ impl super::DavHandler {
                     return Err(e);
                 }
             };
-            let mut path = dirent.path();
-            let mut dest = dest.clone();
-            dest.push_segment(path.file_name());
+            let mut name = dirent.name();
+            let mut nsrc = source.clone();
+            let mut ndest = dest.clone();
+            nsrc.push_segment(&name);
+            ndest.push_segment(&name);
 
             if meta.is_dir() {
-                path.add_slash();
-                dest.add_slash();
+                nsrc.add_slash();
+                ndest.add_slash();
             }
-            if let Err(e) = self.do_copy(&path, topdest, &dest, depth, multierror) {
+            if let Err(e) = self.do_copy(&nsrc, topdest, &ndest, depth, multierror) {
                 retval = Err(e);
             }
         }

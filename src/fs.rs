@@ -27,7 +27,7 @@ pub enum FsError {
 }
 pub type FsResult<T> = std::result::Result<T, FsError>;
 
-pub trait DavFileSystem : Debug {
+pub trait DavFileSystem : Debug + Sync + Send {
     fn open(&self, path: &WebPath, options: OpenOptions) -> FsResult<Box<DavFile>>;
     fn read_dir(&self, path: &WebPath) -> FsResult<Box< DavReadDir<Item=Box<DavDirEntry>> >>;
     fn metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>>;
@@ -55,7 +55,7 @@ pub trait DavReadDir : Iterator<Item=Box<DavDirEntry>> + Debug {
 }
 
 pub trait DavDirEntry: Debug {
-    fn path(&self) -> WebPath;
+    fn name(&self) -> Vec<u8>;
     fn metadata(&self) -> FsResult<Box<DavMetaData>>;
 
     // defaults. implementations can override this if their
