@@ -7,9 +7,13 @@ use std::io::Result as IoResult;
 use std::time::SystemTime;
 use std::io::{Error,ErrorKind};
 use std::sync::{Arc,Mutex};
+use std::collections::HashMap;
 
-use super::webpath::WebPath;
-use super::fs::*;
+use xmltree::Element;
+use webpath::WebPath;
+use hyper::status::StatusCode;
+
+use fs::*;
 
 use tree;
 
@@ -28,11 +32,13 @@ enum MemFsNode {
 
 #[derive(Debug,Clone)]
 struct MemFsDirNode {
+    props:      Vec<Element>,
     mtime:      SystemTime,
 }
 
 #[derive(Debug,Clone)]
 struct MemFsFileNode {
+    props:      Vec<Element>,
     mtime:      SystemTime,
     data:       Vec<u8>,
 }
@@ -202,6 +208,25 @@ impl DavFileSystem for MemFs {
     }
 }
 
+impl DavProps for MemFs {
+    fn patch_props(&mut self, path: &WebPath, set: &Element, del: &Element) -> FsResult<HashMap<StatusCode, Vec<Element>>> {
+        let tree = &mut *self.tree.lock().unwrap();
+        let node_id = tree.lookup(path.as_bytes())?;
+        unimplemented!()
+    }
+
+    fn get_props(&self, path: &WebPath) -> FsResult<Vec<Element>> {
+        let tree = &mut *self.tree.lock().unwrap();
+        let node_id = tree.lookup(path.as_bytes())?;
+        let node = tree.get_node(node_id)?;
+        let props = match node {
+            &MemFsNode::Dir(ref d) => d.props.clone(),
+            &MemFsNode::File(ref f) => f.props.clone(),
+        };
+        Ok(props)
+    }
+}
+
 impl DavReadDir for MemFsReadDir {}
 
 impl Iterator for MemFsReadDir {
@@ -313,14 +338,16 @@ impl Seek for MemFsFile {
 impl MemFsNode {
     fn new_dir() -> MemFsNode {
         MemFsNode::Dir(MemFsDirNode{
-            mtime: SystemTime::now(),
+            mtime:  SystemTime::now(),
+            props:  Vec::new(),
         })
     }
 
     fn new_file() -> MemFsNode {
         MemFsNode::File(MemFsFileNode{
-            mtime: SystemTime::now(),
-            data: Vec::new(),
+            mtime:  SystemTime::now(),
+            props:  Vec::new(),
+            data:   Vec::new(),
         })
     }
 
