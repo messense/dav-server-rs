@@ -24,6 +24,7 @@ use fs::*;
 
 use conditional::ifmatch;
 use errors::DavError;
+use fserror_to_status;
 
 use method_lock::{list_lockdiscovery,list_supportedlock};
 use {DavHandler,DavResult};
@@ -45,7 +46,14 @@ lazy_static! {
     static ref ALLPROP : Vec<Element> = {
         let mut v = Vec::new();
         for a in ALLPROP_STR {
-            v.push(Element::new2(*a));
+            let mut e = Element::new2(*a);
+            e.namespace = match e.prefix.as_ref().map(|x| x.as_str()) {
+                Some("D") => Some(NS_DAV_URI.to_string()),
+                Some("A") => Some(NS_APACHE_URI.to_string()),
+                Some("X") => Some(NS_XS4ALL_URI.to_string()),
+                _ => None,
+            };
+            v.push(e);
         }
         v
     };
@@ -57,6 +65,7 @@ struct PropWriter<'a, 'k: 'a> {
     emitter:    Emitter<'k>,
     name:       &'a str,
     props:      Vec<Element>,
+    fs:         &'a Box<DavFileSystem>,
 }
 
 impl DavHandler {
@@ -67,27 +76,33 @@ impl DavHandler {
 
         let depth = match req.headers.get::<headers::Depth>() {
             Some(&headers::Depth::Infinity) | None => {
-                *res.status_mut() = SC::Forbidden;
-                write!(res.start()?, "PROPFIND requests with a Depth of \"infinity\" are not allowed\r\n")?;
-                return Ok(());
+                if let None = req.headers.get::<headers::XLitmus>() {
+                    *res.status_mut() = SC::Forbidden;
+                    write!(res.start()?, "PROPFIND requests with a Depth of \"infinity\" are not allowed\r\n")?;
+                    return Err(DavError::Status(SC::Forbidden));
+                }
+                headers::Depth::Infinity
             },
             Some(d) => d.clone(),
         };
 
         let (path, meta) = self.fixpath(&req, &mut res).map_err(|e| fserror(&mut res, e))?;
 
-        let root = match Element::parse2(Cursor::new(xmldata)) {
-            Ok(t) => {
-                if t.name == "propfind" &&
-                   t.namespace == Some("DAV:".to_owned()) {
-                       Some(t)
-                } else {
-                    return Err(DavError::XmlParseError);
-                }
-            },
-            Err(DavError::EmptyBody) => None,
-            Err(e) => return Err(e),
-        };
+        let mut root = None;
+        if xmldata.len() > 0 {
+            root = match Element::parse(Cursor::new(xmldata)) {
+                Ok(t) => {
+                    if t.name == "propfind" &&
+                       t.namespace == Some("DAV:".to_owned()) {
+                           Some(t)
+                    } else {
+                        return Err(daverror(&mut res, DavError::XmlParseError));
+                    }
+                },
+                // Err(e) => return Err(daverror(&mut res, e)),
+                Err(_) => return Err(daverror(&mut res, DavError::XmlParseError)),
+            };
+        }
 
         let (name, props) = match root {
             None => ("allprop", Vec::new()),
@@ -101,26 +116,26 @@ impl DavHandler {
                             "propname" => ("propname", Vec::new()),
                             "prop" => ("prop", elem.children),
                             "allprop" => ("allprop", includes),
-                            _ => return Err(DavError::XmlParseError),
+                            _ => return Err(daverror(&mut res, DavError::XmlParseError)),
                         }
                     },
-                    None => return Err(DavError::XmlParseError),
+                    None => return Err(daverror(&mut res, DavError::XmlParseError)),
                 }
             }
         };
 
-        let mut pw = PropWriter::new(res, name, props)?;
-        pw.write_liveprops(&path, meta.as_ref())?;
+        let mut pw = PropWriter::new(res, name, props, &self.fs)?;
+        pw.write_props(&path, meta.as_ref())?;
 
-        if meta.is_dir() && depth == headers::Depth::One {
-            self.propfind_directory(&path, &mut pw)?;
+        if meta.is_dir() && depth != headers::Depth::Zero {
+            self.propfind_directory(&path, depth, &mut pw)?;
         }
         pw.close()?;
 
         Ok(())
     }
 
-    fn propfind_directory(&self, path: &WebPath, propwriter: &mut PropWriter) -> DavResult<()> {
+    fn propfind_directory(&self, path: &WebPath, depth: headers::Depth, propwriter: &mut PropWriter) -> DavResult<()> {
         let entries = match self.fs.read_dir(path) {
             Ok(entries) => entries,
             Err(e) => { error!("read_dir error {:?}", e); return Ok(()); },
@@ -138,7 +153,10 @@ impl DavHandler {
             if meta.is_dir() {
                 npath.add_slash();
             }
-            propwriter.write_liveprops(&npath, meta.as_ref())?;
+            propwriter.write_props(&npath, meta.as_ref())?;
+            if depth == headers::Depth::Infinity && meta.is_dir() {
+                self.propfind_directory(&npath, depth, propwriter)?;
+            }
         }
         Ok(())
     }
@@ -169,30 +187,71 @@ impl DavHandler {
             return Err(daverror(&mut res, DavError::XmlParseError));
         }
 
-        let mut set = Vec::new();
-        let mut rem = Vec::new();
+        fn classify_props(elem: &Element) -> (Vec<DavProp>, Vec<DavProp>) {
+            let mut normal = Vec::new();
+            let mut protected = Vec::new();
+            for n in elem.children.iter()
+                        .filter(|f| f.name == "prop")
+                        .flat_map(|f| &f.children)
+                        .map(|p| element_to_davprop_full(&p)) {
+                match n.namespace.as_ref().map(|x| x.as_str()) {
+                    Some(NS_DAV_URI) |
+                    Some(NS_APACHE_URI) |
+                    Some(NS_XS4ALL_URI) => protected.push(n),
+                    _ => normal.push(n)
+                }
+            }
+            (normal, protected)
+        }
+
+        let mut set_normal = Vec::new();
+        let mut rem_normal = Vec::new();
+        let mut set_protected = Vec::new();
+        let mut rem_protected = Vec::new();
 
         // decode Element.
         for mut elem in &tree.children {
             match elem.name.as_str() {
                 "set" => {
-                    let mut p = elem.children.iter()
-                        .filter(|f| f.name == "prop" && f.children.len() > 0)
-                        .map(|p| &p.children[0])
-                        .collect::<Vec<&Element>>();
-                    set.append(&mut p);
+                    let (normal, protected) = classify_props(elem);
+                    set_normal.extend(normal);
+                    set_protected.extend(protected);
                 },
                 "remove" => {
-                    let mut p = elem.children.iter()
-                        .filter(|f| f.name == "prop" && f.children.len() > 0)
-                        .map(|p| &p.children[0])
-                        .collect::<Vec<&Element>>();
-                    rem.append(&mut p);
+                    let (normal, protected) = classify_props(elem);
+                    rem_normal.extend(normal);
+                    rem_protected.extend(protected);
                 },
                 _ => {},
             }
         }
 
+        let mut ret = Vec::<(SC, DavProp)>::new();
+
+        // trying to set protected properties?
+        if set_protected.len() > 0 || rem_protected.len() > 0 {
+            // right now we fail them all, we might allow setting
+            // some live properties later on.
+            ret.extend(set_protected.into_iter().chain(rem_protected.into_iter())
+                    .map(|p| (SC::Forbidden, p)));
+            ret.extend(set_normal.into_iter().chain(rem_normal.into_iter())
+                    .map(|p| (SC::FailedDependency, p)));
+        } else {
+            ret = self.fs.patch_props(&path, set_normal, rem_normal)
+                .map_err(|e| DavError::Status(fserror_to_status(e)))?;
+        }
+
+        // group by statuscode.
+        let mut hm = HashMap::new();
+        for (code, prop) in ret.into_iter() {
+           if !hm.contains_key(&code) {
+               hm.insert(code, Vec::new());
+            }
+            let mut v = hm.get_mut(&code).unwrap();
+            v.push(davprop_to_element(prop));
+        }
+
+/*
         // Now we only support the Win32 attributes so that the
         // windows minidirector works. Support as in "we say we
         // succeeded but actually we don't do anything".
@@ -223,10 +282,10 @@ impl DavHandler {
                 hm.insert(SC::FailedDependency, p_ok);
             }
         }
-
+*/
         // And reply.
-        let mut pw = PropWriter::new(res, "propertyupdate", Vec::new())?;
-        pw.write_deadprops(&path, hm)?;
+        let mut pw = PropWriter::new(res, "propertyupdate", Vec::new(), &self.fs)?;
+        pw.write_proppatch(&path, hm)?;
         pw.close()?;
 
         Ok(())
@@ -235,7 +294,7 @@ impl DavHandler {
 
 impl<'a, 'k> PropWriter<'a, 'k> {
 
-    pub fn new(mut res: Response<'k>, name: &'a str, mut props: Vec<Element>) -> DavResult<PropWriter<'a, 'k>> {
+    pub fn new(mut res: Response<'k>, name: &'a str, mut props: Vec<Element>, fs: &'a Box<DavFileSystem>) -> DavResult<PropWriter<'a, 'k>> {
 
         let contenttype = vec!(b"text/xml; charset=\"utf-8\"".to_vec());
         res.headers_mut().set_raw("Content-Type", contenttype);
@@ -280,6 +339,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
             emitter:    emitter,
             name:       name,
             props:      props,
+            fs:         fs,
         })
     }
 
@@ -296,64 +356,93 @@ impl<'a, 'k> PropWriter<'a, 'k> {
     }
 
     fn build_prop(&self, prop: &Element, path: &WebPath, meta: &DavMetaData, docontent: bool) -> (Element, bool) {
-        match prop.name.as_str() {
-            "creationdate" => {
-                if let Ok(time) = meta.created() {
-                    let tm = systemtime_to_rfc3339(time);
-                    return self.build_elem(docontent, prop, tm);
+        match prop.namespace.as_ref().map(|x| x.as_str()) {
+            Some(NS_DAV_URI) => match prop.name.as_str() {
+                "creationdate" => {
+                    if let Ok(time) = meta.created() {
+                        let tm = systemtime_to_rfc3339(time);
+                        return self.build_elem(docontent, prop, tm);
+                    }
+                    // use ctime instead - apache seems to do this.
+                    if let Ok(ctime) = meta.status_changed() {
+                        let mut time = ctime;
+                        if let Ok(mtime) = meta.modified() {
+                            if mtime < ctime {
+                                time = mtime;
+                            }
+                        }
+                        let tm = systemtime_to_rfc3339(time);
+                        return self.build_elem(docontent, prop, tm);
+                    }
+                },
+                "getetag" => {
+                    return self.build_elem(docontent, prop, meta.etag());
+                },
+                "getcontentlength" => {
+                    if !meta.is_dir() {
+                        return self.build_elem(docontent, prop, meta.len().to_string());
+                    }
+                },
+                "getcontenttype" => {
+                    return if meta.is_dir() {
+                        self.build_elem(docontent, prop, "httpd/unix-directory")
+                    } else {
+                        self.build_elem(docontent, prop, path.get_mime_type_str())
+                    };
+                },
+                "getlastmodified" => {
+                    if let Ok(time) = meta.modified() {
+                        let tm = format!("{}", systemtime_to_httpdate(time));
+                        return self.build_elem(docontent, prop, tm);
+                    }
+                },
+                "resourcetype" => {
+                    let mut elem = prop.clone();
+                    if meta.is_dir() && docontent {
+                        let dir = Element::new2("D:collection");
+                        elem.children.push(dir);
+                    }
+                    return (elem, true);
+                },
+                "supportedlock" => {
+                    return (list_supportedlock(), true);
                 }
-            },
-            "getetag" => {
-                return self.build_elem(docontent, prop, meta.etag());
-            },
-            "getcontentlength" => {
-                if !meta.is_dir() {
-                    return self.build_elem(docontent, prop, meta.len().to_string());
+                "lockdiscovery" => {
+                    return (list_lockdiscovery(), true);
                 }
+                _ => {},
             },
-            "getcontenttype" => {
-                return if meta.is_dir() {
-                    self.build_elem(docontent, prop, "httpd/unix-directory")
-                } else {
-                    self.build_elem(docontent, prop, path.get_mime_type_str())
-                };
-            },
-            "getlastmodified" => {
-                if let Ok(time) = meta.modified() {
-                    let tm = format!("{}", systemtime_to_httpdate(time));
-                    return self.build_elem(docontent, prop, tm);
+            Some(NS_APACHE_URI) => match prop.name.as_str() {
+                "executable" => {
+                    if let Ok(x) = meta.executable() {
+                        let b = if x { "T" } else { "F" };
+                        return self.build_elem(docontent, prop, b);
+                    }
                 }
+                _ => {},
             },
-            "resourcetype" => {
-                let mut elem = prop.clone();
-                if meta.is_dir() && docontent {
-                    let dir = Element::new2("D:collection");
-                    elem.children.push(dir);
-                }
-                return (elem, true);
+            Some(NS_XS4ALL_URI) => match prop.name.as_str() {
+                "atime" => {
+                    if let Ok(time) = meta.accessed() {
+                        let tm = format!("{}", systemtime_to_rfc3339(time));
+                        return self.build_elem(docontent, prop, tm);
+                    }
+                },
+                "ctime" => {
+                    if let Ok(time) = meta.status_changed() {
+                        let tm = systemtime_to_rfc3339(time);
+                        return self.build_elem(docontent, prop, tm);
+                    }
+                },
+                _ => {},
             },
-            "supportedlock" => {
-                return (list_supportedlock(), true);
-            }
-            "lockdiscovery" => {
-                return (list_lockdiscovery(), true);
-            }
-            "executable" => {
-                if let Ok(x) = meta.executable() {
-                    let b = if x { "T" } else { "F" };
-                    return self.build_elem(docontent, prop, b);
-                }
-            },
-            "atime" => {
-                if let Ok(time) = meta.accessed() {
-                    let tm = format!("{}", systemtime_to_rfc3339(time));
-                    return self.build_elem(docontent, prop, tm);
-                }
-            },
-            "ctime" => {
-                if let Ok(time) = meta.status_changed() {
-                    let tm = systemtime_to_rfc3339(time);
-                    return self.build_elem(docontent, prop, tm);
+            _ if self.name == "prop" && self.fs.have_props(path) => {
+                // asking for a specific property.
+                let dprop = element_to_davprop(prop);
+                if let Ok(xml) = self.fs.get_prop(path, dprop) {
+                    if let Ok(e) = Element::parse(Cursor::new(xml)) {
+                        return (e, true);
+                    }
                 }
             },
             _ => {},
@@ -361,7 +450,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         (prop.clone(), false)
     }
 
-    fn write_liveprops(&mut self, path: &WebPath, meta: &DavMetaData) -> Result<(), DavError> {
+    fn write_props(&mut self, path: &WebPath, meta: &DavMetaData) -> Result<(), DavError> {
 
         self.emitter.write(XmlWEvent::start_element("D:response"))?;
         let p = path.as_url_string();
@@ -373,8 +462,16 @@ impl<'a, 'k> PropWriter<'a, 'k> {
             let (e, ok) = self.build_prop(p, path, meta, self.name != "propname");
             if ok {
                 found.push(e);
-            } else {
+            } else if self.name == "prop" {
                 notfound.push(e);
+            }
+        }
+
+        // and list the dead properties as well.
+        if (self.name == "propname" || self.name == "allprop") && self.fs.have_props(path) {
+            if let Ok(v) = self.fs.get_props(path, self.name != "propname") {
+                let v = v.into_iter().map(davprop_to_element).collect::<Vec<Element>>();
+                found.children.extend(v);
             }
         }
 
@@ -397,7 +494,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         Ok(())
     }
 
-    fn write_deadprops(&mut self, path: &WebPath, props: HashMap<SC, Vec<&Element>>) -> Result<(), DavError> {
+    fn write_proppatch(&mut self, path: &WebPath, props: HashMap<SC, Vec<Element>>) -> Result<(), DavError> {
 
         self.emitter.write(XmlWEvent::start_element("D:response"))?;
         let p = path.as_url_string();
@@ -405,12 +502,12 @@ impl<'a, 'k> PropWriter<'a, 'k> {
 
         for (status, v) in props {
     	    self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
-            Element::new2("D:status").text(status.to_string()).write_ev(&mut self.emitter)?;
+    	    self.emitter.write(XmlWEvent::start_element("D:prop"))?;
             for i in v.iter() {
-    	        self.emitter.write(XmlWEvent::start_element("D:prop"))?;
                 i.write_ev(&mut self.emitter)?;
-                self.emitter.write(XmlWEvent::end_element())?;
             }
+            self.emitter.write(XmlWEvent::end_element())?;
+            Element::new2("D:status").text("HTTP/1.1 ".to_string() + &status.to_string()).write_ev(&mut self.emitter)?;
             self.emitter.write(XmlWEvent::end_element())?;
         }
 
@@ -425,5 +522,40 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         Ok(())
     }
 
+}
+
+fn element_to_davprop_full(elem: &Element) -> DavProp {
+    let mut emitter = EventWriter::new(Cursor::new(Vec::new()));
+    elem.write_ev(&mut emitter).ok();
+    let xml = emitter.into_inner().into_inner();
+    DavProp{
+        name:       elem.name.clone(),
+        prefix:     elem.prefix.clone(),
+        namespace:  elem.namespace.clone(),
+        xml:        Some(xml),
+    }
+}
+
+fn element_to_davprop(elem: &Element) -> DavProp {
+    DavProp{
+        name:       elem.name.clone(),
+        prefix:     elem.prefix.clone(),
+        namespace:  elem.namespace.clone(),
+        xml:        None,
+    }
+}
+
+fn davprop_to_element(prop: DavProp) -> Element {
+    if let Some(xml) = prop.xml {
+        return Element::parse2(Cursor::new(xml)).unwrap();
+    }
+    let mut elem = Element::new(&prop.name);
+    if let Some(ref ns) = prop.namespace {
+        let pfx = prop.prefix.as_ref().map(|p| p.as_str()).unwrap_or("");
+        elem = elem.ns(pfx, ns.as_str());
+    }
+    elem.prefix = prop.prefix;
+    elem.namespace = prop.namespace.clone();
+    elem
 }
 

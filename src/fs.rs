@@ -3,10 +3,8 @@ use std;
 use std::time::{SystemTime,UNIX_EPOCH};
 use std::io::{Read,Write,Seek};
 use std::fmt::Debug;
-use std::collections::HashMap;
 
 use webpath::WebPath;
-use xmltree::Element;
 use hyper::status::StatusCode;
 
 macro_rules! notimplemented {
@@ -30,36 +28,58 @@ pub enum FsError {
 }
 pub type FsResult<T> = std::result::Result<T, FsError>;
 
+#[derive(Debug,Clone)]
+pub struct DavProp {
+    pub name:       String,
+    pub prefix:     Option<String>,
+    pub namespace:  Option<String>,
+    pub xml:        Option<Vec<u8>>,
+}
+
 pub trait DavFileSystem : Debug + Sync + Send {
     fn open(&self, path: &WebPath, options: OpenOptions) -> FsResult<Box<DavFile>>;
     fn read_dir(&self, path: &WebPath) -> FsResult<Box< DavReadDir<Item=Box<DavDirEntry>> >>;
     fn metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>>;
 
-    fn create_dir(&self, _path: &WebPath) -> FsResult<()> {
+    #[allow(unused_variables)]
+    fn create_dir(&self, path: &WebPath) -> FsResult<()> {
         notimplemented!("create_dir")
     }
-    fn remove_dir(&self, _path: &WebPath) -> FsResult<()> {
+    #[allow(unused_variables)]
+    fn remove_dir(&self, path: &WebPath) -> FsResult<()> {
         notimplemented!("remove_dir")
     }
-    fn remove_file(&self, _path: &WebPath) -> FsResult<()> {
+    #[allow(unused_variables)]
+    fn remove_file(&self, path: &WebPath) -> FsResult<()> {
         notimplemented!("remove_file")
     }
-    fn rename(&self, _from: &WebPath, _to: &WebPath) -> FsResult<()> {
+    #[allow(unused_variables)]
+    fn rename(&self, from: &WebPath, to: &WebPath) -> FsResult<()> {
         notimplemented!("rename")
     }
-
-    // we could supply a default implementations of this.
-    fn copy(&self, _from: &WebPath, _to: &WebPath) -> FsResult<()> {
+    #[allow(unused_variables)]
+    fn copy(&self, from: &WebPath, to: &WebPath) -> FsResult<()> {
         notimplemented!("copy")
+    }
+    #[allow(unused_variables)]
+    fn have_props(&self, path: &WebPath) -> bool {
+        false
+    }
+    #[allow(unused_variables)]
+    fn patch_props(&self, path: &WebPath, set: Vec<DavProp>, remove: Vec<DavProp>) -> FsResult<Vec<(StatusCode, DavProp)>> {
+        notimplemented!("patch_props")
+    }
+    #[allow(unused_variables)]
+    fn get_props(&self, path: &WebPath, do_content: bool) -> FsResult<Vec<DavProp>> {
+        notimplemented!("get_props")
+    }
+    #[allow(unused_variables)]
+    fn get_prop(&self, path: &WebPath, prop: DavProp) -> FsResult<Vec<u8>> {
+        notimplemented!("get_prop`")
     }
 
     // helper so that clone() works.
     fn box_clone(&self) -> Box<DavFileSystem>;
-}
-
-pub trait DavProps : Debug {
-    fn patch_props(&mut self, path: &WebPath, set: &Element, del: &Element) -> FsResult<HashMap<StatusCode, Vec<Element>>>;
-    fn get_props(&self, path: &WebPath) -> FsResult<Vec<Element>>;
 }
 
 // generic Clone, calls implementation-specific box_clone().

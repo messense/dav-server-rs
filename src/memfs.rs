@@ -9,7 +9,6 @@ use std::io::{Error,ErrorKind};
 use std::sync::{Arc,Mutex};
 use std::collections::HashMap;
 
-use xmltree::Element;
 use webpath::WebPath;
 use hyper::status::StatusCode;
 
@@ -32,14 +31,16 @@ enum MemFsNode {
 
 #[derive(Debug,Clone)]
 struct MemFsDirNode {
-    props:      Vec<Element>,
+    props:      HashMap<String, DavProp>,
     mtime:      SystemTime,
+    crtime:     SystemTime,
 }
 
 #[derive(Debug,Clone)]
 struct MemFsFileNode {
-    props:      Vec<Element>,
+    props:      HashMap<String, DavProp>,
     mtime:      SystemTime,
+    crtime:     SystemTime,
     data:       Vec<u8>,
 }
 
@@ -51,6 +52,7 @@ struct MemFsReadDir {
 #[derive(Debug,Clone)]
 struct MemFsDirEntry {
     mtime:      SystemTime,
+    crtime:     SystemTime,
     is_dir:     bool,
     name:       Vec<u8>,
     size:       u64,
@@ -201,30 +203,65 @@ impl DavFileSystem for MemFs {
         let dnode_id = tree.lookup(to.as_bytes())?;
 
         // copy.
-        let data = (*tree.get_node_mut(snode_id)?).clone();
+        let mut data = (*tree.get_node_mut(snode_id)?).clone();
+        match data {
+            MemFsNode::Dir(ref mut d) => d.crtime = SystemTime::now(),
+            MemFsNode::File(ref mut f) => f.crtime = SystemTime::now(),
+        }
         *tree.get_node_mut(dnode_id)? = data;
 
         Ok(())
     }
-}
 
-impl DavProps for MemFs {
-    fn patch_props(&mut self, path: &WebPath, set: &Element, del: &Element) -> FsResult<HashMap<StatusCode, Vec<Element>>> {
-        let tree = &mut *self.tree.lock().unwrap();
-        let node_id = tree.lookup(path.as_bytes())?;
-        unimplemented!()
+    fn have_props(&self, _path: &WebPath) -> bool {
+        true
     }
 
-    fn get_props(&self, path: &WebPath) -> FsResult<Vec<Element>> {
+    fn patch_props(&self, path: &WebPath, set: Vec<DavProp>, remove: Vec<DavProp>) -> FsResult<Vec<(StatusCode, DavProp)>> {
+        let tree = &mut *self.tree.lock().unwrap();
+        let node_id = tree.lookup(path.as_bytes())?;
+        let node = tree.get_node_mut(node_id)?;
+        let props = node.get_props_mut();
+        let mut res = Vec::new();
+        for p in remove.into_iter() {
+            props.remove(&propkey(&p.namespace, &p.name));
+            res.push((StatusCode::Ok, p));
+        }
+        for p in set.into_iter() {
+            res.push((StatusCode::Ok, cloneprop(&p)));
+            props.insert(propkey(&p.namespace, &p.name), p);
+        }
+        Ok(res)
+	}
+
+    fn get_props(&self, path: &WebPath, do_content: bool) -> FsResult<Vec<DavProp>> {
         let tree = &mut *self.tree.lock().unwrap();
         let node_id = tree.lookup(path.as_bytes())?;
         let node = tree.get_node(node_id)?;
-        let props = match node {
-            &MemFsNode::Dir(ref d) => d.props.clone(),
-            &MemFsNode::File(ref f) => f.props.clone(),
-        };
-        Ok(props)
+        let mut res = Vec::new();
+        for (_, p) in node.get_props() {
+            res.push(if do_content { p.clone() } else { cloneprop(p) });
+        }
+        Ok(res)
+	}
+
+    fn get_prop(&self, path: &WebPath, prop: DavProp) -> FsResult<Vec<u8>> {
+        let tree = &mut *self.tree.lock().unwrap();
+        let node_id = tree.lookup(path.as_bytes())?;
+        let node = tree.get_node(node_id)?;
+        let p = node.get_props().get(&propkey(&prop.namespace, &prop.name)).ok_or(FsError::NotFound)?;
+        Ok(p.xml.clone().ok_or(FsError::NotFound)?)
     }
+}
+
+// small helper.
+fn propkey(ns: &Option<String>, name: &str) -> String {
+    ns.to_owned().as_ref().unwrap_or(&"".to_string()).clone() + name
+}
+
+// small helper.
+fn cloneprop(p: &DavProp) -> DavProp {
+    DavProp{ name: p.name.clone(), namespace: p.namespace.clone(), prefix: p.prefix.clone(), xml: None }
 }
 
 impl DavReadDir for MemFsReadDir {}
@@ -256,6 +293,10 @@ impl DavDirEntry for MemFsDirEntry {
 impl DavMetaData for MemFsDirEntry {
     fn len(&self) -> u64 {
         self.size
+    }
+
+    fn created(&self) -> FsResult<SystemTime> {
+        Ok(self.crtime)
     }
 
     fn modified(&self) -> FsResult<SystemTime> {
@@ -338,28 +379,31 @@ impl Seek for MemFsFile {
 impl MemFsNode {
     fn new_dir() -> MemFsNode {
         MemFsNode::Dir(MemFsDirNode{
+            crtime:  SystemTime::now(),
             mtime:  SystemTime::now(),
-            props:  Vec::new(),
+            props:  HashMap::new(),
         })
     }
 
     fn new_file() -> MemFsNode {
         MemFsNode::File(MemFsFileNode{
+            crtime:  SystemTime::now(),
             mtime:  SystemTime::now(),
-            props:  Vec::new(),
+            props:  HashMap::new(),
             data:   Vec::new(),
         })
     }
 
     // helper to create MemFsDirEntry from a node.
     fn as_dirent(&self, name: &[u8]) -> MemFsDirEntry {
-        let (is_dir, size, mtime) = match self {
-            &MemFsNode::File(ref file) => (false, file.data.len() as u64, file.mtime),
-            &MemFsNode::Dir(ref dir) => (true, 0, dir.mtime),
+        let (is_dir, size, mtime, crtime) = match self {
+            &MemFsNode::File(ref file) => (false, file.data.len() as u64, file.mtime, file.crtime),
+            &MemFsNode::Dir(ref dir) => (true, 0, dir.mtime, dir.crtime),
         };
         MemFsDirEntry {
             name: name.to_vec(),
             mtime: mtime,
+            crtime: crtime,
             is_dir: is_dir,
             size: size as u64,
         }
@@ -390,6 +434,20 @@ impl MemFsNode {
         match self {
             &mut MemFsNode::File(ref mut n) => Ok(n),
             _ => Err(FsError::Forbidden),
+        }
+    }
+
+    fn get_props(&self) -> &HashMap<String, DavProp> {
+        match self {
+            &MemFsNode::File(ref n) => &n.props,
+            &MemFsNode::Dir(ref d) => &d.props,
+        }
+    }
+
+    fn get_props_mut(&mut self) -> &mut HashMap<String, DavProp> {
+        match self {
+            &mut MemFsNode::File(ref mut n) => &mut n.props,
+            &mut MemFsNode::Dir(ref mut d) => &mut d.props,
         }
     }
 }
