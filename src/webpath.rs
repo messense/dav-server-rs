@@ -6,7 +6,6 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path,PathBuf};
 
 use hyper;
-use hyper::status::StatusCode;
 use mime_guess;
 
 use super::DavError;
@@ -27,7 +26,6 @@ impl std::fmt::Display for WebPath {
 pub enum ParseError {
     InvalidPath,
     IllegalPath,
-    Forbidden,
 }
 
 impl Error for ParseError {
@@ -48,7 +46,6 @@ impl From<ParseError> for DavError {
         match e {
             ParseError::InvalidPath => DavError::InvalidPath,
             ParseError::IllegalPath => DavError::IllegalPath,
-            ParseError::Forbidden => DavError::Status(StatusCode::Forbidden),
         }
     }
 }
@@ -196,7 +193,7 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
             b"." | b"" => {},
             b".." => {
                 if v.len() < 2 {
-                    return Err(ParseError::Forbidden);
+                    return Err(ParseError::IllegalPath);
                 }
                 v.pop(); v.pop(); },
             s => {
