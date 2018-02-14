@@ -4,7 +4,7 @@ use hyper::server::{Request,Response};
 use hyper::status::StatusCode as SC;
 
 use {Method,DavResult};
-use webpath::{self,WebPath};
+use webpath::WebPath;
 use errors::DavError;
 use {statuserror,daverror,fserror,fserror_to_status};
 use fs::*;
@@ -250,7 +250,6 @@ impl super::DavHandler {
         let dest = req.headers.get::<headers::Destination>()
                     .ok_or(statuserror(&mut res, SC::BadRequest))?;
         let dest = match WebPath::from_str(&dest.0, &self.prefix) {
-            Err(webpath::ParseError::IllegalPath) => Err(statuserror(&mut res, SC::BadGateway)),
             Err(e) => Err(daverror(&mut res, e)),
             Ok(d) => Ok(d),
         }?;

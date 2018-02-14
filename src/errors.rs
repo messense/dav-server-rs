@@ -11,6 +11,7 @@ pub(crate) enum DavError {
     XmlParseError,      // error interpreting xml
     InvalidPath,        // error parsing path
     IllegalPath,        // path not valid here
+    ForbiddenPath,      // too many dotdots
     UnknownMethod,
     EmptyBody,
     Status(StatusCode),
@@ -79,7 +80,8 @@ impl DavError {
             &DavError::XmlReadError => StatusCode::BadRequest,
             &DavError::XmlParseError => StatusCode::BadRequest,
             &DavError::InvalidPath => StatusCode::BadRequest,
-            &DavError::IllegalPath => StatusCode::Forbidden,
+            &DavError::IllegalPath => StatusCode::BadGateway,
+            &DavError::ForbiddenPath => StatusCode::Forbidden,
             &DavError::EmptyBody => StatusCode::BadRequest,
             &DavError::UnknownMethod => StatusCode::NotImplemented,
             &DavError::IoError(ref e) => ioerror_to_status(e),

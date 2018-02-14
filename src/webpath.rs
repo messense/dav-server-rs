@@ -24,8 +24,12 @@ impl std::fmt::Display for WebPath {
 
 #[derive(Debug)]
 pub enum ParseError {
+    // cannot parse
     InvalidPath,
+    // outside of prefix
     IllegalPath,
+    // too many dotdots
+    ForbiddenPath,
 }
 
 impl Error for ParseError {
@@ -46,6 +50,7 @@ impl From<ParseError> for DavError {
         match e {
             ParseError::InvalidPath => DavError::InvalidPath,
             ParseError::IllegalPath => DavError::IllegalPath,
+            ParseError::ForbiddenPath => DavError::ForbiddenPath,
         }
     }
 }
@@ -193,7 +198,7 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
             b"." | b"" => {},
             b".." => {
                 if v.len() < 2 {
-                    return Err(ParseError::IllegalPath);
+                    return Err(ParseError::ForbiddenPath);
                 }
                 v.pop(); v.pop(); },
             s => {
