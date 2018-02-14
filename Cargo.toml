@@ -1,10 +1,10 @@
 [package]
-name = "webdav-lib"
+name = "webdav-handler"
 version = "0.1.0"
 authors = ["Miquel van Smoorenburg <mikevs@xs4all.net>"]
 
 [lib]
-name = "webdav_lib"
+name = "webdav_handler"
 path = "src/lib.rs"
 
 [dependencies]

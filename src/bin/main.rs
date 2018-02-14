@@ -14,13 +14,13 @@
 #[macro_use] extern crate clap;
 extern crate log;
 extern crate env_logger;
-extern crate webdav_lib;
+extern crate webdav_handler;
 
 use hyper::header::{Authorization, Basic};
 use hyper::server::{Handler,Request, Response};
 use hyper::status::StatusCode;
 
-use webdav_lib as dav;
+use webdav_handler as dav;
 use dav::DavHandler;
 use dav::localfs;
 use dav::memfs;
