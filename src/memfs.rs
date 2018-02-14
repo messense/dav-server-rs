@@ -286,8 +286,6 @@ impl DavDirEntry for MemFsDirEntry {
     fn name(&self) -> Vec<u8> {
         self.name.clone()
     }
-
-    //fn is_dir(&self) -> FsResult<bool> { Ok(self.is_dir()) }
 }
 
 impl DavMetaData for MemFsDirEntry {
@@ -309,11 +307,10 @@ impl DavMetaData for MemFsDirEntry {
 }
 
 impl DavFile for MemFsFile {
-    fn metadata(&self) -> Box<DavMetaData> {
+    fn metadata(&self) -> FsResult<Box<DavMetaData>> {
         let tree = &*self.tree.lock().unwrap();
-        // XXX FIXME unwrap ... need to return FsResult<> here
-        let node = tree.get_node(self.node_id).unwrap();
-        Box::new(node.as_dirent(b""))
+        let node = tree.get_node(self.node_id)?;
+        Ok(Box::new(node.as_dirent(b"")))
     }
 }
 

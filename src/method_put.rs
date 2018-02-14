@@ -181,16 +181,16 @@ impl super::DavHandler {
             Ok(_) => SC::NoContent,
             Err(_) => SC::Created,
         };
-
-        let m = file.metadata();
-        let file_etag = hyper::header::EntityTag::new(false, m.etag());
-
         res.headers_mut().set(hyper::header::ContentLength(0));
-        res.headers_mut().set(hyper::header::ETag(file_etag));
 
-        if let Ok(modified) = m.modified() {
-            res.headers_mut().set(hyper::header::LastModified(
-                    systemtime_to_httpdate(modified)));
+        if let Ok(m) = file.metadata() {
+            let file_etag = hyper::header::EntityTag::new(false, m.etag());
+            res.headers_mut().set(hyper::header::ETag(file_etag));
+
+            if let Ok(modified) = m.modified() {
+                res.headers_mut().set(hyper::header::LastModified(
+                        systemtime_to_httpdate(modified)));
+            }
         }
         Ok(())
     }

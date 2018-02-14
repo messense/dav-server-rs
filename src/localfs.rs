@@ -165,12 +165,9 @@ impl DavDirEntry for LocalFsDirEntry {
 }
 
 impl DavFile for LocalFsFile {
-    fn metadata(&self) -> Box<DavMetaData> {
-        // this is an open file, fstat() will never fail.
-        match self.0.metadata() {
-            Ok(meta) => Box::new(LocalFsMetaData(meta)),
-            Err(_) => panic!("could not get metadata from fs"),
-        }
+    fn metadata(&self) -> FsResult<Box<DavMetaData>> {
+        let meta = self.0.metadata()?;
+        Ok (Box::new(LocalFsMetaData(meta)))
     }
 }
 

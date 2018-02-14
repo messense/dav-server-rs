@@ -21,7 +21,7 @@ impl super::DavHandler {
         let path = self.path(&req);
         let mut file = self.fs.open(&path, OpenOptions::read())
             .map_err(|e| fserror(&mut res, e))?;
-        let meta = file.metadata();
+        let meta = file.metadata().map_err(|e| fserror(&mut res, e))?;
         if !meta.is_file() {
             return Err(statuserror(&mut res, StatusCode::MethodNotAllowed));
         }

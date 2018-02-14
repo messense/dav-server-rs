@@ -105,7 +105,7 @@ pub trait DavDirEntry: Debug {
 }
 
 pub trait DavFile: Read + Write + Seek + Debug {
-    fn metadata(&self) -> Box<DavMetaData>;
+    fn metadata(&self) -> FsResult<Box<DavMetaData>>;
 }
 
 pub trait DavMetaData : Debug {
