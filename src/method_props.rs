@@ -163,6 +163,99 @@ impl DavHandler {
         Ok(())
     }
 
+    // set/change a live property. returns StatusCode::Continue if
+    // this wasnt't  a live property (or, if we want it handled
+    // as a dead property, e.g. DAV:displayname).
+    fn liveprop_set(&self, prop: &Element, can_deadprop: bool) -> SC {
+        match prop.namespace.as_ref().map(|x| x.as_str()) {
+            Some(NS_DAV_URI) => match prop.name.as_str() {
+                "getcontentlanguage" => {
+                    if prop.text.is_none() || prop.children.len() > 0 {
+                        return SC::Conflict;
+                    }
+                    // only here to make "litmus" happy, really...
+                    if let Some(ref s) = prop.text {
+                        use hyper::header::Header;
+                        use hyper::header::ContentLanguage;
+                        match ContentLanguage::parse_header(&[s.as_bytes().to_vec()]) {
+                            Ok(ContentLanguage(ref v)) if v.len() > 0 => {},
+                            _ => return SC::Conflict,
+                        }
+                    }
+                    if can_deadprop { SC::Continue } else { SC::Forbidden }
+                },
+                "displayname" => {
+                    if prop.text.is_none() || prop.children.len() > 0 {
+                        return SC::Conflict;
+                    }
+                    if can_deadprop { SC::Continue } else { SC::Forbidden }
+                },
+                "getlastmodified" => {
+                    // we might allow setting modified time
+                    // by using utimes() on unix. Not yet though.
+                    if prop.text.is_none() || prop.children.len() > 0 {
+                        return SC::Conflict;
+                    }
+                    SC::Forbidden
+                },
+                _ => SC::Forbidden,
+            },
+            Some(NS_APACHE_URI) => match prop.name.as_str() {
+                "executable" => {
+                    // we could allow toggling the execute bit.
+                    // to be implemented.
+                    if prop.text.is_none() || prop.children.len() > 0 {
+                        return SC::Conflict;
+                    }
+                    SC::Forbidden
+                },
+                _ => SC::Forbidden,
+            },
+            Some(NS_XS4ALL_URI) => {
+                // no xs4all properties can be changed.
+                SC::Forbidden
+            },
+            Some(NS_MS_URI) => match prop.name.as_str() {
+                "Win32CreationTime" |
+                "Win32FileAttributes" |
+                "Win32LastAccessTime" |
+                "Win32LastModifiedTime" => {
+                    if prop.text.is_none() || prop.children.len() > 0 {
+                        return SC::Conflict;
+                    }
+                    // Always report back that we successfully
+                    // changed these, even if we didn't --
+                    // makes the windows webdav client work.
+                    SC::Ok
+                },
+                _ => SC::Forbidden,
+            },
+            _ => SC::Continue,
+        }
+    }
+
+    // In general, live properties cannot be removed, with the
+    // exception of getcontentlanguage and displayname.
+    fn liveprop_remove(&self, prop: &Element, can_deadprop: bool) -> SC {
+        match prop.namespace.as_ref().map(|x| x.as_str()) {
+            Some(NS_DAV_URI) => match prop.name.as_str() {
+                "getcontentlanguage" |
+                "displayname" => {
+                    if can_deadprop {
+                        SC::Ok
+                    } else {
+                        SC::Forbidden
+                    }
+                },
+                _ => SC::Forbidden,
+            },
+            Some(NS_APACHE_URI) |
+            Some(NS_XS4ALL_URI) |
+            Some(NS_MS_URI) => SC::Forbidden,
+            _ => SC::Continue,
+        }
+    }
+
     pub(crate) fn handle_proppatch(&self, mut req: Request, mut res: Response) -> Result<(), DavError> {
 
         // read request.
@@ -189,59 +282,55 @@ impl DavHandler {
             return Err(daverror(&mut res, DavError::XmlParseError));
         }
 
-        fn classify_props(elem: &Element) -> (Vec<DavProp>, Vec<DavProp>) {
-            let mut normal = Vec::new();
-            let mut protected = Vec::new();
+        let mut set = Vec::new();
+        let mut rem = Vec::new();
+        let mut ret = Vec::new();
+        let can_deadprop = self.fs.have_props(&path);
+
+        // walk over the element tree and feed "set" and "remove" items to
+        // the liveprop_set/liveprop_remove functions. If skipped by those,
+        // gather them in the set/rem Vec to be processed as dead properties.
+        for mut elem in &tree.children {
             for n in elem.children.iter()
                         .filter(|f| f.name == "prop")
-                        .flat_map(|f| &f.children)
-                        .map(|p| element_to_davprop_full(&p)) {
-                match n.namespace.as_ref().map(|x| x.as_str()) {
-                    Some(NS_DAV_URI) |
-                    Some(NS_APACHE_URI) |
-                    Some(NS_XS4ALL_URI) |
-                    Some(NS_MS_URI) => protected.push(n),
-                    _ => normal.push(n)
+                        .flat_map(|f| &f.children) {
+                match elem.name.as_str() {
+                    "set" => {
+                        match self.liveprop_set(&n, can_deadprop) {
+                            SC::Continue => set.push(element_to_davprop_full(&n)),
+                            s => ret.push((s, element_to_davprop(&n))),
+                        }
+                    },
+                    "remove" => {
+                        match self.liveprop_remove(&n, can_deadprop) {
+                            SC::Continue => rem.push(element_to_davprop(&n)),
+                            s => ret.push((s, element_to_davprop(&n))),
+                        }
+                    },
+                    _ => {},
                 }
             }
-            (normal, protected)
         }
 
-        let mut set_normal = Vec::new();
-        let mut rem_normal = Vec::new();
-        let mut set_protected = Vec::new();
-        let mut rem_protected = Vec::new();
-
-        // decode Element.
-        for mut elem in &tree.children {
-            match elem.name.as_str() {
-                "set" => {
-                    let (normal, protected) = classify_props(elem);
-                    set_normal.extend(normal);
-                    set_protected.extend(protected);
-                },
-                "remove" => {
-                    let (normal, protected) = classify_props(elem);
-                    rem_normal.extend(normal);
-                    rem_protected.extend(protected);
-                },
-                _ => {},
-            }
-        }
-
-        let mut ret = Vec::<(SC, DavProp)>::new();
-
-        // trying to set protected properties?
-        if set_protected.len() > 0 || rem_protected.len() > 0 {
-            // right now we fail them all, we might allow setting
-            // some live properties later on.
-            ret.extend(set_protected.into_iter().chain(rem_protected.into_iter())
-                    .map(|p| (SC::Forbidden, p)));
-            ret.extend(set_normal.into_iter().chain(rem_normal.into_iter())
+        // if any set/remove failed, stop processing here.
+        if ret.iter().any(|&(ref s, _)| s != &SC::Ok) {
+            ret = ret.into_iter().map(|(s, p)|
+                if s == SC::Ok {
+                    (SC::FailedDependency, p)
+                } else {
+                    (s, p)
+                }
+            ).collect::<Vec<_>>();
+            ret.extend(set.into_iter().chain(rem.into_iter())
                     .map(|p| (SC::FailedDependency, p)));
         } else {
-            ret = self.fs.patch_props(&path, set_normal, rem_normal)
+            // hmmm ... we assume nothing goes wrong here at the
+            // moment. if it does, we should roll back the earlier
+            // made changes to live props, but come on, we're not
+            // builing a transaction engine here.
+            let deadret = self.fs.patch_props(&path, set, rem)
                 .map_err(|e| DavError::Status(fserror_to_status(e)))?;
+            ret.extend(deadret.into_iter());
         }
 
         // group by statuscode.
@@ -254,41 +343,9 @@ impl DavHandler {
             v.push(davprop_to_element(prop));
         }
 
-/*
-        // Now we only support the Win32 attributes so that the
-        // windows minidirector works. Support as in "we say we
-        // succeeded but actually we don't do anything".
-        // We could handle them like live properties, I guess.
-        let mut p_ok = Vec::new();
-        let mut p_failed = Vec::new();
-        for v in set.into_iter().chain(rem) {
-            match v.name.as_str() {
-                "Win32CreationTime" |
-                "Win32LastAccessTime" |
-                "Win32LastModifiedTime" |
-                "Win32FileAttributes" => {
-                    p_ok.push(v);
-                },
-                _ => {
-                    p_failed.push(v);
-                }
-            }
-        }
-
-        // If there were unsupported props, all must fail.
-        let mut hm = HashMap::new();
-        if p_failed.len() == 0 {
-            hm.insert(SC::Ok, p_ok);
-        } else {
-            hm.insert(SC::Conflict, p_failed);
-            if p_ok.len() > 0 {
-                hm.insert(SC::FailedDependency, p_ok);
-            }
-        }
-*/
         // And reply.
         let mut pw = PropWriter::new(res, "propertyupdate", Vec::new(), &self.fs)?;
-        pw.write_proppatch(&path, hm)?;
+        pw.write_propresponse(&path, hm)?;
         pw.close()?;
 
         Ok(())
@@ -346,7 +403,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         })
     }
 
-    fn build_elem<'b, T>(&self, content: bool, e: &Element, text: T) -> (Element, bool)
+    fn build_elem<'b, T>(&self, content: bool, e: &Element, text: T) -> (SC, Element)
             where T: Into<Cow<'a, str>> {
         let mut e = e.clone();
         if content {
@@ -355,10 +412,10 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                 e.text = Some(t.to_string());
             }
         }
-        (e, true)
+        (SC::Ok, e)
     }
 
-    fn build_prop(&self, prop: &Element, path: &WebPath, meta: &DavMetaData, docontent: bool) -> (Element, bool) {
+    fn build_prop(&self, prop: &Element, path: &WebPath, meta: &DavMetaData, docontent: bool) -> (SC, Element) {
         match prop.namespace.as_ref().map(|x| x.as_str()) {
             Some(NS_DAV_URI) => match prop.name.as_str() {
                 "creationdate" => {
@@ -405,13 +462,13 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                         let dir = Element::new2("D:collection");
                         elem.children.push(dir);
                     }
-                    return (elem, true);
+                    return (SC::Ok, elem);
                 },
                 "supportedlock" => {
-                    return (list_supportedlock(), true);
+                    return (SC::Ok, list_supportedlock());
                 }
                 "lockdiscovery" => {
-                    return (list_lockdiscovery(), true);
+                    return (SC::Ok, list_lockdiscovery());
                 }
                 _ => {},
             },
@@ -476,60 +533,47 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                 let dprop = element_to_davprop(prop);
                 if let Ok(xml) = self.fs.get_prop(path, dprop) {
                     if let Ok(e) = Element::parse(Cursor::new(xml)) {
-                        return (e, true);
+                        return (SC::Ok, e);
                     }
                 }
             },
-            _ => {},
+            _ => return (SC::NotFound, prop.clone())
         }
-        (prop.clone(), false)
+        (SC::NotFound, prop.clone())
     }
 
     fn write_props(&mut self, path: &WebPath, meta: &DavMetaData) -> Result<(), DavError> {
 
-        self.emitter.write(XmlWEvent::start_element("D:response"))?;
-        let p = path.as_url_string();
-        Element::new2("D:href").text(p).write_ev(&mut self.emitter)?;
+        // A HashMap<StatusCode, Vec<Element>> for the result.
+        let mut props = HashMap::new();
+        fn add_sc_elem(hm: &mut HashMap<SC, Vec<Element>>, sc: SC, e: Element) {
+            if !hm.contains_key(&sc) {
+                hm.insert(sc, Vec::new());
+            }
+            hm.get_mut(&sc).unwrap().push(e)
+        }
 
-        let mut found = Element::new2("D:prop");
-        let mut notfound = Element::new2("D:prop");
+        // Get properties one-by-one
+        let do_content = self.name != "propname";
         for mut p in &self.props {
-            let (e, ok) = self.build_prop(p, path, meta, self.name != "propname");
-            if ok {
-                found.push(e);
-            } else if self.name == "prop" {
-                notfound.push(e);
+            let (sc, elem) = self.build_prop(p, path, meta, do_content);
+            if sc == SC::Ok || (self.name != "propname" && self.name != "allprop") {
+                add_sc_elem(&mut props, sc, elem);
             }
         }
 
         // and list the dead properties as well.
         if (self.name == "propname" || self.name == "allprop") && self.fs.have_props(path) {
-            if let Ok(v) = self.fs.get_props(path, self.name != "propname") {
-                let v = v.into_iter().map(davprop_to_element).collect::<Vec<Element>>();
-                found.children.extend(v);
+            if let Ok(v) = self.fs.get_props(path, do_content) {
+                v.into_iter().map(davprop_to_element).
+                    for_each(|e| add_sc_elem(&mut props, SC::Ok, e));
             }
         }
 
-        if found.has_children() {
-    	    self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
-            found.write_ev(&mut self.emitter)?;
-            Element::new2("D:status").text("HTTP/1.1 200 OK").write_ev(&mut self.emitter)?;
-            self.emitter.write(XmlWEvent::end_element())?;
-        }
-
-        if self.name == "prop" && notfound.has_children() {
-    	    self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
-            notfound.write_ev(&mut self.emitter)?;
-            Element::new2("D:status").text("HTTP/1.1 404 Not Found").write_ev(&mut self.emitter)?;
-            self.emitter.write(XmlWEvent::end_element())?;
-        }
-
-        self.emitter.write(XmlWEvent::end_element())?; // response
-
-        Ok(())
+        self.write_propresponse(path, props)
     }
 
-    fn write_proppatch(&mut self, path: &WebPath, props: HashMap<SC, Vec<Element>>) -> Result<(), DavError> {
+    fn write_propresponse(&mut self, path: &WebPath, props: HashMap<SC, Vec<Element>>) -> Result<(), DavError> {
 
         self.emitter.write(XmlWEvent::start_element("D:response"))?;
         let p = path.as_url_string();
