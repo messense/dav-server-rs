@@ -34,12 +34,13 @@ use {daverror,statuserror};
 const NS_APACHE_URI: &'static str = "http://apache.org/dav/props/";
 const NS_DAV_URI: &'static str = "DAV:";
 const NS_XS4ALL_URI: &'static str = "http://xs4all.net/dav/props/";
+const NS_MS_URI: &'static str = "urn:schemas-microsoft-com:";
 
 const ALLPROP_STR: &'static [&'static str] = &[
     "D:creationdate", "D:displayname", "D:getcontentlanguage",
     "D:getcontentlength", "D:getcontenttype", "D:getetag", "D:getlastmodified",
     "D:lockdiscovery", "D:resourcetype", "D:supportedlock",
-    "A:executable", "X:atime", "X:ctime",
+    "A:executable", "X:ctime", "M:Win32LastAccessTime"
 ];
 
 lazy_static! {
@@ -51,6 +52,7 @@ lazy_static! {
                 Some("D") => Some(NS_DAV_URI.to_string()),
                 Some("A") => Some(NS_APACHE_URI.to_string()),
                 Some("X") => Some(NS_XS4ALL_URI.to_string()),
+                Some("M") => Some(NS_MS_URI.to_string()),
                 _ => None,
             };
             v.push(e);
@@ -197,7 +199,8 @@ impl DavHandler {
                 match n.namespace.as_ref().map(|x| x.as_str()) {
                     Some(NS_DAV_URI) |
                     Some(NS_APACHE_URI) |
-                    Some(NS_XS4ALL_URI) => protected.push(n),
+                    Some(NS_XS4ALL_URI) |
+                    Some(NS_MS_URI) => protected.push(n),
                     _ => normal.push(n)
                 }
             }
@@ -320,7 +323,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         // could check the prop prefixes and namespace to see if we
         // actually need these.
         if name != "propertyupdate" {
-            ev = ev.ns("A", NS_APACHE_URI).ns("X", NS_XS4ALL_URI);
+            ev = ev.ns("A", NS_APACHE_URI).ns("X", NS_XS4ALL_URI).ns("M", NS_MS_URI);
         }
 
         emitter.write(ev)?;
@@ -431,6 +434,38 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                 "ctime" => {
                     if let Ok(time) = meta.status_changed() {
                         let tm = systemtime_to_rfc3339(time);
+                        return self.build_elem(docontent, prop, tm);
+                    }
+                },
+                _ => {},
+            },
+            Some(NS_MS_URI) => match prop.name.as_str() {
+                "Win32CreationTime" => {
+                    if let Ok(time) = meta.created() {
+                        let tm = format!("{}", systemtime_to_httpdate(time));
+                        return self.build_elem(docontent, prop, tm);
+                    }
+                    // use ctime instead - apache seems to do this.
+                    if let Ok(ctime) = meta.status_changed() {
+                        let mut time = ctime;
+                        if let Ok(mtime) = meta.modified() {
+                            if mtime < ctime {
+                                time = mtime;
+                            }
+                        }
+                        let tm = format!("{}", systemtime_to_httpdate(time));
+                        return self.build_elem(docontent, prop, tm);
+                    }
+                },
+                "Win32LastAccessTime" => {
+                    if let Ok(time) = meta.accessed() {
+                        let tm = format!("{}", systemtime_to_httpdate(time));
+                        return self.build_elem(docontent, prop, tm);
+                    }
+                },
+                "Win32LastModifiedTime" => {
+                    if let Ok(time) = meta.modified() {
+                        let tm = format!("{}", systemtime_to_httpdate(time));
                         return self.build_elem(docontent, prop, tm);
                     }
                 },
