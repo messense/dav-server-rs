@@ -7,7 +7,6 @@ use xml;
 use xml::EmitterConfig;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
-use xml::common::Position;
 use xml::common::XmlVersion;
 
 use xmltree::{self,Element};
@@ -67,16 +66,9 @@ impl ElementExt for Element {
     fn parse2<R: Read>(r: R) -> Result<Element, DavError> {
         match Element::parse(r) {
             Ok(elems) => Ok(elems),
-            Err(xmltree::ParseError::MalformedXml(e)) => {
-                let e : xml::reader::Error = unsafe { std::mem::transmute(e) };
-                // Detect EOF from the XML reader
-                let pos = e.position();
-                if pos.row <= 1 && pos.column <= 1 {
-                    Err(DavError::EmptyBody)
-                } else {
-                    return Err(e)?;
-                }
-            }
+            Err(xmltree::ParseError::MalformedXml(_)) => {
+                Err(DavError::XmlParseError)
+            },
             Err(_) => Err(DavError::XmlReadError),
         }
     }

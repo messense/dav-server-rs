@@ -13,7 +13,6 @@ pub(crate) enum DavError {
     IllegalPath,        // path not valid here
     ForbiddenPath,      // too many dotdots
     UnknownMethod,
-    EmptyBody,
     Status(StatusCode),
     IoError(std::io::Error),
     XmlReaderError(xml::reader::Error),
@@ -82,7 +81,6 @@ impl DavError {
             &DavError::InvalidPath => StatusCode::BadRequest,
             &DavError::IllegalPath => StatusCode::BadGateway,
             &DavError::ForbiddenPath => StatusCode::Forbidden,
-            &DavError::EmptyBody => StatusCode::BadRequest,
             &DavError::UnknownMethod => StatusCode::NotImplemented,
             &DavError::IoError(ref e) => ioerror_to_status(e),
             &DavError::Status(e) => e,
