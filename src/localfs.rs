@@ -11,6 +11,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::time::{Duration,UNIX_EPOCH,SystemTime};
 use std::io::ErrorKind;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::DirBuilderExt;
 
 use libc;
 
@@ -25,6 +26,7 @@ use fs::*;
 #[derive(Debug,Clone)]
 pub struct LocalFs {
     basedir:    PathBuf,
+    public:     bool,
 }
 
 #[derive(Debug)]
@@ -46,9 +48,14 @@ struct LocalFsDirEntry {
 }
 
 impl LocalFs {
-    pub fn new<P: AsRef<Path>>(base: P) -> Box<LocalFs> {
+    /// Create a new LocalFs DavFileSystem, serving "base". If "public" is
+    /// set to true, all files and directories created will be
+    /// publically readable (mode 644/755), otherwise they will
+    /// be private (mode 600/700). Umask stil overrides this.
+    pub fn new<P: AsRef<Path>>(base: P, public: bool) -> Box<LocalFs> {
         Box::new(LocalFs{
             basedir: base.as_ref().to_path_buf(),
+            public: public,
         })
     }
 
@@ -91,7 +98,7 @@ impl DavFileSystem for LocalFs {
             .truncate(options.truncate)
             .create(options.create)
             .create_new(options.create_new)
-            .mode(if options.public { 0o644 } else { 0o600 })
+            .mode(if self.public { 0o644 } else { 0o600 })
             .open(self.fspath(path));
         match res {
             Ok(file) => Ok(Box::new(LocalFsFile(file))),
@@ -101,7 +108,9 @@ impl DavFileSystem for LocalFs {
 
     fn create_dir(&self, path: &WebPath) -> FsResult<()> {
         debug!("FS: create_dir {:?}", self.fspath(path));
-        std::fs::create_dir(self.fspath(path)).map_err(|e| e.into())
+        std::fs::DirBuilder::new()
+            .mode(if self.public { 0o755 } else { 0o700 })
+            .create(self.fspath(path)).map_err(|e| e.into())
     }
 
     fn remove_dir(&self, path: &WebPath) -> FsResult<()> {

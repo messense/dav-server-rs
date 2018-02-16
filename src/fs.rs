@@ -154,7 +154,6 @@ pub struct OpenOptions {
     pub truncate: bool,
     pub create: bool,
     pub create_new: bool,
-    pub public: bool,
 }
 
 impl OpenOptions {
@@ -167,7 +166,6 @@ impl OpenOptions {
             truncate: false,
             create: false,
             create_new: false,
-            public: false,
         }
     }
     pub fn read() -> OpenOptions {
@@ -178,7 +176,6 @@ impl OpenOptions {
             truncate: false,
             create: false,
             create_new: false,
-            public: false,
         }
     }
     pub fn write() -> OpenOptions {
@@ -189,7 +186,6 @@ impl OpenOptions {
             truncate: false,
             create: false,
             create_new: false,
-            public: false,
         }
     }
 }
