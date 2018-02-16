@@ -416,6 +416,11 @@ impl<'a, 'k> PropWriter<'a, 'k> {
     }
 
     fn build_prop(&self, prop: &Element, path: &WebPath, meta: &DavMetaData, docontent: bool) -> (SC, Element) {
+
+        // in some cases, a live property might be stored in the
+        // dead prop database, like DAV:displayname.
+        let mut try_deadprop = false;
+
         match prop.namespace.as_ref().map(|x| x.as_str()) {
             Some(NS_DAV_URI) => match prop.name.as_str() {
                 "creationdate" => {
@@ -434,6 +439,10 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                         let tm = systemtime_to_rfc3339(time);
                         return self.build_elem(docontent, prop, tm);
                     }
+                },
+                "displayname" |
+                "getcontentlanguage" => {
+                    try_deadprop = true;
                 },
                 "getetag" => {
                     return self.build_elem(docontent, prop, meta.etag());
@@ -466,10 +475,10 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                 },
                 "supportedlock" => {
                     return (SC::Ok, list_supportedlock());
-                }
+                },
                 "lockdiscovery" => {
                     return (SC::Ok, list_lockdiscovery());
-                }
+                },
                 _ => {},
             },
             Some(NS_APACHE_URI) => match prop.name.as_str() {
@@ -478,7 +487,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                         let b = if x { "T" } else { "F" };
                         return self.build_elem(docontent, prop, b);
                     }
-                }
+                },
                 _ => {},
             },
             Some(NS_XS4ALL_URI) => match prop.name.as_str() {
@@ -528,16 +537,19 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                 },
                 _ => {},
             },
-            _ if self.name == "prop" && self.fs.have_props(path) => {
-                // asking for a specific property.
-                let dprop = element_to_davprop(prop);
-                if let Ok(xml) = self.fs.get_prop(path, dprop) {
-                    if let Ok(e) = Element::parse(Cursor::new(xml)) {
-                        return (SC::Ok, e);
-                    }
-                }
+            _ => {
+                try_deadprop = true;
             },
-            _ => return (SC::NotFound, prop.clone())
+        }
+
+        if try_deadprop && self.name == "prop" && self.fs.have_props(path) {
+            // asking for a specific property.
+            let dprop = element_to_davprop(prop);
+            if let Ok(xml) = self.fs.get_prop(path, dprop) {
+                if let Ok(e) = Element::parse(Cursor::new(xml)) {
+                    return (SC::Ok, e);
+                }
+            }
         }
         (SC::NotFound, prop.clone())
     }
