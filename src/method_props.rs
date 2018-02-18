@@ -323,7 +323,7 @@ impl DavHandler {
             ).collect::<Vec<_>>();
             ret.extend(set.into_iter().chain(rem.into_iter())
                     .map(|p| (SC::FailedDependency, p)));
-        } else {
+        } else if set.len() > 0 || rem.len() > 0 {
             // hmmm ... we assume nothing goes wrong here at the
             // moment. if it does, we should roll back the earlier
             // made changes to live props, but come on, we're not
