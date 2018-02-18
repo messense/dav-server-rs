@@ -131,7 +131,7 @@ impl Handler for Server {
         let (fs, prefix) : (Box<DavFileSystem>, &str) = if let Some(ref fs) = self.fs {
             ((*fs).clone(), "/")
         } else {
-            (localfs::LocalFs::new(dir), prefix)
+            (localfs::LocalFs::new(dir, true), prefix)
         };
 
         // instantiate and run a new handler.
