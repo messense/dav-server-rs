@@ -257,6 +257,12 @@ impl DavHandler {
 
     // dispatcher.
     pub fn handle(&self, mut req: Request, mut res: Response) {
+
+        // enable TCP_NODELAY
+        if let Some(httpstream) = req.downcast_ref::<hyper::net::HttpStream>() {
+            httpstream.0.set_nodelay(true).ok();
+        }
+
         if let None = req.headers.get::<Date>() {
             let now = time::now();
             res.headers_mut().set(Date(hyper::header::HttpDate(now)));
