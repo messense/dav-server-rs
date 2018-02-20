@@ -78,6 +78,13 @@ impl DavFileSystem for LocalFs {
         }
     }
 
+    fn symlink_metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>> {
+        match std::fs::symlink_metadata(self.fspath(path)) {
+            Ok(meta) => Ok(Box::new(LocalFsMetaData(meta))),
+            Err(e) => Err(e.into())
+        }
+    }
+
     fn read_dir(&self, path: &WebPath) -> FsResult<Box<DavReadDir<Item=Box<DavDirEntry>>>> {
         debug!("FS: read_dir {:?}", self.fspath(path));
         match std::fs::read_dir(self.fspath(path)) {
@@ -222,6 +229,9 @@ impl DavMetaData for LocalFsMetaData {
     }
     fn is_file(&self) -> bool {
         self.0.is_file()
+    }
+    fn is_symlink(&self) -> bool {
+        self.0.file_type().is_symlink()
     }
     fn executable(&self) -> FsResult<bool> {
         if self.0.is_file() {

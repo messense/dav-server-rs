@@ -86,6 +86,7 @@ impl super::DavHandler {
         let mut result = Ok(());
         for dirent in entries {
             // if metadata() fails, skip to next entry.
+            // NOTE: dirent.metadata == symlink_metadata (!)
             let meta = match dirent.metadata() {
                 Ok(m) => m,
                 Err(e) => { result = Err(add_status(&mut res, path, e)); continue },
@@ -126,7 +127,9 @@ impl super::DavHandler {
             _ => return Err(statuserror(&mut res, SC::BadRequest)),
         };
 
-        let (path, meta) = self.fixpath(&req, &mut res).map_err(|e| fserror(&mut res, e))?;
+        let mut path = self.path(&req);
+        path.remove_slash();
+        let meta = self.fs.symlink_metadata(&path).map_err(|e| fserror(&mut res, e))?;
         let mut multierror = MultiError::new(res, &path);
 
         if let Ok(()) = self.delete_items(&mut multierror, depth, meta, &path) {
@@ -262,7 +265,12 @@ impl super::DavHandler {
         }
 
         // check if overwrite is "F"
-        let dmeta = self.fs.metadata(&dest);
+        let dmeta = if depth == Depth::Zero {
+            self.fs.metadata(&dest)
+        } else {
+            self.fs.symlink_metadata(&dest)
+        };
+
         let exists = dmeta.is_ok();
         if !overwrite && exists {
             Err(statuserror(&mut res, SC::PreconditionFailed))?;

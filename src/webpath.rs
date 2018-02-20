@@ -325,6 +325,15 @@ impl WebPath {
         l > 0 && self.path[l-1] == b'/'
     }
 
+    // remove trailing slash
+    pub fn remove_slash(&mut self) {
+        let mut l = self.path.len();
+        while l > 1 && self.path[l-1] == b'/' {
+            l -= 1;
+        }
+        self.path.truncate(l);
+    }
+
     // add a slash
     pub fn add_slash(&mut self) {
         if !self.is_collection() {

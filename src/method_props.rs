@@ -170,15 +170,15 @@ impl DavHandler {
             Err(e) => { error!("read_dir error {:?}", e); return Ok(()); },
         };
         for dirent in entries {
-            let meta = match dirent.metadata() {
+            let mut npath = path.clone();
+            npath.push_segment(&dirent.name());
+            let meta = match self.fs.metadata(&npath) {
                 Ok(meta) => meta,
                 Err(e) => {
-                    error!("Metadata error on {:?}. Skipping {:?}", dirent, e);
+                    debug!("metadata error on {}. Skipping {:?}", npath, e);
                     continue;
                 }
             };
-            let mut npath = path.clone();
-            npath.push_segment(&dirent.name());
             if meta.is_dir() {
                 npath.add_slash();
             }

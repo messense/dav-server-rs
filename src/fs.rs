@@ -42,6 +42,10 @@ pub trait DavFileSystem : Debug + Sync + Send {
     fn metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>>;
 
     #[allow(unused_variables)]
+    fn symlink_metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>> {
+        self.metadata(path)
+    }
+    #[allow(unused_variables)]
     fn create_dir(&self, path: &WebPath) -> FsResult<()> {
         notimplemented!("create_dir")
     }
