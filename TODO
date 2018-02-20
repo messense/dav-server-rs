@@ -14,9 +14,6 @@
 
 - move filesystem interface to pathbuf
 
-- add support for webdav quota reporting - RFC4331. Support plain
-  linux quota and NFS rquota.
-
 - support for compressing responses, at least PROPFIND.
 - support for compressed PUT requests?
 
@@ -26,4 +23,9 @@
 - add tests, tests ...
 
 - port to hyper 0.11
+
+DONE:
+
+- add support for webdav quota reporting - RFC4331. Support plain
+  linux quota and NFS rquota.
 
