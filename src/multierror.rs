@@ -72,6 +72,9 @@ impl<'a> MultiError<'a> {
                     return Ok(());
                 }
 
+                let contenttype = vec!(b"application/xml; charset=utf-8".to_vec());
+                res.headers_mut().set_raw("Content-Type", contenttype);
+
                 self.respstatus = StatusCode::MultiStatus;
                 *res.status_mut() = self.respstatus;
                 let res = res.start()?;

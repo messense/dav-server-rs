@@ -79,8 +79,8 @@ pub trait DavFileSystem : Debug + Sync + Send {
     }
 
     #[allow(unused_variables)]
-    fn get_quota(&self, path: &WebPath) -> FsResult<(u64, Option<u64>)> {
-        notimplemented!("get_prop`")
+    fn get_quota(&self) -> FsResult<(u64, Option<u64>)> {
+        notimplemented!("get_quota`")
     }
 
     // helper so that clone() works.

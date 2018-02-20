@@ -5,6 +5,7 @@ use std::io::BufWriter;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+use hyper;
 use hyper::status::StatusCode as SC;
 use hyper::server::{Request,Response};
 use hyper::net::Streaming;
@@ -36,30 +37,23 @@ const NS_DAV_URI: &'static str = "DAV:";
 const NS_XS4ALL_URI: &'static str = "http://xs4all.net/dav/props/";
 const NS_MS_URI: &'static str = "urn:schemas-microsoft-com:";
 
-const ALLPROP_STR: &'static [&'static str] = &[
+const PROPNAME_STR: &'static [&'static str] = &[
     "D:creationdate", "D:displayname", "D:getcontentlanguage",
     "D:getcontentlength", "D:getcontenttype", "D:getetag", "D:getlastmodified",
     "D:lockdiscovery", "D:resourcetype", "D:supportedlock",
     "D:quota-available-bytes", "D:quota-used-bytes",
-    "A:executable", "X:ctime", "M:Win32LastAccessTime"
+    "A:executable", "X:atime", "X:ctime", "M:Win32LastAccessTime"
+];
+
+const ALLPROP_STR: &'static [&'static str] = &[
+    "D:creationdate", "D:displayname", "D:getcontentlanguage",
+    "D:getcontentlength", "D:getcontenttype", "D:getetag", "D:getlastmodified",
+    "D:lockdiscovery", "D:resourcetype", "D:supportedlock",
 ];
 
 lazy_static! {
-    static ref ALLPROP : Vec<Element> = {
-        let mut v = Vec::new();
-        for a in ALLPROP_STR {
-            let mut e = Element::new2(*a);
-            e.namespace = match e.prefix.as_ref().map(|x| x.as_str()) {
-                Some("D") => Some(NS_DAV_URI.to_string()),
-                Some("A") => Some(NS_APACHE_URI.to_string()),
-                Some("X") => Some(NS_XS4ALL_URI.to_string()),
-                Some("M") => Some(NS_MS_URI.to_string()),
-                _ => None,
-            };
-            v.push(e);
-        }
-        v
-    };
+    static ref ALLPROP : Vec<Element> = init_staticprop(ALLPROP_STR);
+    static ref PROPNAME : Vec<Element> = init_staticprop(PROPNAME_STR);
 }
 
 type Emitter<'a> = EventWriter<BufWriter<Response<'a, Streaming>>>;
@@ -69,6 +63,31 @@ struct PropWriter<'a, 'k: 'a> {
     name:       &'a str,
     props:      Vec<Element>,
     fs:         &'a Box<DavFileSystem>,
+    useragent:  &'a str,
+    q_cache:    QuotaCache,
+}
+
+#[derive(Default,Clone,Copy)]
+struct QuotaCache {
+    q_state:    u32,
+    q_used:     u64,
+    q_total:    Option<u64>,
+}
+
+fn init_staticprop(p: &[&str]) -> Vec<Element> {
+    let mut v = Vec::new();
+    for a in p {
+        let mut e = Element::new2(*a);
+        e.namespace = match e.prefix.as_ref().map(|x| x.as_str()) {
+            Some("D") => Some(NS_DAV_URI.to_string()),
+            Some("A") => Some(NS_APACHE_URI.to_string()),
+            Some("X") => Some(NS_XS4ALL_URI.to_string()),
+            Some("M") => Some(NS_MS_URI.to_string()),
+            _ => None,
+        };
+        v.push(e);
+    }
+    v
 }
 
 impl DavHandler {
@@ -76,6 +95,11 @@ impl DavHandler {
     pub(crate) fn handle_propfind(&self, mut req: Request, mut res: Response) -> DavResult<()> {
 
         let xmldata = self.read_request_max(&mut req, 8192);
+
+        let cc = vec!(b"no-store, no-cache, must-revalidate".to_vec());
+        let pg = vec!(b"no-cache".to_vec());
+        res.headers_mut().set_raw("Cache-Control", cc);
+        res.headers_mut().set_raw("Pragma", pg);
 
         let depth = match req.headers.get::<headers::Depth>() {
             Some(&headers::Depth::Infinity) | None => {
@@ -127,7 +151,9 @@ impl DavHandler {
             }
         };
 
-        let mut pw = PropWriter::new(res, name, props, &self.fs)?;
+        debug!("propfind: type request: {}", name);
+
+        let mut pw = PropWriter::new(&req, res, name, props, &self.fs)?;
         pw.write_props(&path, meta.as_ref())?;
 
         if meta.is_dir() && depth != headers::Depth::Zero {
@@ -345,7 +371,7 @@ impl DavHandler {
         }
 
         // And reply.
-        let mut pw = PropWriter::new(res, "propertyupdate", Vec::new(), &self.fs)?;
+        let mut pw = PropWriter::new(&req, res, "propertyupdate", Vec::new(), &self.fs)?;
         pw.write_propresponse(&path, hm)?;
         pw.close()?;
 
@@ -355,9 +381,9 @@ impl DavHandler {
 
 impl<'a, 'k> PropWriter<'a, 'k> {
 
-    pub fn new(mut res: Response<'k>, name: &'a str, mut props: Vec<Element>, fs: &'a Box<DavFileSystem>) -> DavResult<PropWriter<'a, 'k>> {
+    pub fn new(req: &'a Request, mut res: Response<'k>, name: &'a str, mut props: Vec<Element>, fs: &'a Box<DavFileSystem>) -> DavResult<PropWriter<'a, 'k>> {
 
-        let contenttype = vec!(b"text/xml; charset=\"utf-8\"".to_vec());
+        let contenttype = vec!(b"application/xml; charset=utf-8".to_vec());
         res.headers_mut().set_raw("Content-Type", contenttype);
         *res.status_mut() = SC::MultiStatus;
         let res = res.start()?;
@@ -365,7 +391,8 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         let mut emitter = EventWriter::new_with_config(
                               BufWriter::new(res),
                               EmitterConfig {
-                                  perform_indent: true,
+                                  normalize_empty_elements: false,
+                                  perform_indent: false,
                                   indent_string: Cow::Borrowed(""),
                                   ..Default::default()
                               }
@@ -388,7 +415,8 @@ impl<'a, 'k> PropWriter<'a, 'k> {
 
         if name != "prop" && name != "propertyupdate" {
             let mut v = Vec::new();
-            for a in ALLPROP.iter() {
+            let iter = if name == "allprop" { ALLPROP.iter() } else { PROPNAME.iter() };
+            for a in iter {
                 if !props.iter().any(|e| a.namespace == e.namespace && a.name == e.name) {
                     v.push(a.clone());
                 }
@@ -396,11 +424,18 @@ impl<'a, 'k> PropWriter<'a, 'k> {
             props.append(&mut v);
         }
 
+        let ua = match req.headers.get::<hyper::header::UserAgent>() {
+            Some(s) => &s.0,
+            None => "",
+        };
+
         Ok(PropWriter {
             emitter:    emitter,
             name:       name,
             props:      props,
             fs:         fs,
+            useragent:  ua,
+            q_cache:    Default::default(),
         })
     }
 
@@ -416,7 +451,42 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         (SC::Ok, e)
     }
 
-    fn build_prop(&self, prop: &Element, path: &WebPath, meta: &DavMetaData, docontent: bool) -> (SC, Element) {
+    fn get_quota(&self, qc: &mut QuotaCache, path: &WebPath, meta: &DavMetaData) -> FsResult<(u64, Option<u64>)> {
+        // do lookup only once.
+        match qc.q_state {
+            0 => {
+                match self.fs.get_quota() {
+                    Err(e) => {
+                        qc.q_state = 1;
+                        return Err(e);
+                    },
+                    Ok((u, t)) => {
+                        qc.q_used = u;
+                        qc.q_total = t;
+                        qc.q_state = 2;
+                    },
+                }
+            },
+            1 => return Err(FsError::NotImplemented),
+            _ => {},
+        }
+
+        // if not "/", return for "used" just the size of this file/dir.
+        let used = if path.as_bytes() == b"/" {
+            qc.q_used
+        } else {
+            meta.len()
+        };
+
+        // calculate available space.
+        let avail = match qc.q_total {
+            None => None,
+            Some(total) => Some(if total > used { total - used } else { 0 }),
+        };
+        Ok((used, avail))
+    }
+
+    fn build_prop(&self, prop: &Element, path: &WebPath, meta: &DavMetaData, mut qc: &mut QuotaCache, docontent: bool) -> (SC, Element) {
 
         // in some cases, a live property might be stored in the
         // dead prop database, like DAV:displayname.
@@ -481,18 +551,20 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                     return (SC::Ok, list_lockdiscovery());
                 },
                 "quota-available-bytes" => {
-                    if let Ok((used, Some(total))) = self.fs.get_quota(path) {
-                        let avail = if total > used {
-                            total - used
-                        } else {
-                            0
-                        };
+                    if let Ok((_, Some(avail))) = self.get_quota(&mut qc, path, meta) {
                         return self.build_elem(docontent, prop, avail.to_string());
                     }
                 },
                 "quota-used-bytes" => {
-                    if let Ok((used, _)) = self.fs.get_quota(path) {
-                        return self.build_elem(docontent, prop, used.to_string());
+                    if let Ok((used, _)) = self.get_quota(&mut qc, path, meta) {
+                        let used = if self.useragent.contains("WebDAVFS") {
+                            // Need this on OSX, otherwise the value is off
+                            // by a factor of 10 or so .. ?!?!!?
+                            format!("{:014}", used)
+                        } else {
+                            used.to_string()
+                        };
+                        return self.build_elem(docontent, prop, used);
                     }
                 },
                 _ => {},
@@ -583,12 +655,14 @@ impl<'a, 'k> PropWriter<'a, 'k> {
 
         // Get properties one-by-one
         let do_content = self.name != "propname";
+        let mut qc = self.q_cache;
         for mut p in &self.props {
-            let (sc, elem) = self.build_prop(p, path, meta, do_content);
+            let (sc, elem) = self.build_prop(p, path, meta, &mut qc, do_content);
             if sc == SC::Ok || (self.name != "propname" && self.name != "allprop") {
                 add_sc_elem(&mut props, sc, elem);
             }
         }
+        self.q_cache = qc;
 
         // and list the dead properties as well.
         if (self.name == "propname" || self.name == "allprop") && self.fs.have_props(path) {
@@ -607,7 +681,10 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         let p = path.as_url_string();
         Element::new2("D:href").text(p).write_ev(&mut self.emitter)?;
 
-        for (status, v) in props {
+        let mut keys = props.keys().collect::<Vec<_>>();
+        keys.sort();
+        for status in keys {
+            let v = props.get(status).unwrap();
     	    self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
     	    self.emitter.write(XmlWEvent::start_element("D:prop"))?;
             for i in v.iter() {
