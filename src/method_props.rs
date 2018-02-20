@@ -40,6 +40,7 @@ const ALLPROP_STR: &'static [&'static str] = &[
     "D:creationdate", "D:displayname", "D:getcontentlanguage",
     "D:getcontentlength", "D:getcontenttype", "D:getetag", "D:getlastmodified",
     "D:lockdiscovery", "D:resourcetype", "D:supportedlock",
+    "D:quota-available-bytes", "D:quota-used-bytes",
     "A:executable", "X:ctime", "M:Win32LastAccessTime"
 ];
 
@@ -478,6 +479,21 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                 },
                 "lockdiscovery" => {
                     return (SC::Ok, list_lockdiscovery());
+                },
+                "quota-available-bytes" => {
+                    if let Ok((used, Some(total))) = self.fs.get_quota(path) {
+                        let avail = if total > used {
+                            total - used
+                        } else {
+                            0
+                        };
+                        return self.build_elem(docontent, prop, avail.to_string());
+                    }
+                },
+                "quota-used-bytes" => {
+                    if let Ok((used, _)) = self.fs.get_quota(path) {
+                        return self.build_elem(docontent, prop, used.to_string());
+                    }
                 },
                 _ => {},
             },

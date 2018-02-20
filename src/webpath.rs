@@ -344,7 +344,7 @@ impl WebPath {
     }
 
     // prefix the WebPath with a Path and return a PathBuf
-    pub(crate) fn as_pathbuf_with_prefix<P: AsRef<Path>>(&self, path: P) -> PathBuf {
+    pub fn as_pathbuf_with_prefix<P: AsRef<Path>>(&self, path: P) -> PathBuf {
         let mut p = path.as_ref().to_path_buf();
         p.push(self.as_rel_pathbuf());
         /*
