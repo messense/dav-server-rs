@@ -10,7 +10,7 @@ use super::DavResult;
 use super::fs::*;
 use super::headers;
 use super::{statuserror,fserror,systemtime_to_httpdate};
-use super::conditional::ifmatch;
+use super::conditional::if_match;
 
 macro_rules! statuserror {
     ($res:ident, $s:ident) => {
@@ -109,7 +109,7 @@ impl super::DavHandler {
         }
 
         // handle the if-headers.
-        if let Some(s) = ifmatch(&req, meta.as_ref().ok()) {
+        if let Some(s) = if_match(&req, meta.as_ref().ok(), &self.fs, &path) {
             return Err(statuserror(&mut res, s));
         }
 

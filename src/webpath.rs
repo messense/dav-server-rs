@@ -12,8 +12,8 @@ use super::DavError;
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct WebPath {
-    path:       Vec<u8>,
-    prefix:     Vec<u8>,
+    pub(crate) path:    Vec<u8>,
+    pub(crate) prefix:  Vec<u8>,
 }
 
 impl std::fmt::Display for WebPath {

@@ -4,13 +4,13 @@ use hyper::server::{Request,Response};
 use hyper::status::StatusCode as SC;
 
 use {Method,DavResult};
-use webpath::WebPath;
-use errors::DavError;
 use {statuserror,daverror,fserror,fserror_to_status};
-use fs::*;
+use errors::DavError;
 use multierror::MultiError;
-use headers;
-use headers::Depth;
+use conditional::{if_match,http_if_match};
+use webpath::WebPath;
+use headers::{self,Depth};
+use fs::*;
 
 // map_err helper.
 fn add_status(res: &mut MultiError, path: &WebPath, e: FsError) -> DavError {
@@ -54,6 +54,13 @@ impl super::DavHandler {
     pub(crate) fn handle_mkcol(&self, req: Request, mut res: Response) -> DavResult<()> {
 
         let mut path = self.path(&req);
+        let meta = self.fs.metadata(&path);
+
+        // check the If and If-* headers.
+        if let Some(s) = if_match(&req, meta.as_ref().ok(), &self.fs, &path) {
+            return Err(statuserror(&mut res, s));
+        }
+
         match self.fs.create_dir(&path) {
             // RFC 4918 9.3.1 MKCOL Status Codes.
             Err(FsError::Exists) => Err(statuserror(&mut res, SC::MethodNotAllowed)),
@@ -130,6 +137,12 @@ impl super::DavHandler {
         let mut path = self.path(&req);
         path.remove_slash();
         let meta = self.fs.symlink_metadata(&path).map_err(|e| fserror(&mut res, e))?;
+
+        // check the If and If-* headers.
+        if let Some(s) = if_match(&req, Some(&meta), &self.fs, &path) {
+            return Err(statuserror(&mut res, s));
+        }
+
         let mut multierror = MultiError::new(res, &path);
 
         if let Ok(()) = self.delete_items(&mut multierror, depth, meta, &path) {
@@ -259,7 +272,7 @@ impl super::DavHandler {
 
         // source must exist, as well as the parent of the destination.
         let path = self.path(&req);
-        self.fs.metadata(&path).map_err(|e| fserror(&mut res, e))?;
+        let meta = self.fs.metadata(&path).map_err(|e| fserror(&mut res, e))?;
         if !self.has_parent(&dest) {
             Err(statuserror(&mut res, SC::Conflict))?;
         }
@@ -279,6 +292,15 @@ impl super::DavHandler {
         // check if source == dest
         if path == dest {
             Err(statuserror(&mut res, SC::Forbidden))?;
+        }
+
+        // check If and If-* headers for source URL
+        if let Some(s) = if_match(&req, Some(&meta), &self.fs, &path) {
+            return Err(statuserror(&mut res, s));
+        }
+        // check If-* headers for destionation URL
+        if let Some(s) = http_if_match(&req, dmeta.as_ref().ok()) {
+            return Err(statuserror(&mut res, s));
         }
 
         let mut multierror = MultiError::new(res, &path);

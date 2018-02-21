@@ -23,7 +23,7 @@ use headers;
 use webpath::*;
 use fs::*;
 
-use conditional::ifmatch;
+use conditional::if_match;
 use errors::DavError;
 use fserror_to_status;
 
@@ -93,6 +93,9 @@ fn init_staticprop(p: &[&str]) -> Vec<Element> {
 impl DavHandler {
 
     pub(crate) fn handle_propfind(&self, mut req: Request, mut res: Response) -> DavResult<()> {
+
+        // No checks on If: and If-* headers here, because I do not see
+        // the point and there's nothing in RFC4918 that indicates we should.
 
         let xmldata = self.read_request_max(&mut req, 8192);
 
@@ -295,7 +298,7 @@ impl DavHandler {
         };
 
         // handle the if-headers.
-        if let Some(s) = ifmatch(&req, Some(&meta)) {
+        if let Some(s) = if_match(&req, Some(&meta), &self.fs, &path) {
             return Err(statuserror(&mut res, s));
         }
 

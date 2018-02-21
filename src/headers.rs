@@ -374,13 +374,13 @@ impl HeaderFormat for ContentRange {
 
 // The "If" header contains IfLists, of which the results are ORed.
 #[derive(Debug,Clone,PartialEq)]
-pub struct If(Vec<IfList>);
+pub struct If(pub Vec<IfList>);
 
 // An IfList contains Conditions, of which the results are ANDed.
 #[derive(Debug,Clone,PartialEq)]
 pub struct IfList {
-    resource_tag:   Option<url::Url>,
-    conditions:     Vec<IfCondition>,
+    pub resource_tag:   Option<url::Url>,
+    pub conditions:     Vec<IfCondition>,
 }
 
 // helpers.
@@ -399,11 +399,11 @@ impl IfList {
 // Single Condition is [NOT] State-Token | EntityTag
 #[derive(Debug,Clone,PartialEq)]
 pub struct IfCondition {
-    not:    bool,
-    item:   IfItem,
+    pub not:    bool,
+    pub item:   IfItem,
 }
 #[derive(Debug,Clone,PartialEq)]
-enum IfItem {
+pub enum IfItem {
     StateToken(String),
     ETag(EntityTag),
 }

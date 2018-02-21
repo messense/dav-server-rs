@@ -11,7 +11,7 @@ use super::errors::DavError;
 use super::headers;
 use super::fs::OpenOptions;
 use super::{fserror,statuserror,systemtime_to_httpdate};
-use super::conditional::ifmatch;
+use super::conditional::if_match;
 
 impl super::DavHandler {
     pub(crate) fn handle_get(&self, req: Request, mut res: Response) -> Result<(), DavError> {
@@ -75,7 +75,7 @@ impl super::DavHandler {
         res.headers_mut().set(hyper::header::ETag(file_etag));
 
         // handle the if-headers.
-        if let Some(s) = ifmatch(&req, Some(&meta)) {
+        if let Some(s) = if_match(&req, Some(&meta), &self.fs, &path) {
             return Err(statuserror(&mut res, s));
         }
 

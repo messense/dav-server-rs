@@ -15,7 +15,7 @@ use super::errors::DavError;
 use super::headers::{self,Depth};
 use super::fs::{OpenOptions,FsError};
 use super::{daverror,statuserror,fserror};
-use super::conditional::ifmatch;
+use super::conditional::if_match;
 
 #[derive(Debug)]
 enum LockScope {
@@ -53,7 +53,7 @@ impl super::DavHandler {
         };
 
         // handle the if-headers.
-        if let Some(s) = ifmatch(&req, meta.as_ref()) {
+        if let Some(s) = if_match(&req, meta.as_ref(), &self.fs, &path) {
             return Err(statuserror(&mut res, s));
         }
 
@@ -132,8 +132,6 @@ impl super::DavHandler {
 
         // Claim we succeeded.
         let locktoken = Uuid::new_v4().urn().to_string();
-        let pointy = "<".to_string() + locktoken.as_str() + ">";
-        res.headers_mut().set(headers::LockToken(pointy));
 
         let mut lock = Element::new2("D:activelock");
 
@@ -157,7 +155,10 @@ impl super::DavHandler {
         }.to_string()));
 
         lock.push(Element::new2("D:timeout").text("Second-3600".to_string()));
-        lock.push(Element::new2("D:locktoken").text(locktoken.clone()));
+
+        let mut locktokenelem = Element::new2("D:locktoken");
+        locktokenelem.push(Element::new2("D:href").text(locktoken.clone()));
+        lock.push(locktokenelem);
 
         let mut lockroot = Element::new2("D:lockroot");
         lockroot.push(Element::new2("D:href").text(path.as_url_string()));
@@ -191,6 +192,7 @@ impl super::DavHandler {
             .ok_or(statuserror(&mut res, SC::BadRequest))?;
         // .. and it must look like one we handed out.
         if !t.starts_with("<urn:uuid:") {
+            debug!("conflict error because of weird lock-token {}", t);
             return Err(statuserror(&mut res, SC::Conflict));
         }
 

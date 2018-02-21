@@ -1,8 +1,14 @@
 
-- research why UNLOCK fails with 4xx on OSX
-
-- If: header support in conditional.rs
 - Add a real locksystem interface, and a "memls"
+
+- Do fake locking only for user-agents:
+
+  - /WebDAVFS/					// Apple
+  - /Microsoft Office OneNote 2013/'		// MS
+  - /^Microsoft-WebDAV/				// MS
+
+  this is the list that NextCloud uses for fake locking.
+  probably (WebDAVFS|Microsoft) would do the trick.
 
 - Add support for properties to localfs.rs on XFS. XFS has unlimited and
   scalable extended attributes. ext2/3/4 can store max 4KB. On XFS we can
@@ -28,4 +34,6 @@ DONE:
 
 - add support for webdav quota reporting - RFC4331. Support plain
   linux quota and NFS rquota.
+- research why UNLOCK fails with 4xx on OSX
+- If: header support in conditional.rs
 
