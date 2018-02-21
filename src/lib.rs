@@ -278,7 +278,15 @@ impl DavHandler {
                 return;
             },
         };
-        //
+
+        if let Some(ref a) = self.allow {
+            if !a.contains(&method) {
+                debug!("method {} not allowed on request {}", &req.method, &req.uri);
+                *res.status_mut() = StatusCode::MethodNotAllowed;
+                return;
+            }
+        }
+
         // make sure the request path is valid.
         // XXX why do this twice ... oh well.
         let path = match WebPath::from_uri(&req.uri, &self.prefix) {
