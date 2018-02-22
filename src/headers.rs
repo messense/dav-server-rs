@@ -41,7 +41,7 @@ impl Header for Depth {
             match raw[0].as_slice() {
                 b"0" => return Ok(Depth::Zero),
                 b"1" => return Ok(Depth::One),
-                b"infinity" => return Ok(Depth::Infinity),
+                b"infinity" | b"Infinity" => return Ok(Depth::Infinity),
                 _ => {},
             }
         }
@@ -55,7 +55,7 @@ impl HeaderFormat for Depth {
         let value = match *self {
             Depth::Zero => "0",
             Depth::One => "1",
-            Depth::Infinity => "infinity",
+            Depth::Infinity => "Infinity",
         };
         f.write_str(value)
     }
