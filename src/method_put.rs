@@ -6,11 +6,11 @@ use hyper::status::StatusCode as SC;
 use std;
 use std::io::prelude::*;
 
-use super::DavResult;
-use super::fs::*;
-use super::headers;
-use super::{statuserror,fserror,systemtime_to_httpdate};
-use super::conditional::if_match;
+use DavResult;
+use fs::*;
+use headers;
+use {statuserror,fserror,systemtime_to_httpdate};
+use conditional::if_match;
 
 macro_rules! statuserror {
     ($res:ident, $s:ident) => {
@@ -22,17 +22,7 @@ const SABRE: &'static str = "application/x-sabredav-partialupdate";
 
 impl super::DavHandler {
 
-    pub(crate) fn handle_put(&self, mut req: Request, res: Response) -> DavResult<()> {
-
-        // handle the PUT request, then drain the input if there's still
-        // data coming in (usually if we rejected the request). There really
-        // should be a way to forcibly close the network connection instead.
-        let result = self.do_handle_put(&mut req, res);
-        self.drain_request(&mut req);
-        result
-    }
-
-    fn do_handle_put(&self, req: &mut Request, mut res: Response) -> DavResult<()> {
+    pub(crate) fn handle_put(&self, mut req: Request, mut res: Response) -> DavResult<()> {
 
         let mut start = 0;
         let mut count = 0;
@@ -49,6 +39,9 @@ impl super::DavHandler {
         }
         let path = self.path(&req);
         let meta = self.fs.metadata(&path);
+
+        // close connection on error.
+        res.headers_mut().set(hyper::header::Connection::close());
 
         // SabreDAV style PATCH?
         if req.method == hyper::method::Method::Patch {
@@ -176,12 +169,17 @@ impl super::DavHandler {
             return Err(statuserror(&mut res, SC::BadRequest));
         }
 
-        // Return updated file information.
+        // Report whether we created or updated the file.
         *res.status_mut() = match meta {
             Ok(_) => SC::NoContent,
-            Err(_) => SC::Created,
+            Err(_) => {
+                res.headers_mut().set(hyper::header::ContentLength(0));
+                SC::Created
+            },
         };
-        res.headers_mut().set(hyper::header::ContentLength(0));
+
+        // no errors, connection may be kept open.
+        res.headers_mut().remove::<hyper::header::Connection>();
 
         if let Ok(m) = file.metadata() {
             let file_etag = hyper::header::EntityTag::new(false, m.etag());
