@@ -1,5 +1,12 @@
 //! Simple in-memory filesystem.
 //!
+//! This implementation has state so - if you create a
+//! new instance in a handler(), it will be empty every time.
+//!
+//! So you have to create the instance once, using `MemFs::new`, store
+//! it in your handler struct, and clone() it every time you pass
+//! it to the DavHandler. Cloning is ofcourse not expensive, the
+//! MemFs handle is refcounted, obviously.
 use std;
 use std::io::{self,Read,Write,Seek,SeekFrom};
 use std::io::Result as IoResult;

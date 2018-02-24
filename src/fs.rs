@@ -178,32 +178,52 @@ impl Clone for Box<DavFileSystem> {
     }
 }
 
+/// Iterator, returned by read_dir(), that generates DavDirEntries.
+///
+/// Often you'll end up creating an empty imp DavReadDir, plus an
+/// impl Iterator.
 pub trait DavReadDir : Iterator<Item=Box<DavDirEntry>> + Debug {
 }
 
+/// One directory entry (or child node).
 pub trait DavDirEntry: Debug {
+    /// name of the entry.
     fn name(&self) -> Vec<u8>;
+
+    /// metadata of the entry.
     fn metadata(&self) -> FsResult<Box<DavMetaData>>;
 
-    // defaults. implementations can override this if their
-    // metadata() method is expensive and there is a cheaper
-    // way to provide the same info (e.g. windows/unix filesystems).
+    /// Default implementation of is_dir just returns `self.metadata()?.is_dir()`.
+    /// Implementations can override this if their metadata() method is
+    /// expensive and there is a cheaper way to provide the same info
+    /// (e.g. dirent.d_type in unix filesystems).
     fn is_dir(&self) -> FsResult<bool> { Ok(self.metadata()?.is_dir()) }
+
+
+    /// Likewise. Default: `!is_dir()`.
     fn is_file(&self) -> FsResult<bool> { Ok(self.metadata()?.is_file()) }
+
+    /// Likewise. Default: `false`.
     fn is_symlink(&self) -> FsResult<bool> { Ok(self.metadata()?.is_symlink()) }
 }
 
+/// A DavFile should be readable/writeable/seekable, and be able
+/// to return its metadata.
 pub trait DavFile: Read + Write + Seek + Debug {
     fn metadata(&self) -> FsResult<Box<DavMetaData>>;
 }
 
+/// Not mutch more than type, length, and some timestamps.
 pub trait DavMetaData : Debug {
 
     fn len(&self) -> u64;
     fn modified(&self) -> FsResult<SystemTime>;
 	fn is_dir(&self) -> bool;
 
-    // default implementations.
+    /// Simplistic implementation of etag()
+    ///
+    /// Returns a simple etag that basically is "\<length\>-\<timestamp_in_ms\>"
+    /// with the numbers in hex. Enough for most implementations.
     fn etag(&self) -> String {
 		if let Ok(t) = self.modified() {
             if let Ok(t) = t.duration_since(UNIX_EPOCH) {
@@ -214,40 +234,58 @@ pub trait DavMetaData : Debug {
 		}
 		format!("{:x}", self.len())
 	}
+
+    /// Default implementation for is_file() is !self.is_dir()
 	fn is_file(&self) -> bool {
 		!self.is_dir()
 	}
+
+    /// Default implementation for is_symlink() is "false".
 	fn is_symlink(&self) -> bool {
 		false
 	}
 
+    /// Last access time (default: notimplemented)
     fn accessed(&self) -> FsResult<SystemTime> {
         notimplemented!("access time")
     }
+
+    /// Creation time (default: notimplemented)
     fn created(&self) -> FsResult<SystemTime> {
         notimplemented!("creation time")
     }
+
+    /// Inode change time (ctime) (default: notimplemented)
     fn status_changed(&self) -> FsResult<SystemTime> {
         notimplemented!("status change time")
     }
+
+    /// Is file executable (unix: has "x" mode bit) (default: notimplemented)
     fn executable(&self) -> FsResult<bool> {
         notimplemented!("executable")
     }
 }
 
+/// OpenOptions for open().
 #[derive(Debug,Clone,Copy)]
 pub struct OpenOptions {
+    /// open for reading
     pub read: bool,
+    /// open for writing
     pub write: bool,
+    /// open in write-append mode
     pub append: bool,
+    /// truncate file first when writing
     pub truncate: bool,
+    /// create file if it doesn't exist
     pub create: bool,
+    /// must create new file, fail if it already exists.
     pub create_new: bool,
 }
 
 impl OpenOptions {
     #[allow(dead_code)]
-    pub fn new() -> OpenOptions {
+    pub(crate) fn new() -> OpenOptions {
         OpenOptions{
             read: false,
             write: false,
@@ -257,7 +295,8 @@ impl OpenOptions {
             create_new: false,
         }
     }
-    pub fn read() -> OpenOptions {
+
+    pub(crate) fn read() -> OpenOptions {
         OpenOptions{
             read: true,
             write: false,
@@ -267,7 +306,8 @@ impl OpenOptions {
             create_new: false,
         }
     }
-    pub fn write() -> OpenOptions {
+
+    pub(crate) fn write() -> OpenOptions {
         OpenOptions{
             read: false,
             write: true,

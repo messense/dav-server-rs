@@ -1,6 +1,9 @@
-//!  Simple implementation of a DavFileSystem, basically
-//!  a 1:1 mapping of the std::fs interface.
+//! Simple implementation of a DavFileSystem, basically
+//! a 1:1 mapping of the std::fs interface.
 //!
+//! This implementation is stateless. So it is no problem, and
+//! probably the easiest, to just create a new instance in your
+//! handler function every time.
 use std;
 use std::io::{Read,Write,Seek,SeekFrom};
 use std::io::Result as IoResult;

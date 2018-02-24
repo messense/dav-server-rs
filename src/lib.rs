@@ -7,6 +7,9 @@
 //!   implement reading/writing "DAV properties"
 //! - you can supply a "locksystem" that handles the webdav locks
 //!
+//! Currently passes the "basic", "copymove", "props" and "http"
+//! checks of the Webdav Litmus Test testsuite (so basically all of
+//! RFC4918 except locking).
 //!
 //! Included are two example filesystems:
 //!
@@ -14,6 +17,34 @@
 //! - memfs: ephemeral in-memory filesystem. supports DAV properties.
 //!
 //! There is as of yet no "locksystem".
+//!
+//! Example:
+//!
+//! ```
+//! extern crate hyper;
+//! extern crate webdav_handler as dav;
+//!
+//! struct SampleServer {
+//!     fs:     Box<dav::DavFileSystem>,
+//!     prefix: String,
+//! }
+//!
+//! impl Handler for SampleServer {
+//!     fn handle(&self, req: hyper::server::Request, mut res: hyper::server::Response) {
+//!         let davhandler = dav::DavHandler::new(self.prefix.clone(), self.fs.clone());
+//!         davhandler.handle(req, res);
+//!     }
+//! }
+//!
+//! fn main() {
+//!     let sample_srv = SampleServer{
+//!         fs:     dav::memfs::MemFs::new(),
+//!         prefix: "".to_string(),
+//!     };
+//!     let hyper_srv = hyper::server::Server::http("0.0.0.0:4918").unwrap();
+//!     hyper_srv.handle_threads(sample_srv, 8).unwrap();
+//! }
+//! ```
 
 #[macro_use] extern crate hyper;
 #[macro_use] extern crate log;
@@ -83,31 +114,6 @@ pub enum Method {
 }
 
 /// The webdav handler struct.
-///
-/// Example:
-///
-/// ```
-/// struct SampleServer {
-///     fs:     Option<Box<DavFileSystem>>
-///     prefix: String,
-/// }
-///
-/// impl Handler for SampleServer {
-///     fn handle(&self, req: Request, mut res: Response) {
-///         let dav = DavHandler::new(self.prefix.clone(), self.fs.clone());
-///         dav.handle(req, res);
-///     }
-/// }
-///
-/// fn main() {
-///     let sample_srv = SampleServer{
-///         fs:     memfs::MemFs::new(),
-///         prefix: "".to_string(),
-///     };
-///     let hyper_srv = hyper::server::Server::http("0.0.0.0:4918").unwrap();
-///     hyper_srv.handle_threads(sample_srv, 8).unwrap();
-/// }
-/// ```
 //#[derive(Debug)]
 pub struct DavHandler {
     pub(crate) prefix:     String,
@@ -115,7 +121,7 @@ pub struct DavHandler {
     pub(crate) allow:      Option<HashSet<Method>>,
 }
 
-pub fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {
+pub(crate) fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {
     match t.duration_since(UNIX_EPOCH) {
         Ok(t) => time::Timespec{
             sec: t.as_secs() as i64,
@@ -125,12 +131,12 @@ pub fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {
     }
 }
 
-pub fn systemtime_to_httpdate(t: SystemTime) -> hyper::header::HttpDate {
+pub(crate) fn systemtime_to_httpdate(t: SystemTime) -> hyper::header::HttpDate {
     let ts = systemtime_to_timespec(t);
     hyper::header::HttpDate(time::at_utc(ts))
 }
 
-pub fn systemtime_to_rfc3339(t: SystemTime) -> String {
+pub(crate) fn systemtime_to_rfc3339(t: SystemTime) -> String {
     let ts = systemtime_to_timespec(t);
     format!("{}", time::at_utc(ts).rfc3339())
 }
