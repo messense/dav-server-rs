@@ -1,6 +1,5 @@
-//
-//  Simple in-memory filesystem.
-//
+//! Simple in-memory filesystem.
+//!
 use std;
 use std::io::{self,Read,Write,Seek,SeekFrom};
 use std::io::Result as IoResult;
@@ -67,6 +66,7 @@ struct MemFsFile {
 }
 
 impl MemFs {
+    /// Create a new "memfs" filesystem.
     pub fn new() -> Box<MemFs> {
         let root = MemFsNode::new_dir();
         Box::new(MemFs{tree: Arc::new(Mutex::new(Tree::new(root)))})

@@ -1,3 +1,19 @@
+//!
+//! A webdav handler for the Rust "hyper" HTTP server library. Uses an
+//! interface similar to the Go x/net/webdav package:
+//!
+//! - the library contains an HTTP handler (for Hyper 0.10.x at the moment)
+//! - you supply a "filesystem" for backend storage, which can optionally
+//!   implement reading/writing "DAV properties"
+//! - you can supply a "locksystem" that handles the webdav locks
+//!
+//!
+//! Included are two example filesystems:
+//!
+//! - localfs: serves a directory on the local filesystem
+//! - memfs: ephemeral in-memory filesystem. supports DAV properties.
+//!
+//! There is as of yet no "locksystem".
 
 #[macro_use] extern crate hyper;
 #[macro_use] extern crate log;
@@ -48,6 +64,7 @@ pub(crate) use self::fs::*;
 
 type DavResult<T> = Result<T, DavError>;
 
+/// Methods supported by DavHandler.
 #[derive(Debug,PartialEq,Eq,Hash,Clone,Copy)]
 pub enum Method {
     Head,
@@ -65,6 +82,32 @@ pub enum Method {
     Unlock,
 }
 
+/// The webdav handler struct.
+///
+/// Example:
+///
+/// ```
+/// struct SampleServer {
+///     fs:     Option<Box<DavFileSystem>>
+///     prefix: String,
+/// }
+///
+/// impl Handler for SampleServer {
+///     fn handle(&self, req: Request, mut res: Response) {
+///         let dav = DavHandler::new(self.prefix.clone(), self.fs.clone());
+///         dav.handle(req, res);
+///     }
+/// }
+///
+/// fn main() {
+///     let sample_srv = SampleServer{
+///         fs:     memfs::MemFs::new(),
+///         prefix: "".to_string(),
+///     };
+///     let hyper_srv = hyper::server::Server::http("0.0.0.0:4918").unwrap();
+///     hyper_srv.handle_threads(sample_srv, 8).unwrap();
+/// }
+/// ```
 //#[derive(Debug)]
 pub struct DavHandler {
     pub(crate) prefix:     String,

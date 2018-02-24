@@ -1,4 +1,5 @@
-
+//! Utility module to handle the "path" part of an URL as a filesytem path.
+//!
 use std;
 use std::error::Error;
 use std::ffi::OsStr;

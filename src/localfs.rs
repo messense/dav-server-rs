@@ -1,7 +1,6 @@
-//
-//  Simple implementation of a DavFileSystem, basically
-//  a 1:1 mapping of the std::fs interface.
-//
+//!  Simple implementation of a DavFileSystem, basically
+//!  a 1:1 mapping of the std::fs interface.
+//!
 use std;
 use std::io::{Read,Write,Seek,SeekFrom};
 use std::io::Result as IoResult;
