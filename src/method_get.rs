@@ -6,21 +6,31 @@ use hyper::header::ByteRangeSpec;
 
 use std;
 use std::io::prelude::*;
+use std::io::BufWriter;
 
-use super::errors::DavError;
-use super::headers;
-use super::fs::OpenOptions;
-use super::{fserror,statuserror,systemtime_to_httpdate};
-use super::conditional::if_match;
+use time;
+
+use fs::*;
+use errors::DavError;
+use conditional::if_match;
+use webpath::WebPath;
+use headers;
+use {fserror,statuserror,systemtime_to_httpdate,systemtime_to_timespec};
 
 impl super::DavHandler {
     pub(crate) fn handle_get(&self, req: Request, mut res: Response) -> Result<(), DavError> {
+
         let head = req.method == hyper::method::Method::Head;
 
-        // open file and get metadata.
+        // check if it's a directory.
         let path = self.path(&req);
-        let mut file = self.fs.open(&path, OpenOptions::read())
-            .map_err(|e| fserror(&mut res, e))?;
+        let meta = self.fs.metadata(&path).map_err(|e| fserror(&mut res, e))?;
+        if meta.is_dir() {
+            return self.handle_dirlist(req, res, &path, head);
+        }
+
+        // double check, is it a regular file.
+        let mut file = self.fs.open(&path, OpenOptions::read()).map_err(|e| fserror(&mut res, e))?;
         let meta = file.metadata().map_err(|e| fserror(&mut res, e))?;
         if !meta.is_file() {
             return Err(statuserror(&mut res, StatusCode::MethodNotAllowed));
@@ -129,6 +139,130 @@ impl super::DavHandler {
             count -= n as u64;
             writer.write_all(data)?;
         }
+        Ok(())
+    }
+
+    pub(crate) fn handle_dirlist(&self, _req: Request, mut res: Response, path: &WebPath, head: bool) -> Result<(), DavError> {
+
+        // This is a directory. If the path doesn't end in "/", send a redir.
+        // Most webdav clients handle redirect really bad, but a client asking
+        // for a directory index is usually a browser.
+        if !path.is_collection() {
+            let mut path = path.clone();
+            path.add_slash();
+            res.headers_mut().set_raw("Location", vec!(path.as_bytes().to_vec()));
+            res.headers_mut().set(hyper::header::ContentLength(0));
+            *res.status_mut() = StatusCode::Found;
+            return Ok(());
+        }
+
+        // read directory or bail.
+        let entries = self.fs.read_dir(path).map_err(|e| fserror(&mut res, e))?;
+
+        // start output
+        let contenttype = vec!(b"text/html; charset=utf-8".to_vec());
+        res.headers_mut().set_raw("Content-Type", contenttype);
+        *res.status_mut() = StatusCode::Ok;
+        if head {
+            return Ok(())
+        }
+        let mut w = BufWriter::new(res.start()?);
+
+        // transform all entries into a dirent struct.
+        struct Dirent {
+            path:       String,
+            name:       String,
+            meta:       Box<DavMetaData>,
+        }
+        let mut dirents = Vec::new();
+
+        for dirent in entries {
+            let mut name = dirent.name();
+            if name.starts_with(b".") {
+                continue;
+            }
+            let mut npath = path.clone();
+            npath.push_segment(&name);
+            let meta = match dirent.is_symlink() {
+                Ok(v) if v == true => {
+                    self.fs.metadata(&npath)
+                },
+                _ => {
+                    dirent.metadata()
+                },
+            };
+            if let Ok(meta) = meta {
+                if meta.is_dir() {
+                    name.push(b'/');
+                    npath.add_slash();
+                }
+                dirents.push(Dirent{
+                    path:   npath.as_string(),
+                    name:   String::from_utf8_lossy(&name).to_string(),
+                    meta:   meta,
+                });
+            }
+        }
+
+        // now we can sort the dirent struct.
+        dirents.sort_by(|a, b| {
+            let adir = a.meta.is_dir();
+            let bdir = b.meta.is_dir();
+            if adir && !bdir {
+                std::cmp::Ordering::Less
+            } else if bdir && !adir {
+                std::cmp::Ordering::Greater
+            } else {
+                (a.name).cmp(&b.name)
+            }
+        });
+
+        // and output html
+        let dpath = String::from_utf8_lossy(path.as_bytes());
+        writeln!(w, "<html><head>")?;
+        writeln!(w, "<title>Index of {}</title>", dpath)?;
+        writeln!(w, "<style>")?;
+        writeln!(w, "table {{")?;
+        writeln!(w, "  border-collapse: separate;")?;
+        writeln!(w, "  border-spacing: 1.5em 0.25em;")?;
+        writeln!(w, "}}")?;
+        writeln!(w, "h1 {{")?;
+        writeln!(w, "  padding-left: 0.3em;")?;
+        writeln!(w, "}}")?;
+        writeln!(w, ".mono {{")?;
+        writeln!(w, "  font-family: monospace;")?;
+        writeln!(w, "}}")?;
+        writeln!(w, "</style>")?;
+        writeln!(w, "</head>")?;
+
+        writeln!(w, "<body>")?;
+        writeln!(w, "<h1>Index of {}</h1>", dpath)?;
+        writeln!(w, "<table>")?;
+        writeln!(w, "<tr>")?;
+        writeln!(w, "<th>Name</th><th>Last modified</th><th>Size</th>")?;
+        writeln!(w, "<tr><th colspan=\"3\"><hr></th></tr>")?;
+        writeln!(w, "<tr><td><a href=\"..\">Parent Directory</a></td><td>&nbsp;</td><td align=\"right\">[DIR]</td></tr>")?;
+
+        for dirent in &dirents {
+            let modified = match dirent.meta.modified() {
+                Ok(t) => {
+                    let tm = time::at(systemtime_to_timespec(t));
+                        format!("{:04}-{:02}-{:02} {:02}:{:02}",
+                            tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min)
+                    },
+                Err(_) => "".to_string(),
+            };
+            let size = match dirent.meta.is_file() {
+                true => dirent.meta.len().to_string(),
+                false => "[DIR]".to_string(),
+            };
+            writeln!(w, "<tr><td><a href=\"{}\">{}</a></td><td class=\"mono\">{}</td><td class=\"mono\" align=\"right\">{}</td></tr>",
+                     dirent.path, dirent.name, modified, size)?;
+        }
+
+        writeln!(w, "<tr><th colspan=\"3\"><hr></th></tr>")?;
+        writeln!(w, "</table></body></html>")?;
+
         Ok(())
     }
 }
