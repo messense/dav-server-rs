@@ -135,7 +135,10 @@ fn is_reserved(c: u8) -> bool {
     c == b'+' ||
     c == b'$' ||
     c == b'#' ||
-    c == b'%'
+    c == b'%' ||
+    // not reserved, but useful in XML/HTML documents.
+    c == b'<' ||
+    c == b'>'
 }
 
 fn decode_path(src: &[u8]) -> PercentDecode {

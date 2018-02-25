@@ -61,6 +61,8 @@ extern crate url;
 extern crate xmltree;
 extern crate uuid;
 extern crate mime_guess;
+extern crate filetime;
+extern crate htmlescape;
 
 mod errors;
 mod headers;

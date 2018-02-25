@@ -8,6 +8,7 @@ use std;
 use std::io::prelude::*;
 use std::io::BufWriter;
 
+use htmlescape;
 use time;
 
 use fs::*;
@@ -256,8 +257,9 @@ impl super::DavHandler {
                 true => dirent.meta.len().to_string(),
                 false => "[DIR]".to_string(),
             };
+            let name = htmlescape::encode_minimal(&dirent.name);
             writeln!(w, "<tr><td><a href=\"{}\">{}</a></td><td class=\"mono\">{}</td><td class=\"mono\" align=\"right\">{}</td></tr>",
-                     dirent.path, dirent.name, modified, size)?;
+                     dirent.path, name, modified, size)?;
         }
 
         writeln!(w, "<tr><th colspan=\"3\"><hr></th></tr>")?;
