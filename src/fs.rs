@@ -112,6 +112,24 @@ pub trait DavFileSystem : Debug + Sync + Send {
         notimplemented!("copy")
     }
 
+    /// Set the access time of a file / directory.
+    ///
+    /// Default: notimplemented.
+    #[doc(hidden)]
+    #[allow(unused_variables)]
+    fn set_accessed(&self, path: &WebPath, tm: SystemTime) -> FsResult<()> {
+        notimplemented!("set_accessed")
+    }
+
+    /// Set the modified time of a file / directory.
+    ///
+    /// Default: notimplemented.
+    #[doc(hidden)]
+    #[allow(unused_variables)]
+    fn set_modified(&self, path: &WebPath, tm: SystemTime) -> FsResult<()> {
+        notimplemented!("set_accessed")
+    }
+
     /// Indicator that tells if this filesystem driver supports DAV properties.
     ///
     /// Has a default "false" implementation.
