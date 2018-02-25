@@ -1,7 +1,6 @@
 
 use std;
 use std::fmt;
-use std::time::SystemTime;
 use std::str::FromStr;
 
 use hyper;
@@ -9,8 +8,6 @@ use hyper::header::{Header, HeaderFormat,EntityTag};
 
 use url;
 use regex::Regex;
-
-use systemtime_to_timespec;
 
 header! { (WWWAuthenticate, "WWW-Authenticate") => [String] }
 header! { (DAV, "DAV") => [String] }
@@ -133,19 +130,6 @@ pub enum IfRange {
     Date(hyper::header::HttpDate),
 }
 
-impl IfRange {
-    pub fn matches(&self, tag: &hyper::header::EntityTag, date: SystemTime) -> bool {
-        match self {
-            &IfRange::Date(ref d) => {
-                systemtime_to_timespec(date) <= d.0.to_timespec()
-            },
-            &IfRange::EntityTag(ref t) => {
-                t == tag
-            },
-        }
-    }
-}
-
 impl Header for IfRange {
     fn header_name() -> &'static str {
         "If-Range"
@@ -185,10 +169,10 @@ pub enum ETagList {
 }
 
 #[derive(Debug,Clone,PartialEq)]
-pub struct IfMatch(ETagList);
+pub struct IfMatch(pub ETagList);
 
 #[derive(Debug,Clone,PartialEq)]
-pub struct IfNoneMatch(ETagList);
+pub struct IfNoneMatch(pub ETagList);
 
 fn parse_etag_list(raw: &[Vec<u8>]) -> hyper::Result<ETagList> {
     if raw.len() != 1 {
@@ -216,20 +200,6 @@ fn fmt_etaglist(m: &ETagList, f: &mut fmt::Formatter) -> fmt::Result {
     f.write_str(&value)
 }
 
-impl IfMatch {
-    pub fn matches(&self, tag: &hyper::header::EntityTag) -> bool {
-        match &self.0 {
-            &ETagList::Star => true,
-            &ETagList::Tags(ref t) => t.iter().any(|x| x == tag)
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn is_star(&self) -> bool {
-        &self.0 == &ETagList::Star
-    }
-}
-
 impl Header for IfMatch {
     fn header_name() -> &'static str {
         "If-Match"
@@ -243,20 +213,6 @@ impl Header for IfMatch {
 impl HeaderFormat for IfMatch {
     fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt_etaglist(&self.0, f)
-    }
-}
-
-impl IfNoneMatch {
-    pub fn matches(&self, tag: &hyper::header::EntityTag) -> bool {
-        match &self.0 {
-            &ETagList::Star => true,
-            &ETagList::Tags(ref t) => t.iter().any(|x| x == tag)
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn is_star(&self) -> bool {
-        &self.0 == &ETagList::Star
     }
 }
 

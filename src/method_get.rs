@@ -13,9 +13,9 @@ use time;
 
 use fs::*;
 use errors::DavError;
-use conditional::if_match;
 use webpath::WebPath;
 use headers;
+use conditional;
 use {fserror,statuserror,systemtime_to_httpdate,systemtime_to_timespec};
 
 impl super::DavHandler {
@@ -45,7 +45,7 @@ impl super::DavHandler {
         let file_etag = hyper::header::EntityTag::new(false, meta.etag());
 
         if let Some(r) = req.headers.get::<headers::IfRange>() {
-            do_range = r.matches(&file_etag, meta.modified().unwrap());
+            do_range = conditional::ifrange_match(&r, &file_etag, meta.modified().unwrap());
         }
 
         // see if we want to get a range.
@@ -86,7 +86,7 @@ impl super::DavHandler {
         res.headers_mut().set(hyper::header::ETag(file_etag));
 
         // handle the if-headers.
-        if let Some(s) = if_match(&req, Some(&meta), &self.fs, &path) {
+        if let Some(s) = conditional::if_match(&req, Some(&meta), &self.fs, &path) {
             return Err(statuserror(&mut res, s));
         }
 

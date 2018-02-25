@@ -1,4 +1,5 @@
 use std;
+use std::time::SystemTime;
 
 use hyper;
 use hyper::server::Request;
@@ -11,6 +12,24 @@ use systemtime_to_timespec;
 use fs::{DavFileSystem,DavMetaData};
 use webpath::WebPath;
 
+pub(crate) fn ifrange_match(hdr: &headers::IfRange, tag: &hyper::header::EntityTag, date: SystemTime) -> bool {
+	match hdr {
+        &headers::IfRange::Date(ref d) => {
+            systemtime_to_timespec(date) <= d.0.to_timespec()
+        },
+        &headers::IfRange::EntityTag(ref t) => {
+            t == tag
+        },
+    }
+}
+
+pub(crate) fn etaglist_match(tags: &headers::ETagList, tag: &hyper::header::EntityTag) -> bool {
+    match tags {
+        &headers::ETagList::Star => true,
+        &headers::ETagList::Tags(ref t) => t.iter().any(|x| x == tag)
+    }
+}
+
 // Handle the if-headers: RFC 7232, HTTP/1.1 Conditional Requests.
 // Can be called for both request URL and Destination: URLs.
 // Right now i'm not sure how that would work for Destination: URLs,
@@ -21,7 +40,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
 
     if let Some(r) = req.headers.get::<headers::IfMatch>() {
         let etag = meta.map(|m| EntityTag::new(false, m.etag()));
-        if etag.map_or(true, |m| !r.matches(&m)) {
+        if etag.map_or(true, |m| !etaglist_match(&r.0, &m)) {
             debug!("precondition fail: If-Match {:?}", r);
             return Some(StatusCode::PreconditionFailed);
         }
@@ -40,7 +59,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
 
     if let Some(r) = req.headers.get::<headers::IfNoneMatch>() {
         let etag = meta.map(|m| EntityTag::new(false, m.etag()));
-        if etag.map_or(false, |m| r.matches(&m)) {
+        if etag.map_or(false, |m| etaglist_match(&r.0, &m)) {
             debug!("precondition fail: If-None-Match {:?}", r);
             if req.method == Method::Get || req.method == Method::Head {
                 return Some(StatusCode::NotModified);

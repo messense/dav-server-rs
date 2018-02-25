@@ -60,11 +60,13 @@ impl super::DavHandler {
         // Cut & paste from method_get.rs ....
         let mut oo = OpenOptions::write();
         oo.create = true;
-        if req.headers.get::<headers::IfMatch>().map_or(false, |h| h.is_star()) {
-            oo.create_new = true;
+        if req.headers.get::<headers::IfMatch>()
+            .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
+                oo.create_new = true;
         }
-        if req.headers.get::<headers::IfNoneMatch>().map_or(false, |h| h.is_star ()) {
-            oo.create = false;
+        if req.headers.get::<headers::IfNoneMatch>()
+            .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
+                oo.create = false;
         }
 
         // parse xml

@@ -106,11 +106,13 @@ impl super::DavHandler {
             return Err(statuserror(&mut res, s));
         }
 
-        if req.headers.get::<headers::IfMatch>().map_or(false, |h| h.is_star()) {
-            oo.create_new = true;
+        if req.headers.get::<headers::IfMatch>()
+            .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
+                oo.create_new = true;
         }
-        if req.headers.get::<headers::IfNoneMatch>().map_or(false, |h| h.is_star()) {
-            oo.create = false;
+        if req.headers.get::<headers::IfNoneMatch>()
+            .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
+                oo.create = false;
         }
 
         let mut file = match self.fs.open(&path, oo) {
