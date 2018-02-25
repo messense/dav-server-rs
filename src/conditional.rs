@@ -42,7 +42,11 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
         let etag = meta.map(|m| EntityTag::new(false, m.etag()));
         if etag.map_or(false, |m| r.matches(&m)) {
             debug!("precondition fail: If-None-Match {:?}", r);
-            return Some(StatusCode::PreconditionFailed);
+            if req.method == Method::Get || req.method == Method::Head {
+                return Some(StatusCode::NotModified);
+            } else {
+                return Some(StatusCode::PreconditionFailed);
+            }
         }
     } else if let Some(r) = req.headers.get::<hyper::header::IfModifiedSince>() {
         if req.method == Method::Get || req.method == Method::Head {
