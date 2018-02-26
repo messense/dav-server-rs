@@ -246,7 +246,7 @@ impl DavHandler {
             mm(&mut v, "OPTIONS", Method::Options);
             mm(&mut v, "PROPFIND", Method::PropFind);
             mm(&mut v, "COPY", Method::Copy);
-            if path.as_string() != "/" {
+            if path.as_url_string() != "/" {
                 mm(&mut v, "MOVE", Method::Move);
                 mm(&mut v, "DELETE", Method::Delete);
             }
@@ -272,7 +272,7 @@ impl DavHandler {
         let meta = self.fs.metadata(&path)?;
         if meta.is_dir() && !path.is_collection() {
             path.add_slash();
-            let newloc = path.as_url_string();
+            let newloc = path.as_url_string_with_prefix();
             res.headers_mut().set(headers::ContentLocation(newloc));
         }
         Ok((path, meta))

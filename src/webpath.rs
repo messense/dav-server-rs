@@ -19,7 +19,7 @@ pub struct WebPath {
 
 impl std::fmt::Display for WebPath {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", &self.as_string())
+        write!(f, "{:?}", &self.as_url_string())
     }
 }
 
@@ -278,13 +278,13 @@ impl WebPath {
     }
 
     // as URL encoded string.
-    pub fn as_string(&self) -> String {
+    pub fn as_url_string(&self) -> String {
         let p = encode_path(&self.path);
         std::string::String::from_utf8(p).unwrap()
     }
 
-    // as URL encoded string.
-    pub fn as_url_string(&self) -> String {
+    // as URL encoded string, with prefix.
+    pub fn as_url_string_with_prefix(&self) -> String {
         let mut p = encode_path(&self.path);
         if self.prefix.len() > 0 {
             let mut u = encode_path(&self.prefix);
@@ -292,6 +292,13 @@ impl WebPath {
             p = u;
         }
         std::string::String::from_utf8(p).unwrap()
+    }
+
+    // as utf8 string, with prefix.
+    pub fn as_utf8_string_with_prefix(&self) -> String {
+        let mut p = self.prefix.clone();
+        p.extend_from_slice(&self.path);
+        return String::from_utf8_lossy(&p).to_string();
     }
 
     // as OS specific Path.

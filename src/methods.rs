@@ -69,7 +69,7 @@ impl super::DavHandler {
             Ok(()) => {
                 if path.is_collection() {
                     path.add_slash();
-                    res.headers_mut().set(headers::ContentLocation(path.as_url_string()));
+                    res.headers_mut().set(headers::ContentLocation(path.as_url_string_with_prefix()));
                 }
                 *res.status_mut() = SC::Created;
                 Ok(())

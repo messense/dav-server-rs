@@ -163,7 +163,7 @@ impl super::DavHandler {
         lock.push(locktokenelem);
 
         let mut lockroot = Element::new2("D:lockroot");
-        lockroot.push(Element::new2("D:href").text(path.as_url_string()));
+        lockroot.push(Element::new2("D:href").text(path.as_url_string_with_prefix()));
         lock.push(lockroot);
 
         if let Some(o) = lockinfo.owner {

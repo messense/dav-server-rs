@@ -198,7 +198,7 @@ impl super::DavHandler {
                     npath.add_slash();
                 }
                 dirents.push(Dirent{
-                    path:   npath.as_string(),
+                    path:   npath.as_url_string_with_prefix(),
                     name:   String::from_utf8_lossy(&name).to_string(),
                     meta:   meta,
                 });
@@ -219,9 +219,9 @@ impl super::DavHandler {
         });
 
         // and output html
-        let dpath = String::from_utf8_lossy(path.as_bytes());
+        let upath = path.as_utf8_string_with_prefix();
         writeln!(w, "<html><head>")?;
-        writeln!(w, "<title>Index of {}</title>", dpath)?;
+        writeln!(w, "<title>Index of {}</title>", upath)?;
         writeln!(w, "<style>")?;
         writeln!(w, "table {{")?;
         writeln!(w, "  border-collapse: separate;")?;
@@ -237,12 +237,12 @@ impl super::DavHandler {
         writeln!(w, "</head>")?;
 
         writeln!(w, "<body>")?;
-        writeln!(w, "<h1>Index of {}</h1>", dpath)?;
+        writeln!(w, "<h1>Index of {}</h1>", upath)?;
         writeln!(w, "<table>")?;
         writeln!(w, "<tr>")?;
         writeln!(w, "<th>Name</th><th>Last modified</th><th>Size</th>")?;
         writeln!(w, "<tr><th colspan=\"3\"><hr></th></tr>")?;
-        writeln!(w, "<tr><td><a href=\"..\">Parent Directory</a></td><td>&nbsp;</td><td align=\"right\">[DIR]</td></tr>")?;
+        writeln!(w, "<tr><td><a href=\"..\">Parent Directory</a></td><td>&nbsp;</td><td class=\"mono\" align=\"right\">[DIR]</td></tr>")?;
 
         for dirent in &dirents {
             let modified = match dirent.meta.modified() {

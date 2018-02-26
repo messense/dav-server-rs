@@ -681,7 +681,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
     fn write_propresponse(&mut self, path: &WebPath, props: HashMap<SC, Vec<Element>>) -> Result<(), DavError> {
 
         self.emitter.write(XmlWEvent::start_element("D:response"))?;
-        let p = path.as_url_string();
+        let p = path.as_url_string_with_prefix();
         Element::new2("D:href").text(p).write_ev(&mut self.emitter)?;
 
         let mut keys = props.keys().collect::<Vec<_>>();
