@@ -466,12 +466,12 @@ impl TreeExt for Tree {
     fn lookup_segs(&self, segs: Vec<&[u8]>) -> FsResult<u64> {
         let mut node_id = tree::ROOT_ID;
         let mut is_dir = true;
-        for seg in segs.iter() {
+        for seg in segs.into_iter() {
             if !is_dir {
                 return Err(FsError::Forbidden);
             }
             if self.get_node(node_id)?.is_dir() {
-                node_id = self.get_child(node_id, seg.to_vec())?;
+                node_id = self.get_child(node_id, seg)?;
             } else {
                 is_dir = false;
             }

@@ -3,6 +3,7 @@ use std;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::fmt::Debug;
+use std::borrow::Borrow;
 
 use FsError;
 use FsResult;
@@ -72,10 +73,10 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
 
     /*
      * unused ...
-    pub fn remove_child(&mut self, parent: u64, key: K) -> FsResult<()> {
+    pub fn remove_child(&mut self, parent: u64, key: &K) -> FsResult<()> {
         let id = {
             let pnode = self.nodes.get(&parent).ok_or(FsError::NotFound)?;
-            let id = *pnode.children.get(&key).ok_or(FsError::NotFound)?;
+            let id = *pnode.children.get(key).ok_or(FsError::NotFound)?;
             let node = self.nodes.get(&id).unwrap();
             if node.children.len() > 0 {
                 return Err(FsError::Forbidden);
@@ -84,16 +85,19 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
         };
         {
             let pnode = self.nodes.get_mut(&parent).unwrap();
-            pnode.children.remove(&key);
+            pnode.children.remove(key);
         }
         self.nodes.remove(&id);
         Ok(())
     }*/
 
     /// Get a child node by key K.
-    pub fn get_child(&self, parent: u64, key: K) -> FsResult<u64> {
+    pub fn get_child<Q: ?Sized>(&self, parent: u64, key: &Q) -> FsResult<u64>
+        where K: Borrow<Q>,
+              Q: Hash + Eq
+    {
         let pnode = self.nodes.get(&parent).ok_or(FsError::NotFound)?;
-        let id = pnode.children.get(&key).ok_or(FsError::NotFound)?;
+        let id = pnode.children.get(key).ok_or(FsError::NotFound)?;
         Ok(*id)
     }
 
@@ -108,14 +112,12 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
     }
 
     /// Get reference to a node.
-    //pub fn get_node(&self, id: u64) -> FsResult<&Node<K, D>>  {
     pub fn get_node(&self, id: u64) -> FsResult<&D>  {
         let n = self.nodes.get(&id).ok_or(FsError::NotFound)?;
         Ok(&n.data)
     }
 
     /// Get mutable reference to a node.
-    //pub fn get_node_mut(&mut self, id: u64) -> FsResult<&Node<K, D>>  {
     pub fn get_node_mut(&mut self, id: u64) -> FsResult<&mut D>  {
         let n = self.nodes.get_mut(&id).ok_or(FsError::NotFound)?;
         Ok(&mut n.data)
