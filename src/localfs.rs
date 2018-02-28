@@ -31,7 +31,7 @@ pub struct LocalFs {
     public:     bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 struct LocalFsMetaData(std::fs::Metadata);
 
 #[derive(Debug)]
@@ -67,11 +67,6 @@ impl LocalFs {
 }
 
 impl DavFileSystem for LocalFs {
-
-    // boilerplate helper so that clone() works.
-    fn box_clone(&self) -> Box<DavFileSystem> {
-        Box::new((*self).clone())
-    }
 
     fn metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>> {
         match std::fs::metadata(self.fspath(path)) {

@@ -123,11 +123,6 @@ impl Clone for MemFs {
 
 impl DavFileSystem for MemFs {
 
-    // boilerplate helper so that clone() works.
-    fn box_clone(&self) -> Box<DavFileSystem> {
-        Box::new((*self).clone())
-    }
-
     fn metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>> {
         let tree = &*self.tree.lock().unwrap();
         let node_id = tree.lookup(path.as_bytes())?;

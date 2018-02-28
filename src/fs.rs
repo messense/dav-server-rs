@@ -43,7 +43,7 @@ pub struct DavProp {
 }
 
 /// The trait that defines a filesystem.
-pub trait DavFileSystem : Debug + Sync + Send {
+pub trait DavFileSystem : Debug + Sync + Send + BoxCloneFs {
     /// Open a file.
     fn open(&self, path: &WebPath, options: OpenOptions) -> FsResult<Box<DavFile>>;
     /// Perform read_dir.
@@ -173,19 +173,11 @@ pub trait DavFileSystem : Debug + Sync + Send {
     fn get_quota(&self) -> FsResult<(u64, Option<u64>)> {
         notimplemented!("get_quota`")
     }
+}
 
-    /// Helper so that clone() works.
-    ///
-    /// Every DavFileSystem has to implement these few lines
-    /// of boilerplate:
-    ///
-    /// ```
-    ///    impl DavFileSystem for .... {
-    ///        fn box_clone(&self) -> Box<DavFileSystem> {
-    ///            Box::new((*self).clone())
-    ///        }
-    ///    }
-    /// ```
+// BoxClone trait.
+#[doc(hidden)]
+pub trait BoxCloneFs {
     fn box_clone(&self) -> Box<DavFileSystem>;
 }
 
@@ -193,6 +185,14 @@ pub trait DavFileSystem : Debug + Sync + Send {
 impl Clone for Box<DavFileSystem> {
     fn clone(&self) -> Box<DavFileSystem> {
         self.box_clone()
+    }
+}
+
+// implementation-specific clone.
+#[doc(hidden)]
+impl<FS: Clone + DavFileSystem + 'static> BoxCloneFs for FS {
+    fn box_clone(&self) -> Box<DavFileSystem> {
+        Box::new((*self).clone())
     }
 }
 
@@ -232,7 +232,7 @@ pub trait DavFile: Read + Write + Seek + Debug {
 }
 
 /// Not mutch more than type, length, and some timestamps.
-pub trait DavMetaData : Debug {
+pub trait DavMetaData : Debug + BoxCloneMd {
 
     fn len(&self) -> u64;
     fn modified(&self) -> FsResult<SystemTime>;
@@ -281,6 +281,27 @@ pub trait DavMetaData : Debug {
     /// Is file executable (unix: has "x" mode bit) (default: notimplemented)
     fn executable(&self) -> FsResult<bool> {
         notimplemented!("executable")
+    }
+}
+
+// generic Clone, calls implementation-specific box_clone().
+impl Clone for Box<DavMetaData> {
+    fn clone(&self) -> Box<DavMetaData> {
+        self.box_clone()
+    }
+}
+
+// BoxCloneMd trait.
+#[doc(hidden)]
+pub trait BoxCloneMd {
+    fn box_clone(&self) -> Box<DavMetaData>;
+}
+
+// implementation-specific clone.
+#[doc(hidden)]
+impl<MD: Clone + DavMetaData + 'static> BoxCloneMd for MD {
+    fn box_clone(&self) -> Box<DavMetaData> {
+        Box::new((*self).clone())
     }
 }
 
