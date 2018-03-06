@@ -154,6 +154,18 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
         Ok(self.nodes.remove(&id).unwrap())
     }
 
+    /// Delete a subtree.
+    pub fn delete_subtree(&mut self, id: u64) -> FsResult<()> {
+        let children = {
+            let n = self.nodes.get(&id).ok_or(FsError::NotFound)?;
+            n.children.iter().map(|(_, &v)| v).collect::<Vec<u64>>()
+        };
+        for c in children.into_iter() {
+           self.delete_subtree(c)?;
+        }
+        self.delete_node_from_parent(id)
+    }
+
     /// Move a node to a new position and new name in the tree.
     /// If "overwrite" is true, will replace an existing
     /// node, but only if it doesn't have any children.

@@ -77,8 +77,10 @@ mod xmltree_ext;
 mod tree;
 
 pub mod fs;
+pub mod ls;
 pub mod localfs;
 pub mod memfs;
+pub mod memls;
 pub mod webpath;
 
 use hyper::header::Date;

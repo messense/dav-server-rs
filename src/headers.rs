@@ -59,6 +59,59 @@ impl HeaderFormat for Depth {
 }
 
 #[derive(Debug,Clone,PartialEq)]
+pub enum DavTimeout {
+    Seconds(u32),
+    Infinite,
+}
+
+#[derive(Debug,Clone)]
+pub struct Timeout(Vec<DavTimeout>);
+
+impl Header for Timeout {
+    fn header_name() -> &'static str {
+        "Timeout"
+    }
+
+    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<Timeout> {
+        if raw.len() == 1 {
+            let v = Vec::new();
+            let s = std::str::from_utf8(&raw[0])?.split(|&c| c == ',');
+            for words in s {
+                let w = match s {
+                    "Infinite" => DavTimeout::Infinite,
+                    _ if s.has_prefix("Second-") => {
+                        match &s[7..].parse::<u32> {
+                            None => return Err(hyper::Error::Header),
+                            Some(n) => DavTimeout::Seconds(n),
+                        }
+                    },
+                    - => return Err(hyper::Error::Header),
+                };
+                v.push(w);
+            }
+            Ok(Timeout(v))
+        }
+        Err(hyper::Error::Header)
+    }
+}
+
+impl HeaderFormat for Timeout {
+    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut first = false;
+        for s in &self.0 {
+            if !first {
+                f.write_str(", ")?;
+            }
+            first = false;
+            match s {
+                &Timeout::Seconds(n) => f.write_str("Second-{}", n)?,
+                &Timeout::Infinite => f.write_str("Infinite")?,
+            }
+        }
+    }
+}
+
+#[derive(Debug,Clone,PartialEq)]
 pub struct Destination(pub String);
 
 impl Header for Destination {

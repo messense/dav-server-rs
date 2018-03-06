@@ -24,28 +24,36 @@ use webdav_handler as dav;
 use dav::DavHandler;
 use dav::localfs;
 use dav::memfs;
+use dav::memls;
 use dav::fs::DavFileSystem;
+use dav::ls::DavLockSystem;
 
 header! { (WWWAuthenticate, "WWW-Authenticate") => [String] }
 
 #[derive(Debug)]
 struct Server {
     fs:             Option<Box<DavFileSystem>>,
+    ls:             Option<Box<DavLockSystem>>,
     directory:      String,
     do_accounts:    bool,
 }
 
 impl Server {
     pub fn new(directory: String, do_accounts: bool) -> Self {
-        let fs : Option<Box<DavFileSystem>> = if directory != "" {
-            None
+        if directory != "" {
+            Server{
+                fs:             None,
+                ls:             None,
+                directory:      directory,
+                do_accounts:    do_accounts,
+            }
         } else {
-            Some(memfs::MemFs::new())
-        };
-        Server{
-            fs:             fs,
-            directory:      directory,
-            do_accounts:    do_accounts,
+            Server{
+                fs:             Some(memfs::MemFs::new()),
+                ls:             Some(memls::MemLs::new()),
+                directory:      directory,
+                do_accounts:    do_accounts,
+            }
         }
     }
 }

@@ -43,6 +43,9 @@ pub struct DavProp {
 }
 
 /// The trait that defines a filesystem.
+///
+/// The BoxCloneFs trait is a helper trait that is automatically implemented
+/// so that Box\<DavFileSystem\>.clone() works.
 pub trait DavFileSystem : Debug + Sync + Send + BoxCloneFs {
     /// Open a file.
     fn open(&self, path: &WebPath, options: OpenOptions) -> FsResult<Box<DavFile>>;
@@ -231,7 +234,10 @@ pub trait DavFile: Read + Write + Seek + Debug {
     fn metadata(&self) -> FsResult<Box<DavMetaData>>;
 }
 
-/// Not mutch more than type, length, and some timestamps.
+/// Not much more than type, length, and some timestamps.
+///
+/// The BoxCloneMd trait is a helper trait that is automatically implemented
+/// so that Box\<DavMetaData\>.clone() works.
 pub trait DavMetaData : Debug + BoxCloneMd {
 
     fn len(&self) -> u64;

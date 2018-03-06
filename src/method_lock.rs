@@ -11,29 +11,13 @@ use xmltree_ext::ElementExt;
 
 use uuid::Uuid;
 
+use ls::DavLock;
+
 use super::errors::DavError;
-use super::headers::{self,Depth};
+use super::headers::{self,Depth,Timeout};
 use super::fs::{OpenOptions,FsError};
 use super::{daverror,statuserror,fserror};
 use super::conditional::if_match;
-
-#[derive(Debug)]
-enum LockScope {
-    Shared,
-    Exclusive,
-}
-
-#[derive(Debug)]
-enum LockType {
-    Write
-}
-
-#[derive(Debug)]
-struct LockInfo {
-    scope: LockScope,
-    ltype: LockType,
-    owner: Option<Element>,
-}
 
 impl super::DavHandler {
     pub(crate) fn handle_lock(&self, mut req: Request, mut res: Response) -> Result<(), DavError> {
@@ -41,15 +25,51 @@ impl super::DavHandler {
         // read request.
         let xmldata = self.read_request_max(&mut req, 65536);
 
-        let depth = match req.headers.get::<Depth>() {
-            Some(&Depth::Infinity) | None => Depth::Infinity,
-            Some(&Depth::Zero)=> Depth::Zero,
-            _ => return Err(statuserror(&mut res, SC::BadRequest)),
+        // must have a locksystem or bail
+        let locksystem = match self.ls {
+            Some(ls) => ls,
+            None => return Err(statuserror(&mut res, SC::MethodNotAllowed)),
         };
 
+        // path and meta
         let (path, meta) = match self.fixpath(&req, &mut res) {
             Ok((path, meta)) => (path, Some(meta)),
             Err(_) => (self.path(&req), None),
+        };
+
+        // process timeout header
+        let timeout = match req.headers.get::<Timeout>().map(|t| t.0);
+
+        // lock refresh?
+        if xmldata.len() == 0 {
+
+            // get locktoken
+            let (_, tokens) = dav_if_match(&req, &self.fs, path);
+            if tokens.len() != 1 {
+                return Err(statuserror(&mut res, SC::BadRequest));
+            }
+
+            // try refresh
+            let lock = match locksystem.refresh(path, &tokens[0], timeout) {
+                Ok(lock) => lock,
+                Err(_) => return Err(statuserror(&mut res, SC::PreConditionFailed)),
+            };
+
+            // output result
+            let prop = build_lock_prop(&lock);
+            *res.status_mut() = SC::Ok;
+            let res = res.start()?;
+            let mut emitter = xmltree_ext::emitter(res)?;
+            prop.write_ev(&mut emitter)?;
+
+            Ok(())
+        }
+
+        // handle Depth:
+        let deep = match req.headers.get::<Depth>() {
+            Some(&Depth::Infinity) | None => true,
+            Some(&Depth::Zero)=> false,
+            _ => return Err(statuserror(&mut res, SC::BadRequest)),
         };
 
         // handle the if-headers.
@@ -77,22 +97,23 @@ impl super::DavHandler {
         }
 
         // decode Element.
-        let mut locktype : Option<LockType> = None;
-        let mut lockscope : Option<LockScope> = None;
+        let mut shared : Option<bool> = None;
         let mut owner : Option<Element> = None;
+        let mut locktype = false;
+        let mut timeout : Option<Duration> = None;
 
         for mut elem in tree.children {
             match elem.name.as_str() {
                 "lockscope" if elem.children.len() == 1 => {
                     match elem.children[0].name.as_ref() {
-                        "exclusive" => lockscope = Some(LockScope::Exclusive),
-                        "shared" => lockscope = Some(LockScope::Shared),
+                        "exclusive" => shared = Some(false),
+                        "shared" => shared = Some(true),
                         _ => return Err(DavError::XmlParseError),
                     }
                 },
                 "locktype" if elem.children.len() == 1 => {
                     match elem.children[0].name.as_ref() {
-                        "write" => locktype = Some(LockType::Write),
+                        "write" => locktype = true,
                         _ => return Err(DavError::XmlParseError),
                     }
                 },
@@ -105,13 +126,16 @@ impl super::DavHandler {
             }
         }
 
-        let lockinfo = match (locktype, lockscope) {
-            (Some(t), Some(s)) => LockInfo{
-                scope: s,
-                ltype: t,
-                owner: owner,
-            },
-            _ => return Err(DavError::XmlParseError),
+        // sanity check.
+        if !shared.is_some() || !locktype {
+            return Err(DavError::XmlParseError);
+        };
+        let shared = shared.unwrap();
+
+        // create lock
+        let lock = match locksystem.lock(path, owner, timeout, shared, deep) {
+            Ok(lock) => lock,
+            Err(_) => return Err(statuserror(&mut res, SC::Locked)),
         };
 
         // try to create file if it doesn't exist.
@@ -126,54 +150,34 @@ impl super::DavHandler {
                     } else {
                         SC::Conflict
                     };
-                    return Err(statuserror(&mut res, s))
+                    locksystem.unlock(path, &lock.token).ok();
+                    return Err(statuserror(&mut res, s));
                 },
-                Err(e) => return Err(fserror(&mut res, e)),
+                Err(e) => {
+                    locksystem.unlock(path, &lock.token).ok();
+                    return Err(fserror(&mut res, e));
+                },
             };
         }
 
-        // Claim we succeeded.
+        // Success!
         let locktoken = Uuid::new_v4().urn().to_string();
+        let timeout_at = match timeout {
+            DavTimeout::Infinite => None,
+            DavTimeout::Seconds(n) => Some(SystemTime::now() + n),
+        };
+        let lock = DavLock{
+            token:      locktoken,
+            path:       path,
+            owner:      owner,
+            timeout_at: timeout_at,
+            timeout:    timeout,
+            shared:     shared,
+            deep:       deep,
+        };
 
-        let mut lock = Element::new2("D:activelock");
-
-        let mut elem = Element::new2("D:lockscope");
-        elem.push(match lockinfo.scope {
-            LockScope::Shared => Element::new2("D:shared"),
-            LockScope::Exclusive => Element::new2("D:exclusive"),
-        });
-        lock.push(elem);
-
-        let mut elem = Element::new2("D:locktype");
-        elem.push(match lockinfo.ltype {
-            LockType::Write => Element::new2("D:write"),
-        });
-        lock.push(elem);
-
-        lock.push(Element::new2("D:depth").text(match depth {
-            Depth::Zero => "0",
-            Depth::One => "1",
-            Depth::Infinity => "Infinity",
-        }.to_string()));
-
-        lock.push(Element::new2("D:timeout").text("Second-3600".to_string()));
-
-        let mut locktokenelem = Element::new2("D:locktoken");
-        locktokenelem.push(Element::new2("D:href").text(locktoken.clone()));
-        lock.push(locktokenelem);
-
-        let mut lockroot = Element::new2("D:lockroot");
-        lockroot.push(Element::new2("D:href").text(path.as_url_string_with_prefix()));
-        lock.push(lockroot);
-
-        if let Some(o) = lockinfo.owner {
-            lock.push(o);
-        }
-
-        let mut ldis = Element::new2("D:lockdiscovery");
-        ldis.push(lock);
-        let mut prop = Element::new2("D:prop").ns("D", "DAV:");
-        prop.push(ldis);
+        // output result
+        let prop = build_lock_prop(&lock);
 
         if let None = meta {
             *res.status_mut() = SC::Created;
@@ -227,3 +231,49 @@ pub(crate) fn list_supportedlock() -> Element {
 pub(crate) fn list_lockdiscovery() -> Element {
     Element::new2("D:lockdiscovery")
 }
+
+fn build_lock_prop(lock: &DavLock) -> Element {
+    let mut actlock = Element::new2("D:activelock");
+
+    let mut elem = Element::new2("D:lockscope");
+    elem.push(match lock.shared {
+        false	=> Element::new2("D:exclusive"),
+        true	=> Element::new2("D:shared"),
+    });
+    actlock.push(elem);
+
+    let mut elem = Element::new2("D:locktype");
+    elem.push(match lockinfo.ltype {
+        LockType::Write => Element::new2("D:write"),
+    });
+    actlock.push(elem);
+
+    actlock.push(Element::new2("D:depth").text(match lock.deep {
+        false	=> "0",
+        true	=> "Infinity",
+    }.to_string()));
+
+    actlock.push(Element::new2("D:timeout").text(match lock.timeout {
+		DavTimeout::Infinite => "Infinite".to_string(),
+		DavTimeout::Seconds(n) => format!("Second-{}", n),
+	});
+    let mut locktokenelem = Element::new2("D:locktoken");
+    locktokenelem.push(Element::new2("D:href").text(lock.token.clone()));
+    actlock.push(locktokenelem);
+
+    let mut lockroot = Element::new2("D:lockroot");
+    lockroot.push(Element::new2("D:href").text(lock.path.as_url_string_with_prefix()));
+    actlock.push(lockroot);
+
+    if let Some(o) = lock.owner {
+        actlock.push(o);
+    }
+
+    let mut ldis = Element::new2("D:lockdiscovery");
+    ldis.push(lock);
+    let mut prop = Element::new2("D:prop").ns("D", "DAV:");
+    prop.push(ldis);
+
+	prop
+}
+
