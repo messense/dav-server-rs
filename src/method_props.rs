@@ -22,12 +22,14 @@ use fserror;
 use headers;
 use webpath::*;
 use fs::*;
+use ls::*;
+
+use method_lock::{list_lockdiscovery,list_supportedlock};
 
 use conditional::if_match;
 use errors::DavError;
 use fserror_to_status;
 
-use method_lock::{list_lockdiscovery,list_supportedlock};
 use {DavHandler,DavResult};
 use {systemtime_to_httpdate,systemtime_to_rfc3339};
 use {daverror,statuserror};
@@ -63,6 +65,7 @@ struct PropWriter<'a, 'k: 'a> {
     name:       &'a str,
     props:      Vec<Element>,
     fs:         &'a Box<DavFileSystem>,
+    ls:         Option<&'a Box<DavLockSystem>>,
     useragent:  &'a str,
     q_cache:    QuotaCache,
 }
@@ -156,7 +159,7 @@ impl DavHandler {
 
         debug!("propfind: type request: {}", name);
 
-        let mut pw = PropWriter::new(&req, res, name, props, &self.fs)?;
+        let mut pw = PropWriter::new(&req, res, name, props, &self.fs, self.ls.as_ref())?;
         pw.write_props(&path, meta.as_ref())?;
 
         if meta.is_dir() && depth != headers::Depth::Zero {
@@ -374,7 +377,7 @@ impl DavHandler {
         }
 
         // And reply.
-        let mut pw = PropWriter::new(&req, res, "propertyupdate", Vec::new(), &self.fs)?;
+        let mut pw = PropWriter::new(&req, res, "propertyupdate", Vec::new(), &self.fs, None)?;
         pw.write_propresponse(&path, hm)?;
         pw.close()?;
 
@@ -384,7 +387,7 @@ impl DavHandler {
 
 impl<'a, 'k> PropWriter<'a, 'k> {
 
-    pub fn new(req: &'a Request, mut res: Response<'k>, name: &'a str, mut props: Vec<Element>, fs: &'a Box<DavFileSystem>) -> DavResult<PropWriter<'a, 'k>> {
+    pub fn new(req: &'a Request, mut res: Response<'k>, name: &'a str, mut props: Vec<Element>, fs: &'a Box<DavFileSystem>, ls: Option<&'a Box<DavLockSystem>>) -> DavResult<PropWriter<'a, 'k>> {
 
         let contenttype = vec!(b"application/xml; charset=utf-8".to_vec());
         res.headers_mut().set_raw("Content-Type", contenttype);
@@ -437,6 +440,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
             name:       name,
             props:      props,
             fs:         fs,
+            ls:         ls,
             useragent:  ua,
             q_cache:    Default::default(),
         })
@@ -548,10 +552,10 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                     return (SC::Ok, elem);
                 },
                 "supportedlock" => {
-                    return (SC::Ok, list_supportedlock());
+                    return (SC::Ok, list_supportedlock(self.ls));
                 },
                 "lockdiscovery" => {
-                    return (SC::Ok, list_lockdiscovery());
+                    return (SC::Ok, list_lockdiscovery(self.ls, path));
                 },
                 "quota-available-bytes" => {
                     if let Ok((_, Some(avail))) = self.get_quota(&mut qc, path, meta) {

@@ -1,6 +1,6 @@
 //! Contains the structs and traits that define a "locksystem" backend.
 //!
-use std::time::{SystemTime,Duration};
+use std::time::{Duration,SystemTime};
 use std::fmt::Debug;
 use xmltree::Element;
 use webpath::WebPath;
@@ -25,7 +25,7 @@ pub trait DavLockSystem : Debug + Sync + Send + BoxCloneLs {
 
     /// Lock a node. Returns Ok(new_lock) if succeeded,
 	/// or Err(conflicting_lock) if failed.
-    fn lock(&self, path: &WebPath, owner: Option<Element>, timeout: Option<Duration>, shared: bool, deep: bool) -> Result<DavLock, DavLock>;
+    fn lock(&self, path: &WebPath, owner: Option<&Element>, timeout: Option<Duration>, shared: bool, deep: bool) -> Result<DavLock, DavLock>;
 
     /// Unlock a node. Returns empty Ok if succeeded, empty Err if failed
     /// (because lock doesn't exist)

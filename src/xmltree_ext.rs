@@ -121,7 +121,7 @@ pub(crate) fn emitter<W: Write>(w: W) -> DavResult<EventWriter<BufWriter<W>>> {
     let mut emitter = EventWriter::new_with_config(
                           BufWriter::new(w),
                           EmitterConfig {
-                              perform_indent: true,
+                              perform_indent: false,
                               indent_string: Cow::Borrowed(""),
                               ..Default::default()
                           }

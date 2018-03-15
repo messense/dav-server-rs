@@ -143,7 +143,7 @@ impl Handler for Server {
         };
 
         // instantiate and run a new handler.
-        let dav = DavHandler::new(prefix, fs);
+        let dav = DavHandler::new(prefix, fs, self.ls.clone());
         dav.handle(req, res);
     }
 }

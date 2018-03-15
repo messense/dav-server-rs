@@ -189,3 +189,13 @@ pub(crate) fn if_match(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<
     http_if_match(req, meta)
 }
 
+pub(crate) fn if_match_get_tokens(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<DavFileSystem>, path: &WebPath) -> Result<Vec<String>, StatusCode> {
+    if let Some(code) = http_if_match(req, meta) {
+        return Err(code);
+    }
+    match dav_if_match(req, fs, path) {
+        (true, v) => Ok(v),
+        (false, _) => Err(StatusCode::PreconditionFailed),
+    }
+}
+

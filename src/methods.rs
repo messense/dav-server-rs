@@ -7,7 +7,7 @@ use {Method,DavResult};
 use {statuserror,daverror,fserror,fserror_to_status};
 use errors::DavError;
 use multierror::MultiError;
-use conditional::{if_match,http_if_match};
+use conditional::*;
 use webpath::WebPath;
 use headers::{self,Depth};
 use fs::*;
@@ -40,7 +40,11 @@ impl super::DavHandler {
     pub(crate) fn handle_options(&self, req: Request, mut res: Response)  -> DavResult<()> {
         {
             let h = res.headers_mut();
-            h.set(headers::DAV("1,2,3,sabredav-partialupdate".to_string()));
+            if self.ls.is_some() {
+                h.set(headers::DAV("1,2,3,sabredav-partialupdate".to_string()));
+            } else {
+                h.set(headers::DAV("1,3,sabredav-partialupdate".to_string()));
+            }
             h.set(headers::MSAuthorVia("DAV".to_string()));
             h.set(hyper::header::ContentLength(0));
         }
@@ -109,7 +113,7 @@ impl super::DavHandler {
                 match e {
                     DavError::Status(_) => {
                         result = Err(e);
-                        continue;
+                          continue;
                     },
                     _ => return Err(e),
                 }
@@ -139,8 +143,17 @@ impl super::DavHandler {
         let meta = self.fs.symlink_metadata(&path).map_err(|e| fserror(&mut res, e))?;
 
         // check the If and If-* headers.
-        if let Some(s) = if_match(&req, Some(&meta), &self.fs, &path) {
-            return Err(statuserror(&mut res, s));
+        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &path) {
+            Ok(t) => t,
+            Err(s) => return Err(statuserror(&mut res, s)),
+        };
+
+        // XXX FIXME
+        if let Some(ref locksystem) = self.ls {
+            let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+            if let Err(_l) = locksystem.check(&path, t) {
+                return Err(statuserror(&mut res, SC::Locked));
+            }
         }
 
         let mut multierror = MultiError::new(res, &path);
@@ -239,6 +252,7 @@ impl super::DavHandler {
     }
 
     pub(crate) fn do_move(&self, source: &WebPath, dest: &WebPath, existed: bool, mut multierror: MultiError) -> DavResult<()> {
+        debug!("do_move {} {}", source, dest);
         if let Err(e) = self.fs.rename(source, dest) {
             // XXX FIXME probably need to check if the failure was
             // source or destionation related and produce the
@@ -295,12 +309,24 @@ impl super::DavHandler {
         }
 
         // check If and If-* headers for source URL
-        if let Some(s) = if_match(&req, Some(&meta), &self.fs, &path) {
-            return Err(statuserror(&mut res, s));
-        }
-        // check If-* headers for destionation URL
-        if let Some(s) = http_if_match(&req, dmeta.as_ref().ok()) {
-            return Err(statuserror(&mut res, s));
+        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &path) {
+            Ok(t) => t,
+            Err(s) => return Err(statuserror(&mut res, s)),
+        };
+
+        // check locks XXX FIXME
+        if let Some(ref locksystem) = self.ls {
+            let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+            if method == Method::Move {
+                // for MOVE check if source path is locked
+                if let Err(_l) = locksystem.check(&path, t.clone()) {
+                    return Err(statuserror(&mut res, SC::Locked));
+                }
+            }
+            // for MOVE and COPY check if destination is locked
+            if let Err(_l) = locksystem.check(&dest, t) {
+                return Err(statuserror(&mut res, SC::Locked));
+            }
         }
 
         let mut multierror = MultiError::new(res, &path);

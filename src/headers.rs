@@ -65,7 +65,7 @@ pub enum DavTimeout {
 }
 
 #[derive(Debug,Clone)]
-pub struct Timeout(Vec<DavTimeout>);
+pub struct Timeout(pub Vec<DavTimeout>);
 
 impl Header for Timeout {
     fn header_name() -> &'static str {
@@ -74,22 +74,23 @@ impl Header for Timeout {
 
     fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<Timeout> {
         if raw.len() == 1 {
-            let v = Vec::new();
-            let s = std::str::from_utf8(&raw[0])?.split(|&c| c == ',');
-            for words in s {
-                let w = match s {
+            let mut v = Vec::new();
+            let words = std::str::from_utf8(&raw[0])?.split(|c| c == ',');
+            for word in words {
+                let w = match word {
                     "Infinite" => DavTimeout::Infinite,
-                    _ if s.has_prefix("Second-") => {
-                        match &s[7..].parse::<u32> {
-                            None => return Err(hyper::Error::Header),
-                            Some(n) => DavTimeout::Seconds(n),
+                    _ if word.starts_with("Second-") => {
+                        let num = &word[7..];
+                        match num.parse::<u32>() {
+                            Err(_) => return Err(hyper::Error::Header),
+                            Ok(n) => DavTimeout::Seconds(n),
                         }
                     },
-                    - => return Err(hyper::Error::Header),
+                    _ => return Err(hyper::Error::Header),
                 };
                 v.push(w);
             }
-            Ok(Timeout(v))
+            return Ok(Timeout(v));
         }
         Err(hyper::Error::Header)
     }
@@ -104,10 +105,11 @@ impl HeaderFormat for Timeout {
             }
             first = false;
             match s {
-                &Timeout::Seconds(n) => f.write_str("Second-{}", n)?,
-                &Timeout::Infinite => f.write_str("Infinite")?,
+                &DavTimeout::Seconds(n) => write!(f, "Second-{}", n)?,
+                &DavTimeout::Infinite => f.write_str("Infinite")?,
             }
         }
+        Ok(())
     }
 }
 

@@ -96,6 +96,7 @@ use self::webpath::WebPath;
 
 pub(crate) use self::errors::DavError;
 pub(crate) use self::fs::*;
+pub(crate) use self::ls::*;
 
 type DavResult<T> = Result<T, DavError>;
 
@@ -122,6 +123,7 @@ pub enum Method {
 pub struct DavHandler {
     pub(crate) prefix:     String,
     pub(crate) fs:         Box<DavFileSystem>,
+    pub(crate) ls:         Option<Box<DavLockSystem>>,
     pub(crate) allow:      Option<HashSet<Method>>,
 }
 
@@ -222,6 +224,7 @@ impl DavHandler {
         let mm = |v: &mut Vec<String>, m: &str, y: Method| {
             if (y == Method::Options ||
                 (y != method || islock(y) != islock(method))) &&
+                (!islock(y) || self.ls.is_some()) &&
                 self.allow.as_ref().map_or(true, |x| x.contains(&y)) {
                 v.push(m.to_string());
             }
@@ -396,10 +399,11 @@ impl DavHandler {
     }
 
     // constructor.
-    pub fn new<S: Into<String>>(prefix: S, fs: Box<DavFileSystem>) -> DavHandler {
+    pub fn new<S: Into<String>>(prefix: S, fs: Box<DavFileSystem>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
         DavHandler{
             prefix: prefix.into(),
             fs: fs,
+            ls: ls,
             allow: None,
         }
     }
