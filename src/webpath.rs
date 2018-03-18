@@ -11,13 +11,19 @@ use mime_guess;
 
 use super::DavError;
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Clone,PartialEq)]
 pub struct WebPath {
     pub(crate) path:    Vec<u8>,
     pub(crate) prefix:  Vec<u8>,
 }
 
 impl std::fmt::Display for WebPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", &self.as_url_string())
+    }
+}
+
+impl std::fmt::Debug for WebPath {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:?}", &self.as_url_string())
     }

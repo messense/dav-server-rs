@@ -10,7 +10,7 @@ use DavResult;
 use fs::*;
 use headers;
 use {statuserror,fserror,systemtime_to_httpdate};
-use conditional::if_match;
+use conditional::if_match_get_tokens;
 
 macro_rules! statuserror {
     ($res:ident, $s:ident) => {
@@ -101,11 +101,21 @@ impl super::DavHandler {
             oo.truncate = false;
         }
 
-        // handle the if-headers.
-        if let Some(s) = if_match(&req, meta.as_ref().ok(), &self.fs, &path) {
-            return Err(statuserror(&mut res, s));
+        // check the If and If-* headers.
+        let tokens = match if_match_get_tokens(&req, meta.as_ref().ok(), &self.fs, &path) {
+            Ok(t) => t,
+            Err(s) => return Err(statuserror(&mut res, s)),
+        };
+
+        // XXX FIXME multistatus error
+        if let Some(ref locksystem) = self.ls {
+            let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+            if let Err(_l) = locksystem.check(&path, false, t) {
+                return Err(statuserror(&mut res, SC::Locked));
+            }
         }
 
+        // tweak open options.
         if req.headers.get::<headers::IfMatch>()
             .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
                 oo.create_new = true;

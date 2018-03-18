@@ -1,6 +1,6 @@
 
 use std::io::Cursor;
-use std::time::{Duration,SystemTime};
+use std::time::Duration;
 use std::cmp;
 
 use hyper::server::{Request,Response};
@@ -10,8 +10,6 @@ use xmltree;
 use xmltree::Element;
 use xmltree_ext;
 use xmltree_ext::ElementExt;
-
-use uuid::Uuid;
 
 use ls::*;
 
@@ -161,28 +159,8 @@ impl super::DavHandler {
             };
         }
 
-        // Success!
-        let timeout_at = match timeout {
-            Some(d) => Some(SystemTime::now() + d),
-            None => None,
-        };
-        let locktoken = Uuid::new_v4().urn().to_string();
-
-        res.headers_mut().set(headers::LockToken("<".to_string() + &locktoken + ">"));
-
-        let lock = DavLock{
-            token:      locktoken,
-            path:       path,
-            owner:      owner,
-            timeout_at: timeout_at,
-            timeout:    timeout,
-            shared:     shared,
-            deep:       deep,
-        };
-
         // output result
-        let prop = build_lock_prop(&lock, true);
-
+        res.headers_mut().set(headers::LockToken("<".to_string() + &lock.token + ">"));
         if let None = meta {
             *res.status_mut() = SC::Created;
         } else {
@@ -191,6 +169,7 @@ impl super::DavHandler {
 
         let res = res.start()?;
         let mut emitter = xmltree_ext::emitter(res)?;
+        let prop = build_lock_prop(&lock, true);
         prop.write_ev(&mut emitter)?;
 
         Ok(())
@@ -207,10 +186,11 @@ impl super::DavHandler {
         // Must have Lock-Token header
         let t = req.headers.get::<headers::LockToken>()
             .ok_or(statuserror(&mut res, SC::BadRequest))?;
+        let token = t.0.trim_matches(|c| c == '<' || c == '>');
 
         let (path, _) = self.fixpath(&req, &mut res).map_err(|e| fserror(&mut res, e))?;
 
-        match locksystem.unlock(&path, &t.0) {
+        match locksystem.unlock(&path, token) {
             Ok(_) => {
                 *res.status_mut() = SC::NoContent;
                 Ok(())

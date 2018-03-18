@@ -17,6 +17,7 @@ use xmltree::Element;
 use webpath::WebPath;
 use tree;
 use ls::*;
+use fs::FsResult;
 
 type Tree = tree::Tree<Vec<u8>, Vec<DavLock>>;
 
@@ -46,11 +47,15 @@ impl DavLockSystem for MemLs {
         let inner = &mut *self.0.lock().unwrap();
 
         // any locks in the path?
-        check_locks_to_path(&inner.tree, path, Vec::new(), shared)?;
+        let rc = check_locks_to_path(&inner.tree, path, &Vec::new(), shared);
+        debug!("lock: check_locks_to_path: {:?}", rc);
+        rc?;
 
         // if it's a deep lock we need to check if there are locks furter along the path.
         if deep {
-            check_locks_from_path(&inner.tree, path, shared)?;
+            let rc = check_locks_from_path(&inner.tree, path, &Vec::new(), shared);
+            debug!("lock: check_locks_from_path: {:?}", rc);
+            rc?;
         }
 
         // create lock.
@@ -68,6 +73,7 @@ impl DavLockSystem for MemLs {
             shared:     shared,
             deep:       deep,
         };
+        debug!("lock {} created", &lock.token);
         let slock = lock.clone();
         node.push(slock);
         Ok(lock)
@@ -76,7 +82,7 @@ impl DavLockSystem for MemLs {
     fn unlock(&self, path: &WebPath, token: &str) -> Result<(), ()> {
         let inner = &mut *self.0.lock().unwrap();
         let node_id = match lookup_lock(&inner.tree, path, token) {
-            None => return Err(()),
+            None => { debug!("unlock: {} not found at {}", token, path); return Err(()) },
             Some(n) => n,
         };
         let len = {
@@ -92,9 +98,10 @@ impl DavLockSystem for MemLs {
     }
 
     fn refresh(&self, path: &WebPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()> {
+        debug!("refresh lock {}", token);
         let inner = &mut *self.0.lock().unwrap();
         let node_id = match lookup_lock(&inner.tree, path, token) {
-            None => return Err(()),
+            None => { debug!("lock not found"); return Err(()) },
             Some(n) => n,
         };
         let node = (&mut inner.tree).get_node_mut(node_id).unwrap();
@@ -109,9 +116,20 @@ impl DavLockSystem for MemLs {
         Ok(lock.clone())
     }
 
-    fn check(&self, path: &WebPath, submitted_tokens: Vec<&str>) -> Result<(), DavLock> {
+    fn check(&self, path: &WebPath, deep: bool, submitted_tokens: Vec<&str>) -> Result<(), DavLock> {
         let inner = &*self.0.lock().unwrap();
-        check_locks_to_path(&inner.tree, path, submitted_tokens, false)
+        let st = submitted_tokens.clone();
+        let rc = check_locks_to_path(&inner.tree, path, &submitted_tokens, false);
+        debug!("check: check_lock_to_path: {:?}: {:?}", st, rc);
+        rc?;
+
+        // if it's a deep lock we need to check if there are locks furter along the path.
+        if deep {
+            let rc = check_locks_from_path(&inner.tree, path, &submitted_tokens, false);
+            debug!("check: check_locks_from_path: {:?}", rc);
+            rc?;
+        }
+        Ok(())
     }
 
     fn discover(&self, path: &WebPath) -> Vec<DavLock> {
@@ -129,12 +147,10 @@ impl DavLockSystem for MemLs {
 }
 
 // check if there are any locks along the path.
-fn check_locks_to_path(tree: &Tree, path: &WebPath, submitted_tokens: Vec<&str>, shared_ok: bool) -> Result<(), DavLock> {
+fn check_locks_to_path(tree: &Tree, path: &WebPath, submitted_tokens: &Vec<&str>, shared_ok: bool) -> Result<(), DavLock> {
 
-    // split path into segments, starting with an empty segment indicating root ("/").
-    let path = path.as_bytes();
-    let mut segs : Vec<&[u8]> = path.split(|&c| c == b'/').filter(|s| s.len() > 0).collect();
-    segs.insert(0, b"");
+    // path segments
+    let segs = path_to_segs(path, true);
     let last_seg = segs.len() - 1;
 
     // state
@@ -145,13 +161,10 @@ fn check_locks_to_path(tree: &Tree, path: &WebPath, submitted_tokens: Vec<&str>,
     let mut node_id = tree::ROOT_ID;
     for (i, seg) in segs.into_iter().enumerate() {
 
-        // Read node.
-        if seg != b"" {
-            node_id = match tree.get_child(node_id, seg) {
-                Ok(n) => n,
-                Err(_) => break,
-            };
-        }
+        node_id = match get_child(tree, node_id, seg) {
+            Ok(n) => n,
+            Err(_) => break,
+        };
         let node_locks = match tree.get_node(node_id) {
             Ok(n) => n,
             Err(_) => break,
@@ -161,8 +174,7 @@ fn check_locks_to_path(tree: &Tree, path: &WebPath, submitted_tokens: Vec<&str>,
             if i < last_seg && !nl.deep {
                 continue
             }
-            let m = submitted_tokens.iter().any(|t| &nl.token == t);
-            if m {
+            if submitted_tokens.iter().any(|t| &nl.token == t) {
                 // fine, we hold this lock.
                 holds_lock = true;
             } else {
@@ -187,13 +199,42 @@ fn check_locks_to_path(tree: &Tree, path: &WebPath, submitted_tokens: Vec<&str>,
     Ok(())
 }
 
+// See if there are locks in any path below this collection.
+fn check_locks_from_path(tree: &Tree, path: &WebPath, submitted_tokens: &Vec<&str>, shared_ok: bool) -> Result<(), DavLock> {
+    let node_id = match lookup_node(tree, path) {
+        Some(id) => id,
+        None => return Ok(()),
+    };
+    check_locks_from_node(tree, node_id, submitted_tokens, shared_ok)
+}
+
+// See if there are locks in any nodes below this node.
+fn check_locks_from_node(tree: &Tree, node_id: u64, submitted_tokens: &Vec<&str>, shared_ok: bool) -> Result<(), DavLock> {
+    let node_locks = match tree.get_node(node_id) {
+        Ok(n) => n,
+        Err(_) => return Ok(()),
+    };
+    for nl in node_locks {
+        if !nl.shared || !shared_ok {
+            if !submitted_tokens.iter().any(|t| t == &nl.token) {
+                return Err(nl.to_owned());
+            }
+        }
+    }
+    if let Ok(children) = tree.get_children(node_id) {
+        for (_, node_id) in children {
+            if let Err(l) = check_locks_from_node(tree, node_id, submitted_tokens, shared_ok) {
+                return Err(l);
+            }
+        }
+    }
+    Ok(())
+}
+
 // Find or create node.
 fn get_or_create_path_node<'a>(tree: &'a mut Tree, path: &WebPath) -> &'a mut Vec<DavLock> {
-    let path = path.as_bytes();
-    let segs : Vec<&[u8]> = path.split(|&c| c == b'/').filter(|s| s.len() > 0).collect();
-
     let mut node_id = tree::ROOT_ID;
-    for seg in segs.into_iter() {
+    for seg in path_to_segs(path, false)  {
         node_id = match tree.get_child(node_id, seg) {
             Ok(n) => n,
             Err(_) => {
@@ -206,34 +247,30 @@ fn get_or_create_path_node<'a>(tree: &'a mut Tree, path: &WebPath) -> &'a mut Ve
 
 // Find lock in path.
 fn lookup_lock(tree: &Tree, path: &WebPath, token: &str) -> Option<u64> {
-
-    let path = path.as_bytes();
-    let segs : Vec<&[u8]> = path.split(|&c| c == b'/').filter(|s| s.len() > 0).collect();
+    debug!("lookup_lock: {}", token);
 
     let mut node_id = tree::ROOT_ID;
-    for seg in segs.into_iter() {
-        node_id = match tree.get_child(node_id, seg) {
-            Ok(n) => {
-                let node = tree.get_node(n).unwrap();
-                if node.iter().any(|n| n.token ==token) {
-                    return Some(n);
-                }
-                n
-            },
-            Err(_) => return None,
+    for seg in path_to_segs(path, true) {
+
+        debug!("lookup_lock: node {} seg {}", node_id, String::from_utf8_lossy(seg));
+        node_id = match get_child(tree, node_id, seg) {
+            Ok(n) => n,
+            Err(_) => break,
         };
+        let node = tree.get_node(node_id).unwrap();
+        debug!("lookup_lock: locks here: {:?}", &node);
+        if node.iter().any(|n| n.token == token) {
+            return Some(node_id);
+        }
     }
+    debug!("lookup_lock: fail");
     None
 }
 
 // Find node ID for path.
 fn lookup_node(tree: &Tree, path: &WebPath) -> Option<u64> {
-
-    let path = path.as_bytes();
-    let segs : Vec<&[u8]> = path.split(|&c| c == b'/').filter(|s| s.len() > 0).collect();
-
     let mut node_id = tree::ROOT_ID;
-    for seg in segs.into_iter() {
+    for seg in path_to_segs(path, false) {
         node_id = match tree.get_child(node_id, seg) {
             Ok(n) => n,
             Err(_) => return None,
@@ -242,49 +279,15 @@ fn lookup_node(tree: &Tree, path: &WebPath) -> Option<u64> {
     Some(node_id)
 }
 
-// See if there are locks in any path below this collection.
-fn check_locks_from_path(tree: &Tree, path: &WebPath, shared_ok: bool) -> Result<(), DavLock> {
-    let node_id = match lookup_node(tree, path) {
-        Some(id) => id,
-        None => return Ok(()),
-    };
-    check_locks_from_node(tree, node_id, shared_ok)
-}
-
-// See if there are locks in any nodes below this node.
-fn check_locks_from_node(tree: &Tree, node_id: u64, shared_ok: bool) -> Result<(), DavLock> {
-    let node_locks = match tree.get_node(node_id) {
-        Ok(n) => n,
-        Err(_) => return Ok(()),
-    };
-    for nl in node_locks {
-        if !nl.shared || !shared_ok {
-            return Err(nl.to_owned());
-        }
-    }
-    if let Ok(children) = tree.get_children(node_id) {
-        for (_, node_id) in children {
-            if let Err(l) = check_locks_from_node(tree, node_id, shared_ok) {
-                return Err(l);
-            }
-        }
-    }
-    Ok(())
-}
-
 // Find all locks in a path
 fn list_locks(tree: &Tree, path: &WebPath) -> Vec<DavLock> {
-
-    let path = path.as_bytes();
-    let segs : Vec<&[u8]> = path.split(|&c| c == b'/').filter(|s| s.len() > 0).collect();
-
     let mut locks = Vec::new();
 
     let mut node_id = tree::ROOT_ID;
     if let Ok(node) = tree.get_node(node_id) {
         locks.extend_from_slice(node);
     }
-    for seg in segs.into_iter() {
+    for seg in path_to_segs(path, false) {
         node_id = match tree.get_child(node_id, seg) {
             Ok(n) => n,
             Err(_) => break,
@@ -294,5 +297,21 @@ fn list_locks(tree: &Tree, path: &WebPath) -> Vec<DavLock> {
         }
     }
     locks
+}
+
+fn path_to_segs(path: &WebPath, include_root: bool) -> Vec<&[u8]> {
+    let path = path.as_bytes();
+    let mut segs : Vec<&[u8]> = path.split(|&c| c == b'/').filter(|s| s.len() > 0).collect();
+    if include_root {
+        segs.insert(0, b"");
+    }
+    segs
+}
+
+fn get_child(tree: &Tree, node_id: u64, seg: &[u8]) -> FsResult<u64> {
+    if seg.len() == 0 {
+        return Ok(node_id);
+    }
+    tree.get_child(node_id, seg)
 }
 

@@ -26,7 +26,7 @@ use ls::*;
 
 use method_lock::{list_lockdiscovery,list_supportedlock};
 
-use conditional::if_match;
+use conditional::if_match_get_tokens;
 use errors::DavError;
 use fserror_to_status;
 
@@ -300,9 +300,18 @@ impl DavHandler {
             Err(e) => return Err(fserror(&mut res, e)),
         };
 
-        // handle the if-headers.
-        if let Some(s) = if_match(&req, Some(&meta), &self.fs, &path) {
-            return Err(statuserror(&mut res, s));
+        // check the If and If-* headers.
+        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &path) {
+            Ok(t) => t,
+            Err(s) => return Err(statuserror(&mut res, s)),
+        };
+
+        // XXX FIXME multistatus error
+        if let Some(ref locksystem) = self.ls {
+            let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+            if let Err(_l) = locksystem.check(&path, false, t) {
+                return Err(statuserror(&mut res, SC::Locked));
+            }
         }
 
         debug!(target: "xml", "proppatch input:\n{}]\n",

@@ -139,8 +139,8 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, path: &WebPat
                 headers::IfItem::StateToken(ref s) => {
                     // since we do not support locking yet, almost always
                     // evaluate to "true" with some exceptions (10.4.8).
-                    if s.starts_with("<DAV:") {
-                        false
+                    if s.starts_with("DAV:") {
+                        cond.not
                     } else {
                         !cond.not
                     }

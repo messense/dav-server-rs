@@ -148,10 +148,10 @@ impl super::DavHandler {
             Err(s) => return Err(statuserror(&mut res, s)),
         };
 
-        // XXX FIXME
+        // XXX FIXME multistatus error
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-            if let Err(_l) = locksystem.check(&path, t) {
+            if let Err(_l) = locksystem.check(&path, true, t) {
                 return Err(statuserror(&mut res, SC::Locked));
             }
         }
@@ -159,6 +159,11 @@ impl super::DavHandler {
         let mut multierror = MultiError::new(res, &path);
 
         if let Ok(()) = self.delete_items(&mut multierror, depth, meta, &path) {
+            // XXX FIXME should really do this per item, in case the
+            // delete partially fails.
+            if let Some(ref locksystem) = self.ls {
+                locksystem.delete(&path).ok();
+            }
             return multierror.finalstatus(&path, SC::NoContent);
         }
 
@@ -314,17 +319,17 @@ impl super::DavHandler {
             Err(s) => return Err(statuserror(&mut res, s)),
         };
 
-        // check locks XXX FIXME
+        // check locks XXX FIXME multistatus errors
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             if method == Method::Move {
                 // for MOVE check if source path is locked
-                if let Err(_l) = locksystem.check(&path, t.clone()) {
+                if let Err(_l) = locksystem.check(&path, true, t.clone()) {
                     return Err(statuserror(&mut res, SC::Locked));
                 }
             }
             // for MOVE and COPY check if destination is locked
-            if let Err(_l) = locksystem.check(&dest, t) {
+            if let Err(_l) = locksystem.check(&dest, true, t) {
                 return Err(statuserror(&mut res, SC::Locked));
             }
         }
@@ -336,6 +341,11 @@ impl super::DavHandler {
             debug!("handle_copymove: deleting destination {}", dest);
             if let Err(_) = self.delete_items(&mut multierror, Depth::Infinity, dmeta.unwrap(), &dest) {
                 return Err(DavError::Status(multierror.close()?));
+            }
+            // XXX FIXME should really do this per item, in case the
+            // delete partially fails.
+            if let Some(ref locksystem) = self.ls {
+                locksystem.delete(&path).ok();
             }
         }
 
@@ -349,7 +359,12 @@ impl super::DavHandler {
                 }
             }
         } else {
-            self.do_move(&path, &dest, exists, multierror)
+            // move and if successful, remove locks at old location.
+            self.do_move(&path, &dest, exists, multierror)?;
+            if let Some(ref locksystem) = self.ls {
+                locksystem.delete(&path).ok();
+            }
+            Ok(())
         }
     }
 }
