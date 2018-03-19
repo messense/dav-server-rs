@@ -24,7 +24,7 @@ use webpath::*;
 use fs::*;
 use ls::*;
 
-use method_lock::{list_lockdiscovery,list_supportedlock};
+use handle_lock::{list_lockdiscovery,list_supportedlock};
 
 use conditional::if_match_get_tokens;
 use errors::DavError;
