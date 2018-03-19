@@ -10,6 +10,7 @@ use hyper::header::EntityTag;
 use headers;
 use systemtime_to_timespec;
 use fs::{DavFileSystem,DavMetaData};
+use ls::DavLockSystem;
 use webpath::WebPath;
 
 pub(crate) fn ifrange_match(hdr: &headers::IfRange, tag: &hyper::header::EntityTag, date: SystemTime) -> bool {
@@ -92,7 +93,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
 // this would probably also be a good spot to check if this request
 // should fail because it is locked (once we implement locking).
 //
-pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, path: &WebPath) -> (bool, Vec<String>) {
+pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, ls: &Option<Box<DavLockSystem>>, path: &WebPath) -> (bool, Vec<String>) {
 
     let mut tokens : Vec<String> = Vec::new();
     let mut any_list_ok = false;
@@ -117,14 +118,14 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, path: &WebPat
         }
 
         // find the resource that this list is about.
-        #[allow(unused_assignments)]
         let mut pa : Option<WebPath> = None;
         let (p, valid) = match iflist.resource_tag {
             Some(ref url) => {
                 match WebPath::from_url(url, std::str::from_utf8(&path.prefix).unwrap()) {
                     Ok(p) => {
-                        pa = Some(p);
-                        (pa.as_ref().unwrap(), true)
+                        // anchor webpath in pa.
+                        let p : &WebPath = pa.get_or_insert(p);
+                        (p, true)
                     },
                     Err(_) => (path, false),
                 }
@@ -137,12 +138,14 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, path: &WebPat
         for cond in iflist.conditions.iter() {
             let cond_ok = match cond.item {
                 headers::IfItem::StateToken(ref s) => {
-                    // since we do not support locking yet, almost always
-                    // evaluate to "true" with some exceptions (10.4.8).
-                    if s.starts_with("DAV:") {
-                        cond.not
+                    // tokens in DAV: namespace always evaluate to false (10.4.8)
+                    if !valid || s.starts_with("DAV:") {
+                        false
                     } else {
-                        !cond.not
+                        match ls {
+                            &Some(ref ls) => ls.check(p, false, vec![s]).is_ok(),
+                            &None => false,
+                        }
                     }
                 },
                 headers::IfItem::ETag(ref tag) => {
@@ -181,19 +184,19 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, path: &WebPat
 
 // Handle both the HTTP conditional If: headers, and the webdav If: header.
 // Should be called only for request URLs, not for Destionation: URLs.
-pub(crate) fn if_match(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<DavFileSystem>, path: &WebPath) -> Option<StatusCode> {
-    match dav_if_match(req, fs, path) {
+pub(crate) fn if_match(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<DavFileSystem>, ls: &Option<Box<DavLockSystem>>, path: &WebPath) -> Option<StatusCode> {
+    match dav_if_match(req, fs, ls, path) {
         (true, _) => {},
         (false, _) => return Some(StatusCode::PreconditionFailed),
     }
     http_if_match(req, meta)
 }
 
-pub(crate) fn if_match_get_tokens(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<DavFileSystem>, path: &WebPath) -> Result<Vec<String>, StatusCode> {
+pub(crate) fn if_match_get_tokens(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<DavFileSystem>, ls: &Option<Box<DavLockSystem>>, path: &WebPath) -> Result<Vec<String>, StatusCode> {
     if let Some(code) = http_if_match(req, meta) {
         return Err(code);
     }
-    match dav_if_match(req, fs, path) {
+    match dav_if_match(req, fs, ls, path) {
         (true, v) => Ok(v),
         (false, _) => Err(StatusCode::PreconditionFailed),
     }

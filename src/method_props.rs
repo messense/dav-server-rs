@@ -301,7 +301,7 @@ impl DavHandler {
         };
 
         // check the If and If-* headers.
-        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &path) {
+        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path) {
             Ok(t) => t,
             Err(s) => return Err(statuserror(&mut res, s)),
         };

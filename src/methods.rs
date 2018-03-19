@@ -61,7 +61,7 @@ impl super::DavHandler {
         let meta = self.fs.metadata(&path);
 
         // check the If and If-* headers.
-        if let Some(s) = if_match(&req, meta.as_ref().ok(), &self.fs, &path) {
+        if let Some(s) = if_match(&req, meta.as_ref().ok(), &self.fs, &self.ls, &path) {
             return Err(statuserror(&mut res, s));
         }
 
@@ -143,7 +143,7 @@ impl super::DavHandler {
         let meta = self.fs.symlink_metadata(&path).map_err(|e| fserror(&mut res, e))?;
 
         // check the If and If-* headers.
-        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &path) {
+        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path) {
             Ok(t) => t,
             Err(s) => return Err(statuserror(&mut res, s)),
         };
@@ -314,7 +314,7 @@ impl super::DavHandler {
         }
 
         // check If and If-* headers for source URL
-        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &path) {
+        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path) {
             Ok(t) => t,
             Err(s) => return Err(statuserror(&mut res, s)),
         };

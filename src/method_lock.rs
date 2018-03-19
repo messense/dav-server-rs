@@ -42,7 +42,7 @@ impl super::DavHandler {
         if xmldata.len() == 0 {
 
             // get locktoken
-            let (_, tokens) = dav_if_match(&req, &self.fs, &path);
+            let (_, tokens) = dav_if_match(&req, &self.fs, &self.ls, &path);
             if tokens.len() != 1 {
                 return Err(statuserror(&mut res, SC::BadRequest));
             }
@@ -72,7 +72,7 @@ impl super::DavHandler {
         };
 
         // handle the if-headers.
-        if let Some(s) = if_match(&req, meta.as_ref(), &self.fs, &path) {
+        if let Some(s) = if_match(&req, meta.as_ref(), &self.fs, &self.ls, &path) {
             return Err(statuserror(&mut res, s));
         }
 

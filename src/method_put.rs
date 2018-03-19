@@ -102,7 +102,7 @@ impl super::DavHandler {
         }
 
         // check the If and If-* headers.
-        let tokens = match if_match_get_tokens(&req, meta.as_ref().ok(), &self.fs, &path) {
+        let tokens = match if_match_get_tokens(&req, meta.as_ref().ok(), &self.fs, &self.ls, &path) {
             Ok(t) => t,
             Err(s) => return Err(statuserror(&mut res, s)),
         };
