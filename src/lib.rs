@@ -216,58 +216,6 @@ impl DavHandler {
         self.fs.metadata(&p).map(|m| m.is_dir()).unwrap_or(false)
     }
 
-    pub(crate) fn do_options(&self, req: &Request, res: &mut Response, meta: FsResult<Box<DavMetaData>>) -> DavResult<()> {
-
-        // Helper to add method to array if method is in fact
-        // allowed. If the current method is not OPTIONS, leave
-        // out the current method since we're probably called
-        // for MethodNotAllowed.
-        let method = dav_method(&req.method).unwrap_or(Method::Options);
-        let islock = |m| m == Method::Lock || m == Method::Unlock;
-        let mm = |v: &mut Vec<String>, m: &str, y: Method| {
-            if (y == Method::Options ||
-                (y != method || islock(y) != islock(method))) &&
-                (!islock(y) || self.ls.is_some()) &&
-                self.allow.as_ref().map_or(true, |x| x.contains(&y)) {
-                v.push(m.to_string());
-            }
-        };
-        let mut v = Vec::new();
-
-        let path = self.path(&req);
-        let is_unmapped = meta.is_err();
-        let is_file = meta.and_then(|m| Ok(m.is_file())).unwrap_or_default();
-        let is_star = path.is_star() && method == Method::Options;
-
-        if is_unmapped && !is_star {
-            mm(&mut v, "OPTIONS", Method::Options);
-            mm(&mut v, "MKCOL", Method::MkCol);
-            mm(&mut v, "PUT", Method::Put);
-            mm(&mut v, "LOCK", Method::Lock);
-        } else {
-            if is_file || is_star {
-                mm(&mut v, "HEAD", Method::Head);
-                mm(&mut v, "GET", Method::Get);
-                mm(&mut v, "PATCH", Method::Patch);
-                mm(&mut v, "PUT", Method::Put);
-            }
-            mm(&mut v, "OPTIONS", Method::Options);
-            mm(&mut v, "PROPFIND", Method::PropFind);
-            mm(&mut v, "COPY", Method::Copy);
-            if path.as_url_string() != "/" {
-                mm(&mut v, "MOVE", Method::Move);
-                mm(&mut v, "DELETE", Method::Delete);
-            }
-            mm(&mut v, "LOCK", Method::Lock);
-            mm(&mut v, "UNLOCK", Method::Unlock);
-        }
-
-        let a = v.clone().join(",").as_bytes().to_owned();
-        res.headers_mut().set_raw("Allow", vec!(a));
-
-        Ok(())
-    }
-
     pub(crate) fn path(&self, req: &Request) -> WebPath {
         // XXX FIXME need to make sure this never fails
         WebPath::from_uri(&req.uri, &self.prefix).unwrap()
