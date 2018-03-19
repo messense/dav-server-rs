@@ -9,15 +9,14 @@ interface similar to the Go x/net/webdav package:
   implement reading/writing "DAV properties"
 - you can supply a "locksystem" that handles the webdav locks
 
-Included are two example filesystems:
+Included are two filesystems:
 - localfs: serves a directory on the local filesystem
 - memfs: ephemeral in-memory filesystem. supports DAV properties.
 
-There is as of yet no "locksystem".
+Also included are two locksystems:
 
-At the moment we do _fake_ a bit of locking" support. We just allow any
-LOCK and UNLOCK requests. That is enough for the Windows and OSX clients
-to work.
+- memls: ephemeral in-memory locksystem.
+- fakels: fake locksystem. just enough LOCK/UNLOCK support for OSX/Windows.
 
 # testing
 
@@ -38,7 +37,7 @@ You do not have to install the litmus binary, it's possible to run the tests
 straight from the unpacked & compiled litmus directory:
 
 ```
-$ TESTS="basic copymove props http" HTDOCS=htdocs TESTROOT=. ./litmus http://localhost:4918/
+$ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. ./litmus http://localhost:4918/
 
 -> running `basic':
  0. init.................. pass

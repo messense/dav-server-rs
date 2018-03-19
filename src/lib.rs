@@ -11,12 +11,15 @@
 //! checks of the Webdav Litmus Test testsuite (so basically all of
 //! RFC4918 except locking).
 //!
-//! Included are two example filesystems:
+//! Included are two filesystems:
 //!
 //! - localfs: serves a directory on the local filesystem
 //! - memfs: ephemeral in-memory filesystem. supports DAV properties.
 //!
-//! There is as of yet no "locksystem".
+//! Also included are two locksystems:
+//!
+//! - memls: ephemeral in-memory locksystem.
+//! - fakels: fake locksystem. just enough LOCK/UNLOCK support for OSX/Windows.
 //!
 //! Example:
 //!
@@ -26,12 +29,13 @@
 //!
 //! struct SampleServer {
 //!     fs:     Box<dav::DavFileSystem>,
+//!     ls:     Box<dav::DavLockSystem>,
 //!     prefix: String,
 //! }
 //!
 //! impl Handler for SampleServer {
 //!     fn handle(&self, req: hyper::server::Request, mut res: hyper::server::Response) {
-//!         let davhandler = dav::DavHandler::new(self.prefix.clone(), self.fs.clone());
+//!         let davhandler = dav::DavHandler::new(&self.prefix, self.fs.clone(), self.ls.clone());
 //!         davhandler.handle(req, res);
 //!     }
 //! }
@@ -39,6 +43,7 @@
 //! fn main() {
 //!     let sample_srv = SampleServer{
 //!         fs:     dav::memfs::MemFs::new(),
+//!         ls:     dav::memls::MemLs::new(),
 //!         prefix: "".to_string(),
 //!     };
 //!     let hyper_srv = hyper::server::Server::http("0.0.0.0:4918").unwrap();
@@ -84,6 +89,7 @@ pub mod ls;
 pub mod localfs;
 pub mod memfs;
 pub mod memls;
+pub mod fakels;
 pub mod webpath;
 
 use hyper::header::Date;
