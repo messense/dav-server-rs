@@ -16,8 +16,17 @@ impl super::DavHandler {
         let meta = self.fs.metadata(&path);
 
         // check the If and If-* headers.
-        if let Some(s) = if_match(&req, meta.as_ref().ok(), &self.fs, &self.ls, &path) {
-            return Err(statuserror(&mut res, s));
+        let tokens = match if_match_get_tokens(&req, meta.as_ref().ok(), &self.fs, &self.ls, &path) {
+            Ok(t) => t,
+            Err(s) => return Err(statuserror(&mut res, s)),
+        };
+
+        // if locked check if we hold that lock.
+        if let Some(ref locksystem) = self.ls {
+            let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+            if let Err(_l) = locksystem.check(&path, false, t) {
+                return Err(statuserror(&mut res, SC::Locked));
+            }
         }
 
         match self.fs.create_dir(&path) {
