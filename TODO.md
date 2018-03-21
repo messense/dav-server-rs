@@ -1,9 +1,9 @@
 
-> TODO list
+# TODO list
 
-### Protocol compliance
+## Protocol compliance
 
-# Apply all headers
+### Apply all headers
 
 The RFC says that for COPY/MOVE/DELETE with Depth: Infinity all headers
 must be applied to all resources. For example, in RFC4918 9.6.1:
@@ -15,7 +15,7 @@ Any headers included with DELETE MUST be applied in processing every resource to
 Currently we do not do this- we do apply the If-Match, If-None-Match, and If headers
 to the request url, but not recursively.
 
-# In MOVE/DELETE test locks seperately per resource
+### In MOVE/DELETE test locks seperately per resource
 
 Right now we check if we hold the locks (if any) for the request url, and paths
 below it for Depth: Infinity requests. If we don't, the entire request fails. We
@@ -25,7 +25,7 @@ and only fail those resources.
 This does mean that we cannot MOVE a collection by doing a simple rename, we must
 do it resource-per-resource, like COPY.
 
-### Race conditions
+## Race conditions
 
 During long-running requests like MOVE/COPY/DELETE we should really LOCK the resource
 so that no other request can race us.
@@ -48,7 +48,7 @@ refresh it every 5 seconds or so, so that a stale lock doesn't hang around
 too long if something goes catastrophically wrong. Might only happen when
 the lock database is seperate from the webdav server.
 
-### collection-ends-in-slash
+## collection-ends-in-slash
 
 There is some confusion in the code where HTTP paths end in '/', especially
 where we handle symbolic links. We should really strip the trailing slash
@@ -60,7 +60,7 @@ and less error-prone.
 Something similar holds for comparing paths.. WebPath should have a
 PartialEq implementation where path/to/resource/ == /path/to/resource
 
-### Improvements:
+## Improvements:
 
 - Do fake locking only for user-agents:
 
@@ -80,7 +80,7 @@ PartialEq implementation where path/to/resource/ == /path/to/resource
 
 - port to hyper 0.11
 
-### Project ideas:
+## Project ideas:
 
 - Add support for properties to localfs.rs on XFS. XFS has unlimited and
   scalable extended attributes. ext2/3/4 can store max 4KB. On XFS we can
@@ -90,9 +90,9 @@ PartialEq implementation where path/to/resource/ == /path/to/resource
 
 - return windows "hidden" attribute for windows clients if filename starts with "."
 
-### Things I thought of but aren't going to work:
+## Things I thought of but aren't going to work:
 
-# Compression
+### Compression
 
 - support for compressing responses, at least PROPFIND.
 - support for compressed PUT requests
