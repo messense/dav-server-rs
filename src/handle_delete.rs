@@ -94,6 +94,9 @@ impl super::DavHandler {
         let mut path = self.path(&req);
         path.remove_slash();
         let meta = self.fs.symlink_metadata(&path).map_err(|e| fserror(&mut res, e))?;
+        if meta.is_dir() {
+            path.add_slash();
+        }
 
         // check the If and If-* headers.
         let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path) {
@@ -101,7 +104,9 @@ impl super::DavHandler {
             Err(s) => return Err(statuserror(&mut res, s)),
         };
 
-        // XXX FIXME multistatus error
+        // check locks. since we cancel the entire operation if there is
+        // a conflicting lock, we do not return a 207 multistatus, but
+        // just a simple status.
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             if let Err(_l) = locksystem.check(&path, true, t) {
@@ -112,8 +117,7 @@ impl super::DavHandler {
         let mut multierror = MultiError::new(res, &path);
 
         if let Ok(()) = self.delete_items(&mut multierror, depth, meta, &path) {
-            // XXX FIXME should really do this per item, in case the
-            // delete partially fails.
+            // should really do this per resource, in case the delete partially fails. See TODO.pm
             if let Some(ref locksystem) = self.ls {
                 locksystem.delete(&path).ok();
             }

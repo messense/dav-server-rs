@@ -306,7 +306,7 @@ impl DavHandler {
             Err(s) => return Err(statuserror(&mut res, s)),
         };
 
-        // XXX FIXME multistatus error
+        // if locked check if we hold that lock.
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             if let Err(_l) = locksystem.check(&path, false, t) {

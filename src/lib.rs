@@ -287,6 +287,7 @@ impl DavHandler {
             Ok(m) => m,
             Err(e) => {
                 debug!("refusing method {} request {}", &req.method, &req.uri);
+                res.headers_mut().set(hyper::header::Connection::close());
                 *res.status_mut() = e.statuscode();
                 return;
             },
@@ -295,6 +296,7 @@ impl DavHandler {
         if let Some(ref a) = self.allow {
             if !a.contains(&method) {
                 debug!("method {} not allowed on request {}", &req.method, &req.uri);
+                res.headers_mut().set(hyper::header::Connection::close());
                 *res.status_mut() = StatusCode::MethodNotAllowed;
                 return;
             }
@@ -304,12 +306,16 @@ impl DavHandler {
         // XXX why do this twice ... oh well.
         let path = match WebPath::from_uri(&req.uri, &self.prefix) {
             Ok(p) => p,
-            Err(e) => { daverror(&mut res, e); return; },
+            Err(e) => { 
+                res.headers_mut().set(hyper::header::Connection::close());
+                daverror(&mut res, e);
+                return;
+            },
         };
 
         // some handlers expect a body, but most do not, so just drain
         // the body here first. If there was a body, reject request
-        // with Unspoorted Media Type.
+        // with Unsupported Media Type.
         match method {
             Method::Put |
             Method::PropFind |

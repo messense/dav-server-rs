@@ -123,7 +123,11 @@ impl<'a> MultiError<'a> {
             },
             State::Empty => {},
         }
-        Ok(())
+        if sc.is_success() {
+            Ok(())
+        } else {
+            Err(DavError::Status(sc))
+        }
     }
 
     pub fn close(self) -> Result<StatusCode, DavError> {
