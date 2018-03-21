@@ -5,9 +5,9 @@
 //  Connect to http://localhost:4918/<DIR>/
 //
 //  <DIR>   username    password    filesystem
-//  public  -           -           <crate>/davdata/public
-//  mike    mike        mike        <crate>/davdata/mike
-//  simon   simon       simon       <crate>/davdata/simon 
+//  public  -           -           <rootdir>/public
+//  mike    mike        mike        <rootdir>/mike
+//  simon   simon       simon       <rootdir>/simon 
 //
 
 #[macro_use] extern crate hyper;
@@ -48,8 +48,15 @@ impl Server {
                 do_accounts:    do_accounts,
             }
         } else {
+            let fs = memfs::MemFs::new();
+            if do_accounts {
+                use dav::webpath::WebPath;
+                fs.create_dir(&WebPath::from_str("/public", "").unwrap()).unwrap();
+                fs.create_dir(&WebPath::from_str("/mike", "").unwrap()).unwrap();
+                fs.create_dir(&WebPath::from_str("/simon", "").unwrap()).unwrap();
+            }
             Server{
-                fs:             Some(memfs::MemFs::new()),
+                fs:             Some(fs),
                 ls:             Some(memls::MemLs::new()),
                 directory:      directory,
                 do_accounts:    do_accounts,
@@ -72,6 +79,7 @@ fn authenticate(req: &Request, res: &mut Response, user: &str, pass: &str) -> bo
         _ => {
             res.headers_mut().set(WWWAuthenticate(
                         "Basic realm=\"webdav-lib\"".to_string()));
+            res.headers_mut().set(hyper::header::Connection::close());
             *res.status_mut() = StatusCode::Unauthorized;
             false
         },
@@ -120,6 +128,7 @@ impl Handler for Server {
         let path = match req.uri {
             hyper::uri::RequestUri::AbsolutePath(ref s) => s.to_string(),
             _ => {
+                res.headers_mut().set(hyper::header::Connection::close());
                 *res.status_mut() = StatusCode::BadRequest;
                 return;
             }
