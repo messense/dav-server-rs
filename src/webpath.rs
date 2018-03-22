@@ -25,13 +25,13 @@ define_encode_set! {
 
 impl std::fmt::Display for WebPath {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", &self.as_url_string())
+        write!(f, "{:?}", &self.as_url_string_with_prefix_debug())
     }
 }
 
 impl std::fmt::Debug for WebPath {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", &self.as_url_string())
+        write!(f, "{:?}", &self.as_url_string_with_prefix_debug())
     }
 }
 
@@ -216,6 +216,19 @@ impl WebPath {
         if self.prefix.len() > 0 {
             let mut u = encode_path(&self.prefix);
             u.extend_from_slice(&p);
+            p = u;
+        }
+        std::string::String::from_utf8(p).unwrap()
+    }
+
+    // as URL encoded string, with prefix.
+    pub(crate) fn as_url_string_with_prefix_debug(&self) -> String {
+        let mut p = encode_path(&self.path);
+        if self.prefix.len() > 0 {
+            let mut u = encode_path(&self.prefix);
+            u.extend_from_slice(b"[");
+            u.extend_from_slice(&p);
+            u.extend_from_slice(b"]");
             p = u;
         }
         std::string::String::from_utf8(p).unwrap()
