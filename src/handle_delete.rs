@@ -92,11 +92,13 @@ impl super::DavHandler {
         };
 
         let mut path = self.path(&req);
-        path.remove_slash();
         let meta = self.fs.symlink_metadata(&path).map_err(|e| fserror(&mut res, e))?;
-        if meta.is_dir() {
-            path.add_slash();
+        if meta.is_symlink() {
+            if let Ok(m2) = self.fs.metadata(&path) {
+                path.add_slash_if(m2.is_dir());
+            }
         }
+        path.add_slash_if(meta.is_dir());
 
         // check the If and If-* headers.
         let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path) {

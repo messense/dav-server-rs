@@ -11,7 +11,8 @@ use mime_guess;
 
 use super::DavError;
 
-#[derive(Clone,PartialEq)]
+/// Path information relative to a prefix.
+#[derive(Clone)]
 pub struct WebPath {
     pub(crate) path:    Vec<u8>,
     pub(crate) prefix:  Vec<u8>,
@@ -210,7 +211,8 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
                 if v.len() < 2 {
                     return Err(ParseError::ForbiddenPath);
                 }
-                v.pop(); v.pop(); },
+                v.pop(); v.pop();
+            },
             s => {
                 if let Err(e) = valid_segment(s) {
                     Err(e)?;
@@ -226,8 +228,23 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
     Ok(v.iter().flat_map(|s| decode_path(s)).collect())
 }
 
+/// Comparision ignores any trailing slash, so /foo == /foo/
+impl PartialEq for WebPath {
+    fn eq(&self, rhs: &WebPath) -> bool {
+        let mut a = self.path.as_slice();
+        if a.len() > 1 && a.ends_with(b"/") {
+            a = &a[..a.len()-1];
+        }
+        let mut b = rhs.path.as_slice();
+        if b.len() > 1 && b.ends_with(b"/") {
+            b = &b[..b.len()-1];
+        }
+        self.prefix == rhs.prefix && a == b
+    }
+}
+
 impl WebPath {
-    // from an URL encoded string.
+    /// from URL encoded strings: path and prefix.
     pub fn from_str(src: &str, prefix: &str) -> Result<WebPath, ParseError> {
         let b = src.as_bytes();
         let path = normalize_path(b)?;
@@ -249,7 +266,7 @@ impl WebPath {
     }
 
     // from hyper req.uri
-    pub fn from_uri(uri: &hyper::uri::RequestUri, prefix: &str) -> Result<Self, ParseError> {
+    pub(crate) fn from_uri(uri: &hyper::uri::RequestUri, prefix: &str) -> Result<Self, ParseError> {
         match uri {
             &hyper::uri::RequestUri::AbsolutePath(ref r) => {
                 WebPath::from_str(r, prefix)
@@ -266,31 +283,24 @@ impl WebPath {
         }
     }
 
-    // from hyper Url
+    /// from hyper Url and url encoded prefix string.
     pub fn from_url(url: &hyper::Url, prefix: &str) -> Result<Self, ParseError> {
         WebPath::from_str(url.path(), prefix)
     }
 
-    // from raw slice
-    pub fn from_raw(b: &[u8], prefix: &str) -> Self {
-        WebPath{
-            prefix: prefix.as_bytes().to_vec(),
-            path: b.to_vec(),
-        }
-    }
-
-    pub fn is_star(&self) -> bool {
+    // is this a "star" request (only used with OPTIONS)
+    pub(crate) fn is_star(&self) -> bool {
         self.path == b"*"
     }
 
     // as URL encoded string.
-    pub fn as_url_string(&self) -> String {
+    pub(crate) fn as_url_string(&self) -> String {
         let p = encode_path(&self.path);
         std::string::String::from_utf8(p).unwrap()
     }
 
     // as URL encoded string, with prefix.
-    pub fn as_url_string_with_prefix(&self) -> String {
+    pub(crate) fn as_url_string_with_prefix(&self) -> String {
         let mut p = encode_path(&self.path);
         if self.prefix.len() > 0 {
             let mut u = encode_path(&self.prefix);
@@ -301,14 +311,18 @@ impl WebPath {
     }
 
     // as utf8 string, with prefix.
-    pub fn as_utf8_string_with_prefix(&self) -> String {
+    pub(crate) fn as_utf8_string_with_prefix(&self) -> String {
         let mut p = self.prefix.clone();
         p.extend_from_slice(&self.path);
         return String::from_utf8_lossy(&p).to_string();
     }
 
-    // as OS specific Path.
-    #[allow(dead_code)]
+    /// as raw bytes, not encoded.
+    pub fn as_bytes(&self) -> &[u8] {
+        self.path.as_slice()
+    }
+
+    /// as OS specific Path. without prefix. never ends in "/".
     pub fn as_pathbuf(&self) -> PathBuf {
         let mut b = self.path.as_slice();
         if b.len() > 1 && b.ends_with(b"/") {
@@ -318,12 +332,15 @@ impl WebPath {
         PathBuf::from(os_string)
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        self.path.as_slice()
+    /// prefix the WebPath with a Path and return a PathBuf
+    pub fn as_pathbuf_with_prefix<P: AsRef<Path>>(&self, path: P) -> PathBuf {
+        let mut p = path.as_ref().to_path_buf();
+        p.push(self.as_rel_pathbuf());
+        p
     }
 
-    // as OS specific Path, relative (remove first slash)
-    pub(crate) fn as_rel_pathbuf(&self) -> PathBuf {
+    /// as OS specific Path, relative (remove first slash)
+    pub fn as_rel_pathbuf(&self) -> PathBuf {
         let mut path = if self.path.len() > 0 {
             &self.path[1..]
         } else {
@@ -336,14 +353,20 @@ impl WebPath {
         PathBuf::from(os_string)
     }
 
-    // does the path end in '/'
+    /// is this a collection i.e. does the original URL path end in "/".
     pub fn is_collection(&self) -> bool {
         let l = self.path.len();
         l > 0 && self.path[l-1] == b'/'
     }
 
+    /// return the URL prefix (as original URL encoded string)
+    pub fn prefix(&self) -> &str {
+        std::str::from_utf8(&self.prefix).unwrap()
+    }
+
     // remove trailing slash
-    pub fn remove_slash(&mut self) {
+    #[allow(unused)]
+    pub(crate) fn remove_slash(&mut self) {
         let mut l = self.path.len();
         while l > 1 && self.path[l-1] == b'/' {
             l -= 1;
@@ -352,7 +375,7 @@ impl WebPath {
     }
 
     // add a slash
-    pub fn add_slash(&mut self) {
+    pub(crate) fn add_slash(&mut self) {
         if !self.is_collection() {
             self.path.push(b'/');
         }
@@ -365,22 +388,7 @@ impl WebPath {
         }
     }
 
-    pub fn nth(&self, n: usize) -> Option<(&[u8])> {
-        self.path.split(|c| *c == b'/').nth(n)
-    }
-
-    // prefix the WebPath with a Path and return a PathBuf
-    pub fn as_pathbuf_with_prefix<P: AsRef<Path>>(&self, path: P) -> PathBuf {
-        let mut p = path.as_ref().to_path_buf();
-        p.push(self.as_rel_pathbuf());
-        /*
-        if self.is_collection() {
-            p.push("");
-        }
-        */
-        p
-    }
-
+    // get parent.
     pub(crate) fn parent(&self) -> WebPath {
         let mut segs = self.path.split(|&c| c == b'/').filter(|e| e.len() > 0).collect::<Vec<&[u8]>>();
         segs.pop();

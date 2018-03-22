@@ -81,6 +81,7 @@ impl super::DavHandler {
         // Last seen error is returned from function.
         let mut retval = Ok(());
         for dirent in entries {
+            // NOTE: dirent.metadata() behaves like symlink_metadata()
             let meta = match dirent.metadata() {
                 Ok(meta) => meta,
                 Err(e) => {
@@ -131,24 +132,25 @@ impl super::DavHandler {
         // decode and validate destination.
         let dest = req.headers.get::<headers::Destination>()
                     .ok_or(statuserror(&mut res, SC::BadRequest))?;
-        let mut dest = match WebPath::from_str(&dest.0, &self.prefix) {
+        let dest = match WebPath::from_str(&dest.0, &self.prefix) {
             Err(e) => Err(daverror(&mut res, e)),
             Ok(d) => Ok(d),
         }?;
 
-        // get the source. for MOVE, tread with care- if the path ends in "/" but
-        // it actually is a symlink, we want to move the symlink, not what it points to.
+        // for MOVE, tread with care- if the path ends in "/" but it actually
+        // is a symlink, we want to move the symlink, not what it points to.
         let mut path = self.path(&req);
-        let meta = if method == Method::Copy {
-            self.fs.metadata(&path).map_err(|e| fserror(&mut res, e))?
-        } else {
-            path.remove_slash();
+        let meta = if method == Method::Move {
             let meta = self.fs.symlink_metadata(&path).map_err(|e| fserror(&mut res, e))?;
-            if meta.is_dir() {
-                path.add_slash();
+            if meta.is_symlink() {
+                let m2 = self.fs.metadata(&path).map_err(|e| fserror(&mut res, e))?;
+                path.add_slash_if(m2.is_dir());
             }
             meta
+        } else {
+            self.fs.metadata(&path).map_err(|e| fserror(&mut res, e))?
         };
+        path.add_slash_if(meta.is_dir());
 
         // parent of the destination must exist.
         if !self.has_parent(&dest) {
@@ -157,23 +159,17 @@ impl super::DavHandler {
 
         // for the destination, also check if it's a symlink. If we are going
         // to remove it first, we want to remove the link, not what it points to.
-        let mut d = dest.clone();
-        d.remove_slash();
-        let (dest_is_file, dmeta) = match self.fs.symlink_metadata(&d) {
+        let (dest_is_file, dmeta) = match self.fs.symlink_metadata(&dest) {
             Ok(meta) => {
                 let mut is_file = false;
                 if meta.is_symlink() {
-                    if let Ok(m) = self.fs.metadata(&d) {
+                    if let Ok(m) = self.fs.metadata(&dest) {
                         is_file = m.is_file();
                     }
                 }
                 if meta.is_file() {
                     is_file = true;
                 }
-                if meta.is_dir() {
-                    d.add_slash();
-                }
-                dest = d;
                 (is_file, Ok(meta))
             },
             Err(e) => (false, Err(e)),

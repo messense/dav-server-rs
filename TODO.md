@@ -48,18 +48,6 @@ refresh it every 5 seconds or so, so that a stale lock doesn't hang around
 too long if something goes catastrophically wrong. Might only happen when
 the lock database is seperate from the webdav server.
 
-## collection-ends-in-slash
-
-There is some confusion in the code where HTTP paths end in '/', especially
-where we handle symbolic links. We should really strip the trailing slash
-when calling into the filesystem, so that the filesystem can always see
-the difference between a symlink and a directory. This makes all the
-stuff around metadata() / symlink_metadata() in COPY/MOVE/DELETE clearer
-and less error-prone.
-
-Something similar holds for comparing paths.. WebPath should have a
-PartialEq implementation where path/to/resource/ == /path/to/resource
-
 ## Improvements:
 
 - Do fake locking only for user-agents:
@@ -73,7 +61,7 @@ PartialEq implementation where path/to/resource/ == /path/to/resource
 
 - API: do we need really need metadata() in DavDirEntry? If not, we can change
   DavDirEntry to a struct instead of a trait and simplify a lot of things
-- API: move filesystem interface to Path/PathBuf or similar and hide WebPath
+- API: perhaps move filesystem interface to Path/PathBuf or similar and hide WebPath
 
 - add documentation
 - add tests, tests ...
