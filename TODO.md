@@ -12,8 +12,8 @@ must be applied to all resources. For example, in RFC4918 9.6.1:
 Any headers included with DELETE MUST be applied in processing every resource to be deleted.
 ```
 
-Currently we do not do this- we do apply the If-Match, If-None-Match, and If headers
-to the request url, but not recursively.
+Currently we do not do this- we do apply the If-Match, If-None-Match, If-Modified-Since,
+If-Unmodified-Since, and If headers to the request url, but not recursively.
 
 ### In MOVE/DELETE test locks seperately per resource
 
@@ -77,6 +77,10 @@ the lock database is seperate from the webdav server.
 - Add support for setting mtime/atime
 
 - return windows "hidden" attribute for windows clients if filename starts with "."
+
+- implement [RFC4437 Webdav Redirectref](https://tools.ietf.org/html/rfc4437) -- basically support for symbolic links
+
+- implement [RFC3744 Webdac ACL](https://tools.ietf.org/html/rfc3744)
 
 ## Things I thought of but aren't going to work:
 
