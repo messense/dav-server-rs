@@ -32,9 +32,6 @@ pub(crate) fn etaglist_match(tags: &headers::ETagList, tag: &hyper::header::Enti
 }
 
 // Handle the if-headers: RFC 7232, HTTP/1.1 Conditional Requests.
-// Can be called for both request URL and Destination: URLs.
-// Right now i'm not sure how that would work for Destination: URLs,
-// especially with Depth: Infinity.
 pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> Option<StatusCode> {
 
     let modified = meta.and_then(|m| m.modified().ok());
@@ -89,9 +86,6 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
 //
 // caller should set the http status to 412 PreconditionFailed if
 // the return value from this function is false.
-//
-// this would probably also be a good spot to check if this request
-// should fail because it is locked (once we implement locking).
 //
 pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, ls: &Option<Box<DavLockSystem>>, path: &WebPath) -> (bool, Vec<String>) {
 
@@ -183,7 +177,6 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, ls: &Option<B
 }
 
 // Handle both the HTTP conditional If: headers, and the webdav If: header.
-// Should be called only for request URLs, not for Destionation: URLs.
 pub(crate) fn if_match(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<DavFileSystem>, ls: &Option<Box<DavLockSystem>>, path: &WebPath) -> Option<StatusCode> {
     match dav_if_match(req, fs, ls, path) {
         (true, _) => {},
@@ -192,6 +185,7 @@ pub(crate) fn if_match(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<
     http_if_match(req, meta)
 }
 
+// Like if_match, but also returns all "associated state-tokens"
 pub(crate) fn if_match_get_tokens(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<DavFileSystem>, ls: &Option<Box<DavLockSystem>>, path: &WebPath) -> Result<Vec<String>, StatusCode> {
     if let Some(code) = http_if_match(req, meta) {
         return Err(code);
