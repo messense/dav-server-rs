@@ -22,6 +22,7 @@ uuid = { version = "0.4", features = ["use_std", "v4"] }
 lazy_static = "1.0"
 mime_guess = "1.8"
 htmlescape = "0.3.1"
+percent-encoding = "1.0.1"
 
 # for bin/webdav_handler.rs
 env_logger = "0.4"

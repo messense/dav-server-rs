@@ -8,6 +8,7 @@ use std::path::{Path,PathBuf};
 
 use hyper;
 use mime_guess;
+use percent_encoding as pct;
 
 use super::DavError;
 
@@ -16,6 +17,10 @@ use super::DavError;
 pub struct WebPath {
     pub(crate) path:    Vec<u8>,
     pub(crate) prefix:  Vec<u8>,
+}
+
+define_encode_set! {
+    pub ENCODE_SET = [pct::DEFAULT_ENCODE_SET] | {'&', '%'}
 }
 
 impl std::fmt::Display for WebPath {
@@ -63,141 +68,47 @@ impl From<ParseError> for DavError {
     }
 }
 
-struct PercentDecode<'a> {
-    src:    &'a[u8],
-    pos:    usize,
-}
-
-impl<'a> Iterator for PercentDecode<'a> {
-    type Item = u8;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.pos == self.src.len() {
-            return None;
-        }
-        let src = self.src;
-        let i = self.pos;
-        let c = src[i];
-        if c == b'%' {
-            if i >= src.len() - 2 {
-                return None;
-            }
-            match (from_hexdigit(src[i+1]), from_hexdigit(src[i+2])) {
-                (Some(c1), Some(c2)) => {
-                    self.pos += 3;
-                    return Some(c1 * 16 + c2);
-                },
-                _ => { return None; },
-            };
-        }
-        self.pos += 1;
-        Some(c)
-    }
-}
-
-fn from_hexdigit(c: u8) -> Option<u8> {
-    if c >= 48 && c <= 57 {
-        return Some(c - 48);
-    }
-    if c >= 65 && c <= 70 {
-        return Some(c - 55);
-    }
-    if c >= 97 && c <= 102 {
-        return Some(c - 87);
-    }
-    None
-}
-
-fn to_hexdigit(c: u8) -> u8 {
-    if c < 10 {
-        return c + 48;
-    }
-    c + 55
-}
-
-/*
-fn is_unreserved(c: u8) -> bool {
-    (c >= 48 && c <= 57) ||
-    (c >= 65 && c <= 90) ||
-    (c >= 97 && c <= 122) ||
-    c == '-' as u8 ||
-    c == '_' as u8 ||
-    c == '.' as u8 ||
-    c == '~' as u8
-}
-*/
-
-fn is_reserved(c: u8) -> bool {
-    // control chars
-    c < 33 ||
-    // non-ascii
-    c > 126 ||
-    // set from js encodeURIcomponent, plus '#%', minus '/'.
-    c == b';' ||
-    c == b',' ||
-    c == b'?' ||
-    c == b':' ||
-    c == b'@' ||
-    c == b'&' ||
-    c == b'=' ||
-    c == b'+' ||
-    c == b'$' ||
-    c == b'#' ||
-    c == b'%' ||
-    // not reserved, but useful in XML/HTML documents.
-    c == b'<' ||
-    c == b'>'
-}
-
-fn decode_path(src: &[u8]) -> PercentDecode {
-    PercentDecode{
-        src:    src,
-        pos:    0,
-    }
-}
-
+// a decoded segment can contain any value except '/' or '\0'
 fn valid_segment(src: &[u8]) -> Result<(), ParseError> {
-    let mut p = decode_path(src);
-    if p.any(|x| x == 0 || x == b'/') || p.pos < p.src.len() {
+    let mut p = pct::percent_decode(src);
+    if p.any(|x| x == 0 || x == b'/') {
         return Err(ParseError::InvalidPath);
     }
     Ok(())
 }
 
+// encode path segment with user-defined ENCODE_SET
 fn encode_path(src: &[u8]) -> Vec<u8> {
-    let mut v = Vec::new();
-    //for &c in src.into() {
-    for &c in src {
-        if is_reserved(c) {
-            v.push(b'%');
-            v.push(to_hexdigit(c / 16));
-            v.push(to_hexdigit(c % 16));
-        } else {
-            v.push(c);
-        }
-    }
-    v
+    pct::percent_encode(src, ENCODE_SET).to_string().into_bytes()
 }
 
 // make path safe:
 // - raw path before decoding can contain only printable ascii
 // - make sure path is absolute
-// - error on fragments (#)
-// - remove everything after ?
+// - remove query part (everything after ?)
 // - merge consecutive slashes
-// - handle . and ..
+// - process . and ..
 // - decode percent encoded bytes, fail on invalid encodings.
 // - do not allow NUL or '/' in segments.
 fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
-    if rp.iter().any(|&x| x < 32 || x > 127 || x == b'#') {
+
+    // must consist of printable ASCII
+    if rp.iter().any(|&x| x < 32 || x > 126) {
         Err(ParseError::InvalidPath)?;
     }
+
+    // delete query part (if any)
     let mut rawpath = rp;
     if let Some(pos) = rawpath.iter().position(|&x| x == b'?') {
         rawpath = &rawpath[..pos];
     }
+
+    // must start with "/"
     if rawpath.is_empty() || rawpath[0] != b'/' {
         Err(ParseError::InvalidPath)?;
     }
+
+    // split up in segments
     let isdir = match rawpath.last() {
         Some(x) if *x == b'/' => true,
         _ => false,
@@ -225,7 +136,7 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
     if isdir || v.is_empty() {
         v.push(b"/");
     }
-    Ok(v.iter().flat_map(|s| decode_path(s)).collect())
+    Ok(v.iter().flat_map(|s| pct::percent_decode(s)).collect())
 }
 
 /// Comparision ignores any trailing slash, so /foo == /foo/
@@ -265,8 +176,8 @@ impl WebPath {
         })
     }
 
-    // from hyper req.uri
-    pub(crate) fn from_uri(uri: &hyper::uri::RequestUri, prefix: &str) -> Result<Self, ParseError> {
+    /// from hyper req.uri
+    pub fn from_uri(uri: &hyper::uri::RequestUri, prefix: &str) -> Result<Self, ParseError> {
         match uri {
             &hyper::uri::RequestUri::AbsolutePath(ref r) => {
                 WebPath::from_str(r, prefix)
@@ -283,7 +194,7 @@ impl WebPath {
         }
     }
 
-    /// from hyper Url and url encoded prefix string.
+    /// from hyper Url and (not-url-encoded) prefix string.
     pub fn from_url(url: &hyper::Url, prefix: &str) -> Result<Self, ParseError> {
         WebPath::from_str(url.path(), prefix)
     }
@@ -317,12 +228,12 @@ impl WebPath {
         return String::from_utf8_lossy(&p).to_string();
     }
 
-    /// as raw bytes, not encoded.
+    /// as raw bytes, not encoded, no prefix.
     pub fn as_bytes(&self) -> &[u8] {
         self.path.as_slice()
     }
 
-    /// as OS specific Path. without prefix. never ends in "/".
+    /// as OS specific Path. never ends in "/".
     pub fn as_pathbuf(&self) -> PathBuf {
         let mut b = self.path.as_slice();
         if b.len() > 1 && b.ends_with(b"/") {
@@ -359,7 +270,7 @@ impl WebPath {
         l > 0 && self.path[l-1] == b'/'
     }
 
-    /// return the URL prefix (as original URL encoded string)
+    /// return the URL prefix.
     pub fn prefix(&self) -> &str {
         std::str::from_utf8(&self.prefix).unwrap()
     }
