@@ -9,6 +9,13 @@ interface similar to the Go x/net/webdav package:
   implement reading/writing "DAV properties"
 - you can supply a "locksystem" that handles the webdav locks
 
+Currently passes the "basic", "copymove", "props", "locks" and "http"
+checks of the Webdav Litmus Test testsuite. That's all of the base
+RFC4918 webdav specification.
+
+The litmus test suite also has tests for RFC3744 "acl" and "principal",
+RFC5842 "bind", and RFC3253 "versioning". Those we do not support right now.
+
 Included are two filesystems:
 - localfs: serves a directory on the local filesystem
 - memfs: ephemeral in-memory filesystem. supports DAV properties.
