@@ -10,172 +10,84 @@
 //  simon   simon       simon       <rootdir>/simon 
 //
 
-#[macro_use] extern crate hyper;
-#[macro_use] extern crate clap;
-extern crate log;
-extern crate env_logger;
-extern crate webdav_handler;
+use std::error::Error;
+use std::net::SocketAddr;
+use std::str::FromStr;
 
-use hyper::header::{Authorization, Basic};
-use hyper::server::{Handler,Request, Response};
-use hyper::status::StatusCode;
+#[macro_use]
+extern crate clap;
 
-use webdav_handler as dav;
-use crate::dav::DavHandler;
-use crate::dav::localfs;
-use crate::dav::memfs;
-use crate::dav::memls;
-use crate::dav::fs::DavFileSystem;
-use crate::dav::ls::DavLockSystem;
-use crate::dav::webpath::WebPath;
+use bytes::Bytes;
+use env_logger;
+use futures::{
+    future::Future,
+    stream::Stream,
+};
+use hyper;
 
-header! { (WWWAuthenticate, "WWW-Authenticate") => [String] }
+use webdav_handler::{
+    DavHandler,
+    localfs,
+    memfs,
+    memls,
+};
 
-#[derive(Debug)]
+#[derive(Clone)]
 struct Server {
-    fs:             Option<Box<DavFileSystem>>,
-    ls:             Option<Box<DavLockSystem>>,
-    directory:      String,
-    do_accounts:    bool,
+    dh:             DavHandler,
 }
 
+type BoxedError = Box<dyn Error + Send + Sync>;
+type BoxedFuture = Box<Future<Item=hyper::Response<hyper::Body>, Error=BoxedError> + Send>;
+
 impl Server {
-    pub fn new(directory: String, do_accounts: bool) -> Self {
-        if directory != "" {
-            Server{
-                fs:             None,
-                ls:             None,
-                directory:      directory,
-                do_accounts:    do_accounts,
-            }
+    pub fn new(directory: String) -> Self {
+        let dh = if directory != "" {
+            let fs = localfs::LocalFs::new(directory, true);
+            DavHandler::new("", fs, None)
         } else {
             let fs = memfs::MemFs::new();
-            if do_accounts {
-                fs.create_dir(&WebPath::from_str("/public", "").unwrap()).unwrap();
-                fs.create_dir(&WebPath::from_str("/mike", "").unwrap()).unwrap();
-                fs.create_dir(&WebPath::from_str("/simon", "").unwrap()).unwrap();
-            }
-            Server{
-                fs:             Some(fs),
-                ls:             Some(memls::MemLs::new()),
-                directory:      directory,
-                do_accounts:    do_accounts,
-            }
-        }
-    }
-}
-
-fn authenticate(req: &Request, res: &mut Response, user: &str, pass: &str) -> bool {
-    // we must have a login/pass
-    let (ok, username) = match req.headers.get::<Authorization<Basic>>() {
-        Some(&Authorization(Basic{
-                                ref username,
-                                password: Some(ref password)
-                            }
-        )) => {
-            (user == username && pass == password, username.as_str())
-        },
-        _ => (false, ""),
-    };
-    if !ok {
-        if username == "test2@limebits.com" {
-            // hack so that buggy litmus tests 61/62 work
-            // should fail on anything not 2xx (or at least 401 Unauthorized),
-            // but it wants to see 423 locked
-            *res.status_mut() = StatusCode::Locked;
-        } else {
-            res.headers_mut().set(WWWAuthenticate(
-                    "Basic realm=\"webdav-lib\"".to_string()));
-            *res.status_mut() = StatusCode::Unauthorized;
-        }
-        res.headers_mut().set(hyper::header::Connection::close());
-    }
-    ok
-}
-
-impl Server {
-
-    fn auth(&self, req: &Request, mut res: &mut Response, path: &[u8]) -> Result<(&str, &str), ()> {
-
-        let path = match std::str::from_utf8(path) {
-            Ok(p) => p,
-            Err(_) => {
-                *res.status_mut() = StatusCode::BadRequest;
-                return Err(())
-            },
+            let ls = memls::MemLs::new();
+            DavHandler::new("", fs, Some(ls))
         };
-
-        // path can start with "/public" (no authentication needed)
-        // or "/username". known users are "mike" and "simon".
-        //
-        // NOTE we no not percent-decode here, if this was a real
-        // application that would be bad.
-        let x = path.splitn(3, "/").collect::<Vec<&str>>();
-        let (prefix, dir) = match x[1] {
-            "public" => ("/public", "public" ),
-            "mike" => {
-                if !authenticate(&req, &mut res, "mike", "mike") {
-                    return Err(());
-                }
-                ("/mike", "mike")
-            },
-            "simon" => {
-                if !authenticate(&req, &mut res, "simon", "simon") {
-                    return Err(());
-                }
-                ("/simon", "simon")
-            },
-            _ => {
-                *res.status_mut() = StatusCode::Forbidden;
-                return Err(());
-            }
-        };
-        Ok((prefix, dir))
+        Server{ dh }
     }
-}
 
-impl Handler for Server {
-
-    //fn handle<'a, 'k>(&'a self, req: Request<'a, 'k>, mut res: Response<'a>) {
-    fn handle(&self, req: Request, mut res: Response) {
-
+    fn handle(&self, req: hyper::Request<hyper::Body>) -> BoxedFuture {
+        /*
         // Get request path.
-        let path = match WebPath::from_uri(&req.uri, "") {
+        let path = match WebPath::from_str(req.path(), "") {
             Ok(path) => path,
             Err(_) => {
-                res.headers_mut().set(hyper::header::Connection::close());
-                *res.status_mut() = StatusCode::BadRequest;
-                return;
+                return Response::builder()
+                    .status(StatusCode::BadRequest)
+                    .header("connection", "close")
+                    .body(())
+                    .unwrap();
             }
         };
+        */
 
-        // handle logins.
-        let (dir, prefix) = if self.do_accounts {
-            match self.auth(&req, &mut res, path.as_bytes()) {
-                Ok((pfx, user)) => (self.directory.clone() + "/" + user, pfx),
-                Err(_) => {
-                    res.headers_mut().set(hyper::header::Connection::close());
-                    return
-                },
-            }
-        } else {
-            (self.directory.clone(), "/")
-        };
-
-        // memfs or localfs.
-        let (fs, prefix) : (Box<DavFileSystem>, &str) = if let Some(ref fs) = self.fs {
-            ((*fs).clone(), prefix)
-        } else {
-            (localfs::LocalFs::new(dir, true), prefix)
-        };
-
-        // instantiate and run a new handler.
-        let dav = DavHandler::new(prefix, fs, self.ls.clone());
-        dav.handle(req, res);
+        // transform hyper::Request into http::Request, run handler,
+        // then transform http::Response into hyper::Response.
+        let (parts, body) = req.into_parts();
+        let body = body.map(|item| Bytes::from(item));
+        let req = http::Request::from_parts(parts, body);
+        let fut = self.dh.handle(req)
+            .and_then(|resp| {
+                let (parts, body) = resp.into_parts();
+                let body = hyper::Body::wrap_stream(body);
+                Ok(hyper::Response::from_parts(parts, body))
+            })
+            .map_err(|e| {
+                let r: Box<dyn Error + Send + Sync> = Box::new(e);
+                r
+            });
+        Box::new(fut)
     }
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let matches = clap_app!(webdav_lib =>
@@ -183,7 +95,6 @@ fn main() {
         (@arg PORT: -p --port +takes_value "port to listen on (4918)")
         (@arg DIR: -d --dir +takes_value "local directory to serve")
         (@arg mem: -m --memfs "serve from ephemeral memory filesystem")
-        (@arg accounts: -a --accounts "with fake mike/simon accounts")
     ).get_matches();
 
     let (dir, name) = match matches.value_of("DIR") {
@@ -191,12 +102,31 @@ fn main() {
         None => ("", "memory filesystem"),
     };
 
+    let dav_server = Server::new(dir.to_string());
+    let make_service = move || {
+        let dav_server = dav_server.clone();
+        hyper::service::service_fn(move |req| {
+            dav_server.handle(req)
+        })
+    };
+
     let port = matches.value_of("PORT").unwrap_or("4918");
-    let port = "0.0.0.0:".to_string() + port;
-    let hyper_server = hyper::server::Server::http(&port).unwrap();
-    let dav_server = Server::new(dir.to_string(), matches.is_present("accounts"));
+    let addr = "0.0.0.0:".to_string() + port;
+    let addr = SocketAddr::from_str(&addr)?;
+    let server = hyper::Server::try_bind(&addr)?
+        .serve(make_service)
+        .map_err(|e| eprintln!("server error: {}", e));
+
+    /*
+    let server = hyper::Server::try_bind(&addr.into())?
+        .tcp_nodelay(true)
+        .serve(dav_server)
+        .map_err(|e| eprintln!("server error: {}", e));
+    */
 
     println!("Serving {} on {}", name, port);
-    hyper_server.handle_threads(dav_server, 8).unwrap();
+    hyper::rt::run(server);
+
+    Ok(())
 }
 
