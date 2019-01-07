@@ -1,4 +1,3 @@
-use std;
 use std::time::SystemTime;
 
 use hyper;

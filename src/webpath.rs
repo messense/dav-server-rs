@@ -1,6 +1,5 @@
 //! Utility module to handle the "path" part of an URL as a filesytem path.
 //!
-use std;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
@@ -10,7 +9,7 @@ use hyper;
 use mime_guess;
 use percent_encoding as pct;
 
-use super::DavError;
+use crate::DavError;
 
 /// Path information relative to a prefix.
 #[derive(Clone)]

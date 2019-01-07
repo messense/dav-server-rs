@@ -6,7 +6,7 @@ use crate::headers;
 use crate::fs::{DavMetaData,FsResult};
 use crate::{dav_method,Method,DavResult};
 
-impl super::DavHandler {
+impl crate::DavHandler {
 
     pub(crate) fn handle_options(&self, req: Request, mut res: Response)  -> DavResult<()> {
         {

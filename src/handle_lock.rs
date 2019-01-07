@@ -20,7 +20,7 @@ use crate::conditional::{if_match,dav_if_match};
 use crate::webpath::WebPath;
 use crate::{daverror,statuserror,fserror};
 
-impl super::DavHandler {
+impl crate::DavHandler {
     pub(crate) fn handle_lock(&self, mut req: Request, mut res: Response) -> Result<(), DavError> {
 
         // read request.

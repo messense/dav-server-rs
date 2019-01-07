@@ -1,6 +1,5 @@
 //! Contains the structs and traits that define a "filesystem" backend.
 //!
-use std;
 use std::time::{SystemTime,UNIX_EPOCH};
 use std::io::{Read,Write,Seek};
 use std::fmt::Debug;

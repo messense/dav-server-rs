@@ -7,7 +7,6 @@
 //! it in your handler struct, and clone() it every time you pass
 //! it to the DavHandler. Cloning is ofcourse not expensive, the
 //! MemFs handle is refcounted, obviously.
-use std;
 use std::io::{self,Read,Write,Seek,SeekFrom};
 use std::io::Result as IoResult;
 use std::time::SystemTime;

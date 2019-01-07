@@ -1,5 +1,4 @@
 
-use std;
 use std::error::Error;
 use std::io::ErrorKind;
 use xml;

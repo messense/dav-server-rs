@@ -1,5 +1,4 @@
 
-use std;
 use std::io::Write;
 use std::io::BufWriter;
 
@@ -12,8 +11,8 @@ use xml::common::XmlVersion;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
 
-use super::DavError;
-use super::webpath::WebPath;
+use crate::DavError;
+use crate::webpath::WebPath;
 
 type XmlWriter<'a> = EventWriter<BufWriter<Response<'a, Streaming>>>;
 

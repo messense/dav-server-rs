@@ -59,20 +59,6 @@
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate percent_encoding;
 
-extern crate serde;
-extern crate env_logger;
-extern crate regex;
-extern crate xml;
-extern crate libc;
-extern crate time;
-extern crate sha2;
-extern crate url;
-extern crate xmltree;
-extern crate uuid;
-extern crate mime_guess;
-extern crate filetime;
-extern crate htmlescape;
-
 mod errors;
 mod headers;
 mod handle_copymove;
@@ -105,11 +91,11 @@ use std::io::Read;
 use std::time::{UNIX_EPOCH,SystemTime};
 use std::collections::HashSet;
 
-use self::webpath::WebPath;
+use crate::webpath::WebPath;
 
-pub(crate) use self::errors::DavError;
-pub(crate) use self::fs::*;
-pub(crate) use self::ls::*;
+pub(crate) use crate::errors::DavError;
+pub(crate) use crate::fs::*;
+pub(crate) use crate::ls::*;
 
 type DavResult<T> = Result<T, DavError>;
 

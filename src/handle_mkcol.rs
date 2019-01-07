@@ -8,7 +8,7 @@ use crate::conditional::*;
 use crate::headers;
 use crate::fs::*;
 
-impl super::DavHandler {
+impl crate::DavHandler {
 
     pub(crate) fn handle_mkcol(&self, req: Request, mut res: Response) -> DavResult<()> {
 

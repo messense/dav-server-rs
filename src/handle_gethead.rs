@@ -4,7 +4,6 @@ use hyper::server::{Request,Response};
 use hyper::status::StatusCode;
 use hyper::header::ByteRangeSpec;
 
-use std;
 use std::io::prelude::*;
 use std::io::BufWriter;
 
@@ -18,7 +17,7 @@ use crate::headers;
 use crate::conditional;
 use crate::{fserror,statuserror,systemtime_to_httpdate,systemtime_to_timespec};
 
-impl super::DavHandler {
+impl crate::DavHandler {
     pub(crate) fn handle_get(&self, req: Request, mut res: Response) -> Result<(), DavError> {
 
         let head = req.method == hyper::method::Method::Head;

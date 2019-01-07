@@ -3,7 +3,6 @@ use hyper;
 use hyper::server::{Request,Response};
 use hyper::status::StatusCode as SC;
 
-use std;
 use std::io::prelude::*;
 
 use crate::DavResult;
@@ -20,7 +19,7 @@ macro_rules! statuserror {
 
 const SABRE: &'static str = "application/x-sabredav-partialupdate";
 
-impl super::DavHandler {
+impl crate::DavHandler {
 
     pub(crate) fn handle_put(&self, mut req: Request, mut res: Response) -> DavResult<()> {
 

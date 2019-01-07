@@ -33,7 +33,7 @@ fn dir_status(res: &mut MultiError, path: &WebPath, e: FsError) -> DavError {
     DavError::Status(status)
 }
 
-impl super::DavHandler {
+impl crate::DavHandler {
 
     pub(crate) fn delete_items(&self, mut res: &mut MultiError, depth: Depth, meta: Box<DavMetaData>, path: &WebPath) -> DavResult<()> {
         if !meta.is_dir() {

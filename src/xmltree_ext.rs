@@ -1,4 +1,3 @@
-use std;
 use std::io::{Read,Write};
 use std::io::BufWriter;
 use std::borrow::Cow;
@@ -11,7 +10,7 @@ use xml::common::XmlVersion;
 
 use xmltree::{self,Element};
 
-use super::{DavError,DavResult};
+use crate::{DavError,DavResult};
 
 pub(crate) trait ElementExt {
     fn ns<S: Into<String>>(self, prefix: S, namespace: S) -> Self;
