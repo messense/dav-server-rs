@@ -10,8 +10,8 @@ use std::time::{SystemTime,Duration};
 use uuid::Uuid;
 use xmltree::Element;
 
-use webpath::WebPath;
-use ls::*;
+use crate::webpath::WebPath;
+use crate::ls::*;
 
 #[derive(Debug, Clone)]
 pub struct FakeLs{}

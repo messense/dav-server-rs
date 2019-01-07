@@ -2,9 +2,9 @@
 use hyper;
 use hyper::server::{Request,Response};
 use hyper::status::StatusCode as SC;
-use headers;
-use fs::{DavMetaData,FsResult};
-use {dav_method,Method,DavResult};
+use crate::headers;
+use crate::fs::{DavMetaData,FsResult};
+use crate::{dav_method,Method,DavResult};
 
 impl super::DavHandler {
 

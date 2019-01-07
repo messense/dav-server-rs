@@ -2,14 +2,14 @@
 use hyper::server::{Request,Response};
 use hyper::status::StatusCode as SC;
 
-use {Method,DavResult};
-use {statuserror,daverror,fserror,fserror_to_status};
-use errors::DavError;
-use multierror::MultiError;
-use conditional::*;
-use webpath::WebPath;
-use headers::{self,Depth};
-use fs::*;
+use crate::{Method,DavResult};
+use crate::{statuserror,daverror,fserror,fserror_to_status};
+use crate::errors::DavError;
+use crate::multierror::MultiError;
+use crate::conditional::*;
+use crate::webpath::WebPath;
+use crate::headers::{self,Depth};
+use crate::fs::*;
 
 // map_err helper.
 fn add_status(res: &mut MultiError, path: &WebPath, e: FsError) -> DavError {
@@ -89,7 +89,7 @@ impl super::DavHandler {
                     return Err(e);
                 }
             };
-            let mut name = dirent.name();
+            let name = dirent.name();
             let mut nsrc = source.clone();
             let mut ndest = dest.clone();
             nsrc.push_segment(&name);

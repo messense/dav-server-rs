@@ -21,13 +21,13 @@ use hyper::server::{Handler,Request, Response};
 use hyper::status::StatusCode;
 
 use webdav_handler as dav;
-use dav::DavHandler;
-use dav::localfs;
-use dav::memfs;
-use dav::memls;
-use dav::fs::DavFileSystem;
-use dav::ls::DavLockSystem;
-use dav::webpath::WebPath;
+use crate::dav::DavHandler;
+use crate::dav::localfs;
+use crate::dav::memfs;
+use crate::dav::memls;
+use crate::dav::fs::DavFileSystem;
+use crate::dav::ls::DavLockSystem;
+use crate::dav::webpath::WebPath;
 
 header! { (WWWAuthenticate, "WWW-Authenticate") => [String] }
 

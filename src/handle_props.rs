@@ -16,23 +16,23 @@ use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
 
 use xmltree::Element;
-use xmltree_ext::*;
+use crate::xmltree_ext::*;
 
-use fserror;
-use headers;
-use webpath::*;
-use fs::*;
-use ls::*;
+use crate::fserror;
+use crate::headers;
+use crate::webpath::*;
+use crate::fs::*;
+use crate::ls::*;
 
-use handle_lock::{list_lockdiscovery,list_supportedlock};
+use crate::handle_lock::{list_lockdiscovery,list_supportedlock};
 
-use conditional::if_match_get_tokens;
-use errors::DavError;
-use fserror_to_status;
+use crate::conditional::if_match_get_tokens;
+use crate::errors::DavError;
+use crate::fserror_to_status;
 
-use {DavHandler,DavResult};
-use {systemtime_to_httpdate,systemtime_to_rfc3339};
-use {daverror,statuserror};
+use crate::{DavHandler,DavResult};
+use crate::{systemtime_to_httpdate,systemtime_to_rfc3339};
+use crate::{daverror,statuserror};
 
 const NS_APACHE_URI: &'static str = "http://apache.org/dav/props/";
 const NS_DAV_URI: &'static str = "DAV:";
@@ -332,7 +332,7 @@ impl DavHandler {
         // walk over the element tree and feed "set" and "remove" items to
         // the liveprop_set/liveprop_remove functions. If skipped by those,
         // gather them in the set/rem Vec to be processed as dead properties.
-        for mut elem in &tree.children {
+        for elem in &tree.children {
             for n in elem.children.iter()
                         .filter(|f| f.name == "prop")
                         .flat_map(|f| &f.children) {
@@ -381,7 +381,7 @@ impl DavHandler {
            if !hm.contains_key(&code) {
                hm.insert(code, Vec::new());
             }
-            let mut v = hm.get_mut(&code).unwrap();
+            let v = hm.get_mut(&code).unwrap();
             v.push(davprop_to_element(prop));
         }
 
@@ -672,7 +672,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         // Get properties one-by-one
         let do_content = self.name != "propname";
         let mut qc = self.q_cache;
-        for mut p in &self.props {
+        for p in &self.props {
             let (sc, elem) = self.build_prop(p, path, meta, &mut qc, do_content);
             if sc == SC::Ok || (self.name != "propname" && self.name != "allprop") {
                 add_sc_elem(&mut props, sc, elem);

@@ -8,17 +8,17 @@ use hyper::status::StatusCode as SC;
 
 use xmltree;
 use xmltree::Element;
-use xmltree_ext;
-use xmltree_ext::ElementExt;
+use crate::xmltree_ext;
+use crate::xmltree_ext::ElementExt;
 
-use ls::*;
+use crate::ls::*;
 
-use errors::DavError;
-use headers::{self,Depth,Timeout,DavTimeout};
-use fs::{OpenOptions,FsError};
-use conditional::{if_match,dav_if_match};
-use webpath::WebPath;
-use {daverror,statuserror,fserror};
+use crate::errors::DavError;
+use crate::headers::{self,Depth,Timeout,DavTimeout};
+use crate::fs::{OpenOptions,FsError};
+use crate::conditional::{if_match,dav_if_match};
+use crate::webpath::WebPath;
+use crate::{daverror,statuserror,fserror};
 
 impl super::DavHandler {
     pub(crate) fn handle_lock(&self, mut req: Request, mut res: Response) -> Result<(), DavError> {
@@ -100,7 +100,7 @@ impl super::DavHandler {
         let mut owner : Option<Element> = None;
         let mut locktype = false;
 
-        for mut elem in tree.children {
+        for elem in tree.children {
             match elem.name.as_str() {
                 "lockscope" if elem.children.len() == 1 => {
                     match elem.children[0].name.as_ref() {

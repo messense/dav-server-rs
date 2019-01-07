@@ -11,12 +11,12 @@ use std::io::BufWriter;
 use htmlescape;
 use time;
 
-use fs::*;
-use errors::DavError;
-use webpath::WebPath;
-use headers;
-use conditional;
-use {fserror,statuserror,systemtime_to_httpdate,systemtime_to_timespec};
+use crate::fs::*;
+use crate::errors::DavError;
+use crate::webpath::WebPath;
+use crate::headers;
+use crate::conditional;
+use crate::{fserror,statuserror,systemtime_to_httpdate,systemtime_to_timespec};
 
 impl super::DavHandler {
     pub(crate) fn handle_get(&self, req: Request, mut res: Response) -> Result<(), DavError> {

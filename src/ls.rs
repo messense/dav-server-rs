@@ -3,7 +3,7 @@
 use std::time::{Duration,SystemTime};
 use std::fmt::Debug;
 use xmltree::Element;
-use webpath::WebPath;
+use crate::webpath::WebPath;
 
 /// Type of the locks returned by DavLockSystem methods.
 #[derive(Debug,Clone)]

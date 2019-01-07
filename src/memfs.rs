@@ -15,12 +15,12 @@ use std::io::{Error,ErrorKind};
 use std::sync::{Arc,Mutex};
 use std::collections::HashMap;
 
-use webpath::WebPath;
+use crate::webpath::WebPath;
 use hyper::status::StatusCode;
 
-use fs::*;
+use crate::fs::*;
 
-use tree;
+use crate::tree;
 
 type Tree = tree::Tree<Vec<u8>, MemFsNode>;
 

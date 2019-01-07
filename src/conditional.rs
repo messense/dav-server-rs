@@ -7,11 +7,11 @@ use hyper::status::StatusCode;
 use hyper::method::Method;
 use hyper::header::EntityTag;
 
-use headers;
-use systemtime_to_timespec;
-use fs::{DavFileSystem,DavMetaData};
-use ls::DavLockSystem;
-use webpath::WebPath;
+use crate::headers;
+use crate::systemtime_to_timespec;
+use crate::fs::{DavFileSystem,DavMetaData};
+use crate::ls::DavLockSystem;
+use crate::webpath::WebPath;
 
 pub(crate) fn ifrange_match(hdr: &headers::IfRange, tag: &hyper::header::EntityTag, date: SystemTime) -> bool {
 	match hdr {

@@ -6,11 +6,11 @@ use hyper::status::StatusCode as SC;
 use std;
 use std::io::prelude::*;
 
-use DavResult;
-use fs::*;
-use headers;
-use {statuserror,fserror,systemtime_to_httpdate};
-use conditional::if_match_get_tokens;
+use crate::DavResult;
+use crate::fs::*;
+use crate::headers;
+use crate::{statuserror,fserror,systemtime_to_httpdate};
+use crate::conditional::if_match_get_tokens;
 
 macro_rules! statuserror {
     ($res:ident, $s:ident) => {

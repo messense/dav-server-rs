@@ -5,8 +5,8 @@ use std::hash::Hash;
 use std::fmt::Debug;
 use std::borrow::Borrow;
 
-use FsError;
-use FsResult;
+use crate::FsError;
+use crate::FsResult;
 
 #[derive(Debug)]
 /// A tree contains a bunch of nodes.

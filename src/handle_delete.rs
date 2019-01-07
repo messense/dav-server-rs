@@ -2,14 +2,14 @@
 use hyper::server::{Request,Response};
 use hyper::status::StatusCode as SC;
 
-use DavResult;
-use {statuserror,fserror,fserror_to_status};
-use errors::DavError;
-use multierror::MultiError;
-use conditional::*;
-use webpath::WebPath;
-use headers::Depth;
-use fs::*;
+use crate::DavResult;
+use crate::{statuserror,fserror,fserror_to_status};
+use crate::errors::DavError;
+use crate::multierror::MultiError;
+use crate::conditional::*;
+use crate::webpath::WebPath;
+use crate::headers::Depth;
+use crate::fs::*;
 
 // map_err helper.
 fn add_status(res: &mut MultiError, path: &WebPath, e: FsError) -> DavError {

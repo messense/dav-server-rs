@@ -14,10 +14,10 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use xmltree::Element;
 
-use webpath::WebPath;
-use tree;
-use ls::*;
-use fs::FsResult;
+use crate::webpath::WebPath;
+use crate::tree;
+use crate::ls::*;
+use crate::fs::FsResult;
 
 type Tree = tree::Tree<Vec<u8>, Vec<DavLock>>;
 

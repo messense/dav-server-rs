@@ -22,9 +22,9 @@ use std::os::linux::fs::MetadataExt;
 
 use sha2::{self,Digest};
 
-use webpath::WebPath;
-use fs::*;
-use fs::DavReadDir;
+use crate::webpath::WebPath;
+use crate::fs::*;
+use crate::fs::DavReadDir;
 
 #[derive(Debug,Clone)]
 pub struct LocalFs {

@@ -5,7 +5,7 @@ use std::time::{SystemTime,UNIX_EPOCH};
 use std::io::{Read,Write,Seek};
 use std::fmt::Debug;
 
-use webpath::WebPath;
+use crate::webpath::WebPath;
 use hyper::status::StatusCode;
 
 macro_rules! notimplemented {
