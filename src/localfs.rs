@@ -24,6 +24,7 @@ use sha2::{self,Digest};
 
 use webpath::WebPath;
 use fs::*;
+use fs::DavReadDir;
 
 #[derive(Debug,Clone)]
 pub struct LocalFs {
@@ -82,7 +83,7 @@ impl DavFileSystem for LocalFs {
         }
     }
 
-    fn read_dir(&self, path: &WebPath) -> FsResult<Box<DavReadDir<Item=Box<DavDirEntry>>>> {
+    fn read_dir(&self, path: &WebPath) -> FsResult<Box<DavReadDir>> {
         debug!("FS: read_dir {:?}", self.fspath(path));
         match std::fs::read_dir(self.fspath(path)) {
             Ok(iterator) => Ok(Box::new(LocalFsReadDir{
@@ -141,8 +142,6 @@ impl DavFileSystem for LocalFs {
         Ok(())
     }
 }
-
-impl DavReadDir for LocalFsReadDir {}
 
 impl Iterator for LocalFsReadDir {
     type Item = Box<DavDirEntry>;

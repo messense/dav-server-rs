@@ -129,13 +129,13 @@ impl DavFileSystem for MemFs {
         Ok(Box::new(tree.get_node(node_id)?.as_dirent(path.as_bytes())))
     }
 
-    fn read_dir(&self, path: &WebPath) -> FsResult<Box<DavReadDir<Item=Box<DavDirEntry>>>> {
+    fn read_dir(&self, path: &WebPath) -> FsResult<Box<DavReadDir>> {
         let tree = &*self.tree.lock().unwrap();
         let node_id = tree.lookup(path.as_bytes())?;
         if !tree.get_node(node_id)?.is_dir() {
             return Err(FsError::Forbidden);
         }
-        let mut v = Vec::new();
+        let mut v : Vec<MemFsDirEntry> = Vec::new();
         for (name, dnode_id) in tree.get_children(node_id)? {
             if let Ok(node) = tree.get_node(dnode_id) {
                 v.push(node.as_dirent(&name));
@@ -266,8 +266,6 @@ fn cloneprop(p: &DavProp) -> DavProp {
     DavProp{ name: p.name.clone(), namespace: p.namespace.clone(), prefix: p.prefix.clone(), xml: None }
 }
 
-impl DavReadDir for MemFsReadDir {}
-
 impl Iterator for MemFsReadDir {
     type Item = Box<DavDirEntry>;
 
@@ -371,7 +369,7 @@ impl Seek for MemFsFile {
         } else {
             self.pos = (start + offset as u64) as usize;
         }
-        Ok((self.pos as u64))
+        Ok(self.pos as u64)
     }
 }
 

@@ -20,6 +20,7 @@ pub struct WebPath {
 }
 
 define_encode_set! {
+    #[doc(hidden)]
     pub ENCODE_SET = [pct::DEFAULT_ENCODE_SET] | {'&', '%'}
 }
 

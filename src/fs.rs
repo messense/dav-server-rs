@@ -49,8 +49,9 @@ pub struct DavProp {
 pub trait DavFileSystem : Debug + Sync + Send + BoxCloneFs {
     /// Open a file.
     fn open(&self, path: &WebPath, options: OpenOptions) -> FsResult<Box<DavFile>>;
+
     /// Perform read_dir.
-    fn read_dir(&self, path: &WebPath) -> FsResult<Box< DavReadDir<Item=Box<DavDirEntry>> >>;
+    fn read_dir(&self, path: &WebPath) -> FsResult<Box< DavReadDir>>;
 
     /// Return the metadata of a file or directory.
     fn metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>>;
@@ -200,11 +201,7 @@ impl<FS: Clone + DavFileSystem + 'static> BoxCloneFs for FS {
 }
 
 /// Iterator, returned by read_dir(), that generates DavDirEntries.
-///
-/// Often you'll end up creating an empty imp DavReadDir, plus an
-/// impl Iterator.
-pub trait DavReadDir : Iterator<Item=Box<DavDirEntry>> + Debug {
-}
+pub type DavReadDir = Iterator<Item=Box<DavDirEntry>>;
 
 /// One directory entry (or child node).
 pub trait DavDirEntry: Debug {
