@@ -9,7 +9,7 @@ name = "webdav_handler"
 path = "src/lib.rs"
 
 [dependencies]
-hyper = "0.10"
+hyper = "0.12"
 log = "0.4.6"
 serde = "1.0.84"
 serde_derive = "1.0.84"
@@ -24,6 +24,11 @@ lazy_static = "1.2.0"
 mime_guess = "1.8.6"
 htmlescape = "0.3.1"
 percent-encoding = "1.0.1"
+futures = "0.1.25"
+bytes = "0.4.11"
+http = "0.1.14"
+threadpool = "1.7.1"
+hyperx = "0.14.0"
 
 # for bin/webdav_handler.rs
 env_logger = "0.6.0"
