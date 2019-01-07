@@ -54,25 +54,28 @@
 //! }
 //! ```
 
-#[macro_use] extern crate hyper;
+#[macro_use] extern crate hyperx;
 #[macro_use] extern crate log;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate percent_encoding;
 
 mod errors;
 mod headers;
-mod handle_copymove;
-mod handle_delete;
+//mod handle_copymove;
+//mod handle_delete;
 mod handle_gethead;
-mod handle_lock;
-mod handle_mkcol;
-mod handle_options;
-mod handle_props;
-mod handle_put;
+//mod handle_lock;
+//mod handle_mkcol;
+//mod handle_options;
+//mod handle_props;
+//mod handle_put;
 mod multierror;
 mod conditional;
 mod xmltree_ext;
 mod tree;
+
+mod typed_headers;
+mod sync_adapter;
 
 pub mod fs;
 pub mod ls;
@@ -82,24 +85,30 @@ pub mod memls;
 pub mod fakels;
 pub mod webpath;
 
-use hyper::header::Date;
-use hyper::server::{Request, Response};
-use hyper::method::Method as httpMethod;
-use hyper::status::StatusCode;
-
 use std::io::Read;
 use std::time::{UNIX_EPOCH,SystemTime};
 use std::collections::HashSet;
+use std::sync::Arc;
 
+use bytes;
+use futures::{Future, Stream};
+
+use http::Method as httpMethod;
+use http::StatusCode;
+
+use crate::typed_headers::{Date, HeaderMapExt};
+use crate::sync_adapter::{Request, Response};
 use crate::webpath::WebPath;
 
 pub(crate) use crate::errors::DavError;
 pub(crate) use crate::fs::*;
 pub(crate) use crate::ls::*;
 
+pub use crate::sync_adapter::BoxedByteStream;
+
 type DavResult<T> = Result<T, DavError>;
 
-/// Methods supported by DavHandler.
+/// HTTP Methods supported by DavHandler.
 #[derive(Debug,PartialEq,Eq,Hash,Clone,Copy)]
 pub enum Method {
     Head,
@@ -118,8 +127,11 @@ pub enum Method {
 }
 
 /// The webdav handler struct.
-//#[derive(Debug)]
-pub struct DavHandler {
+#[derive(Clone)]
+pub struct DavHandler(Arc<DavInner>);
+
+// The actual struct.
+pub(crate) struct DavInner {
     pub(crate) prefix:     String,
     pub(crate) fs:         Box<DavFileSystem>,
     pub(crate) ls:         Option<Box<DavLockSystem>>,
@@ -136,9 +148,8 @@ pub(crate) fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {
     }
 }
 
-pub(crate) fn systemtime_to_httpdate(t: SystemTime) -> hyper::header::HttpDate {
-    let ts = systemtime_to_timespec(t);
-    hyper::header::HttpDate(time::at_utc(ts))
+pub(crate) fn systemtime_to_httpdate(t: SystemTime) -> typed_headers::HttpDate {
+    typed_headers::HttpDate::from(t)
 }
 
 pub(crate) fn systemtime_to_rfc3339(t: SystemTime) -> String {
@@ -147,23 +158,25 @@ pub(crate) fn systemtime_to_rfc3339(t: SystemTime) -> String {
 }
 
 // translate method into our own enum that has webdav methods as well.
-pub(crate) fn dav_method(m: &hyper::method::Method) -> DavResult<Method> {
+pub(crate) fn dav_method(m: &http::Method) -> DavResult<Method> {
     let m = match m {
-        &httpMethod::Head => Method::Head,
-        &httpMethod::Get => Method::Get,
-        &httpMethod::Put => Method::Put,
-        &httpMethod::Patch => Method::Patch,
-        &httpMethod::Delete => Method::Delete,
-        &httpMethod::Options => Method::Options,
-        &httpMethod::Extension(ref s) if s == "PROPFIND" => Method::PropFind,
-        &httpMethod::Extension(ref s) if s == "PROPPATCH" => Method::PropPatch,
-        &httpMethod::Extension(ref s) if s == "MKCOL" => Method::MkCol,
-        &httpMethod::Extension(ref s) if s == "COPY" => Method::Copy,
-        &httpMethod::Extension(ref s) if s == "MOVE" => Method::Move,
-        &httpMethod::Extension(ref s) if s == "LOCK" => Method::Lock,
-        &httpMethod::Extension(ref s) if s == "UNLOCK" => Method::Unlock,
-        _ => {
-            return Err(DavError::UnknownMethod);
+        &httpMethod::HEAD => Method::Head,
+        &httpMethod::GET => Method::Get,
+        &httpMethod::PUT => Method::Put,
+        &httpMethod::PATCH => Method::Patch,
+        &httpMethod::DELETE => Method::Delete,
+        &httpMethod::OPTIONS => Method::Options,
+        _ => match m.as_str() {
+            "PROPFIND" => Method::PropFind,
+            "PROPPATCH" => Method::PropPatch,
+            "MKCOL" => Method::MkCol,
+            "COPY" => Method::Copy,
+            "MOVE" => Method::Move,
+            "LOCK" => Method::Lock,
+            "UNLOCK" => Method::Unlock,
+            _ => {
+                return Err(DavError::UnknownMethod);
+            }
         }
     };
     Ok(m)
@@ -192,20 +205,45 @@ pub (crate) fn fserror(res: &mut Response, e: FsError) -> DavError {
 // helper.
 pub (crate) fn fserror_to_status(e: FsError) -> StatusCode {
     match e {
-        FsError::NotImplemented => StatusCode::NotImplemented,
-        FsError::GeneralFailure => StatusCode::InternalServerError,
-        FsError::Exists => StatusCode::MethodNotAllowed,
-        FsError::NotFound => StatusCode::NotFound,
-        FsError::Forbidden => StatusCode::Forbidden,
-        FsError::InsufficientStorage => StatusCode::InsufficientStorage,
-        FsError::LoopDetected => StatusCode::LoopDetected,
-        FsError::PathTooLong => StatusCode::UriTooLong,
-        FsError::TooLarge => StatusCode::PayloadTooLarge,
-        FsError::IsRemote => StatusCode::BadGateway,
+        FsError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
+        FsError::GeneralFailure => StatusCode::INTERNAL_SERVER_ERROR,
+        FsError::Exists => StatusCode::METHOD_NOT_ALLOWED,
+        FsError::NotFound => StatusCode::NOT_FOUND,
+        FsError::Forbidden => StatusCode::FORBIDDEN,
+        FsError::InsufficientStorage => StatusCode::INSUFFICIENT_STORAGE,
+        FsError::LoopDetected => StatusCode::LOOP_DETECTED,
+        FsError::PathTooLong => StatusCode::URI_TOO_LONG,
+        FsError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+        FsError::IsRemote => StatusCode::BAD_GATEWAY,
     }
 }
 
 impl DavHandler {
+    pub fn handle<ReqBody, ReqError>(&self, req: http::Request<ReqBody>)
+      -> impl Future<Item = http::Response<BoxedByteStream>, Error = std::io::Error>
+    where
+        ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqError: ToString,
+    {
+        let inner = self.0.clone();
+        sync_adapter::handler(req, move |req, resp| {
+            inner.handle(req, resp)
+        })
+    }
+
+    // constructor.
+    pub fn new<S: Into<String>>(prefix: S, fs: Box<DavFileSystem>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
+        let inner = DavInner{
+            prefix: prefix.into(),
+            fs: fs,
+            ls: ls,
+            allow: None,
+        };
+        DavHandler(Arc::new(inner))
+    }
+}
+
+impl DavInner {
 
     pub(crate) fn has_parent(&self, path: &WebPath) -> bool {
         let p = path.parent();
@@ -225,7 +263,7 @@ impl DavHandler {
         if meta.is_dir() && !path.is_collection() {
             path.add_slash();
             let newloc = path.as_url_string_with_prefix();
-            res.headers_mut().set(headers::ContentLocation(newloc));
+            res.headers_mut().typed_insert(headers::ContentLocation(newloc));
         }
         Ok((path, meta))
     }
@@ -259,25 +297,23 @@ impl DavHandler {
     }
 
     // dispatcher.
-    pub fn handle(&self, mut req: Request, mut res: Response) {
+    fn handle(&self, mut req: Request, mut res: Response) {
 
-        // enable TCP_NODELAY
-        if let Some(httpstream) = req.downcast_ref::<hyper::net::HttpStream>() {
-            httpstream.0.set_nodelay(true).ok();
+        // XXX FIXME what does this do? Is it for webdav litmus?
+        if let None = req.headers.typed_get::<Date>() {
+            let now = SystemTime::now();
+            res.headers_mut().typed_insert(Date(typed_headers::HttpDate::from(now)));
         }
 
-        if let None = req.headers.get::<Date>() {
-            let now = time::now();
-            res.headers_mut().set(Date(hyper::header::HttpDate(now)));
-        }
-        if let Some(t) = req.headers.get::<headers::XLitmus>() {
+        if let Some(t) = req.headers.typed_get::<headers::XLitmus>() {
             debug!("X-Litmus: {}", t);
         }
+
         let method = match dav_method(&req.method) {
             Ok(m) => m,
             Err(e) => {
                 debug!("refusing method {} request {}", &req.method, &req.uri);
-                res.headers_mut().set(hyper::header::Connection::close());
+                res.headers_mut().typed_insert(typed_headers::Connection::close());
                 *res.status_mut() = e.statuscode();
                 return;
             },
@@ -286,8 +322,8 @@ impl DavHandler {
         if let Some(ref a) = self.allow {
             if !a.contains(&method) {
                 debug!("method {} not allowed on request {}", &req.method, &req.uri);
-                res.headers_mut().set(hyper::header::Connection::close());
-                *res.status_mut() = StatusCode::MethodNotAllowed;
+                res.headers_mut().typed_insert(typed_headers::Connection::close());
+                *res.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
                 return;
             }
         }
@@ -297,7 +333,7 @@ impl DavHandler {
         let path = match WebPath::from_uri(&req.uri, &self.prefix) {
             Ok(p) => p,
             Err(e) => { 
-                res.headers_mut().set(hyper::header::Connection::close());
+                res.headers_mut().typed_insert(typed_headers::Connection::close());
                 daverror(&mut res, e);
                 return;
             },
@@ -313,7 +349,7 @@ impl DavHandler {
             Method::Lock => {},
             _ => {
                 if self.drain_request(&mut req) > 0 {
-                    *res.status_mut() = StatusCode::UnsupportedMediaType;
+                    *res.status_mut() = StatusCode::UNSUPPORTED_MEDIA_TYPE;
                     return;
                 }
             }
@@ -322,16 +358,17 @@ impl DavHandler {
         debug!("== START REQUEST {:?} {}", method, path);
         if let Err(e) = match method {
             Method::Head | Method::Get => self.handle_get(req, res),
-            Method::Put | Method::Patch => self.handle_put(req, res),
-            Method::Options => self.handle_options(req, res),
-            Method::PropFind => self.handle_propfind(req, res),
-            Method::PropPatch => self.handle_proppatch(req, res),
-            Method::MkCol => self.handle_mkcol(req, res),
-            Method::Copy => self.handle_copymove(method, req, res),
-            Method::Move => self.handle_copymove(method, req, res),
-            Method::Delete => self.handle_delete(req, res),
-            Method::Lock => self.handle_lock(req, res),
-            Method::Unlock => self.handle_unlock(req, res),
+            //Method::Put | Method::Patch => self.handle_put(req, res),
+            //Method::Options => self.handle_options(req, res),
+            //Method::PropFind => self.handle_propfind(req, res),
+            //Method::PropPatch => self.handle_proppatch(req, res),
+            //Method::MkCol => self.handle_mkcol(req, res),
+            //Method::Copy => self.handle_copymove(method, req, res),
+            //Method::Move => self.handle_copymove(method, req, res),
+            //Method::Delete => self.handle_delete(req, res),
+            //Method::Lock => self.handle_lock(req, res),
+            //Method::Unlock => self.handle_unlock(req, res),
+            _ => self.handle_get(req, res),
         } {
             debug!("== END REQUEST result {:?}", e);
         } else {
@@ -339,7 +376,7 @@ impl DavHandler {
         }
     }
 
-    pub fn allow(mut self, m: Method) -> DavHandler {
+    pub fn allow(mut self, m: Method) -> DavInner {
         match self.allow {
             Some(ref mut a) => { a.insert(m); },
             None => {
@@ -349,15 +386,5 @@ impl DavHandler {
             },
         }
         self
-    }
-
-    // constructor.
-    pub fn new<S: Into<String>>(prefix: S, fs: Box<DavFileSystem>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
-        DavHandler{
-            prefix: prefix.into(),
-            fs: fs,
-            ls: ls,
-            allow: None,
-        }
     }
 }

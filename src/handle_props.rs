@@ -29,7 +29,7 @@ use crate::conditional::if_match_get_tokens;
 use crate::errors::DavError;
 use crate::fserror_to_status;
 
-use crate::{DavHandler,DavResult};
+use crate::{DavInner,DavResult};
 use crate::{systemtime_to_httpdate,systemtime_to_rfc3339};
 use crate::{daverror,statuserror};
 
@@ -92,7 +92,7 @@ fn init_staticprop(p: &[&str]) -> Vec<Element> {
     v
 }
 
-impl DavHandler {
+impl DavInner {
 
     pub(crate) fn handle_propfind(&self, mut req: Request, mut res: Response) -> DavResult<()> {
 
@@ -195,7 +195,7 @@ impl DavHandler {
         Ok(())
     }
 
-    // set/change a live property. returns StatusCode::Continue if
+    // set/change a live property. returns StatusCode::CONTINUE if
     // this wasnt't  a live property (or, if we want it handled
     // as a dead property, e.g. DAV:displayname).
     fn liveprop_set(&self, prop: &Element, can_deadprop: bool) -> SC {

@@ -2,8 +2,7 @@
 use std::io::Write;
 use std::io::BufWriter;
 
-use hyper::status::StatusCode;
-use hyper::server::{Response,Fresh,Streaming};
+use http::StatusCode;
 
 use xml;
 use xml::EmitterConfig;
@@ -13,17 +12,18 @@ use xml::writer::XmlEvent as XmlWEvent;
 
 use crate::DavError;
 use crate::webpath::WebPath;
+use crate::sync_adapter::Response;
 
-type XmlWriter<'a> = EventWriter<BufWriter<Response<'a, Streaming>>>;
+type XmlWriter = EventWriter<BufWriter<Response>>;
 
-enum State<'a> {
-    Fresh(Response<'a, Fresh>),
-    Writer(XmlWriter<'a>),
+enum State {
+    Fresh(Response),
+    Writer(XmlWriter),
     Empty,
 }
 
-pub(crate) struct MultiError<'a> {
-    wstate:     State<'a>,
+pub(crate) struct MultiError {
+    wstate:     State,
     path:       WebPath,
     respstatus: StatusCode,
 }
@@ -50,12 +50,12 @@ fn write_response(mut w: &mut XmlWriter, path: &WebPath, sc: StatusCode) -> Resu
 //
 // Create  a new MultiError.
 //
-impl<'a> MultiError<'a> {
+impl MultiError {
 
-    pub fn new(res: Response<'a>, path: &WebPath) -> MultiError<'a> {
+    pub fn new(res: Response, path: &WebPath) -> MultiError {
         MultiError {
             wstate:     State::Fresh(res),
-            respstatus: StatusCode::FailedDependency,
+            respstatus: StatusCode::FAILED_DEPENDENCY,
             path:       path.clone(),
         }
     }
@@ -71,12 +71,12 @@ impl<'a> MultiError<'a> {
                     return Ok(());
                 }
 
-                let contenttype = vec!(b"application/xml; charset=utf-8".to_vec());
-                res.headers_mut().set_raw("Content-Type", contenttype);
+                let contenttype = "application/xml; charset=utf-8".parse().unwrap();
+                res.headers_mut().insert("content-type", contenttype);
 
-                self.respstatus = StatusCode::MultiStatus;
+                self.respstatus = StatusCode::MULTI_STATUS;
                 *res.status_mut() = self.respstatus;
-                let res = res.start()?;
+                let res = res.start();
 
                 let bufwriter = BufWriter::new(res);
                 // let mut xw = EventWriter::new(bufwriter);

@@ -1,12 +1,11 @@
 
-use std::fmt;
+use std::fmt::{self, Write};
 use std::str::FromStr;
 
-use hyper;
-use hyper::header::{Header, HeaderFormat,EntityTag};
-
-use url;
 use regex::Regex;
+use url;
+
+use crate::typed_headers::{self, EntityTag, Header, RawLike};
 
 header! { (WWWAuthenticate, "WWW-Authenticate") => [String] }
 header! { (DAV, "DAV") => [String] }
@@ -32,28 +31,25 @@ impl Header for Depth {
         "Depth"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<Depth> {
-        if raw.len() == 1 {
-            match raw[0].as_slice() {
+    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<Depth> {
+        if let Some(line) = raw.one() {
+            match line {
                 b"0" => return Ok(Depth::Zero),
                 b"1" => return Ok(Depth::One),
                 b"infinity" | b"Infinity" => return Ok(Depth::Infinity),
                 _ => {},
             }
         }
-        Err(hyper::Error::Header)
+        Err(typed_headers::Error::Header)
     }
 
-}
-
-impl HeaderFormat for Depth {
-    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
         let value = match *self {
             Depth::Zero => "0",
             Depth::One => "1",
             Depth::Infinity => "Infinity",
         };
-        f.write_str(value)
+        f.fmt_line(&value)
     }
 }
 
@@ -71,44 +67,43 @@ impl Header for Timeout {
         "Timeout"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<Timeout> {
-        if raw.len() == 1 {
+    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<Timeout> {
+        if let Some(line) = raw.one() {
             let mut v = Vec::new();
-            let words = std::str::from_utf8(&raw[0])?.split(|c| c == ',');
+            let words = std::str::from_utf8(line)?.split(|c| c == ',');
             for word in words {
                 let w = match word {
                     "Infinite" => DavTimeout::Infinite,
                     _ if word.starts_with("Second-") => {
                         let num = &word[7..];
                         match num.parse::<u32>() {
-                            Err(_) => return Err(hyper::Error::Header),
+                            Err(_) => return Err(typed_headers::Error::Header),
                             Ok(n) => DavTimeout::Seconds(n),
                         }
                     },
-                    _ => return Err(hyper::Error::Header),
+                    _ => return Err(typed_headers::Error::Header),
                 };
                 v.push(w);
             }
             return Ok(Timeout(v));
         }
-        Err(hyper::Error::Header)
+        Err(typed_headers::Error::Header)
     }
-}
 
-impl HeaderFormat for Timeout {
-    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
         let mut first = false;
+        let mut value = String::new();
         for s in &self.0 {
             if !first {
-                f.write_str(", ")?;
+                value.push_str(", ");
             }
             first = false;
             match s {
-                &DavTimeout::Seconds(n) => write!(f, "Second-{}", n)?,
-                &DavTimeout::Infinite => f.write_str("Infinite")?,
+                &DavTimeout::Seconds(n) => write!(&mut value, "Second-{}", n)?,
+                &DavTimeout::Infinite => value.push_str("Infinite"),
             }
         }
-        Ok(())
+        f.fmt_line(&value)
     }
 }
 
@@ -120,11 +115,11 @@ impl Header for Destination {
         "Destination"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<Destination> {
-        if raw.len() == 1 {
-            let s = match std::str::from_utf8(raw[0].as_slice()) {
+    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<Destination> {
+        if let Some(line) = raw.one() {
+            let s = match std::str::from_utf8(line) {
                 Ok(s) => s,
-                Err(_) => return Err(hyper::Error::Header),
+                Err(_) => return Err(typed_headers::Error::Header),
             };
             if s.starts_with("/") {
                 return Ok(Destination(s.to_string()));
@@ -138,13 +133,11 @@ impl Header for Destination {
                 _ => {},
             }
         }
-        Err(hyper::Error::Header)
+        Err(typed_headers::Error::Header)
     }
-}
 
-impl HeaderFormat for Destination {
-    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(&format!("{}", self.0))
+    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
+        f.fmt_line(&self.0)
     }
 }
 
@@ -156,32 +149,30 @@ impl Header for Overwrite {
         "Overwrite"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<Overwrite> {
-        if raw.len() == 1 {
-            match raw[0].as_slice() {
+    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<Overwrite> {
+        if let Some(line) = raw.one() {
+            match line {
                 b"F" => return Ok(Overwrite(false)),
                 b"T" => return Ok(Overwrite(true)),
                 _ => {},
             }
         }
-        Err(hyper::Error::Header)
+        Err(typed_headers::Error::Header)
     }
-}
 
-impl HeaderFormat for Overwrite {
-    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
         let value = match self.0 {
             true => "T",
             false => "F",
         };
-        f.write_str(value)
+        f.fmt_line(&value)
     }
 }
 
 #[derive(Debug,Clone,PartialEq)]
 pub enum IfRange {
-    EntityTag(hyper::header::EntityTag),
-    Date(hyper::header::HttpDate),
+    EntityTag(typed_headers::EntityTag),
+    Date(typed_headers::HttpDate),
 }
 
 impl Header for IfRange {
@@ -189,36 +180,34 @@ impl Header for IfRange {
         "If-Range"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<IfRange> {
-        if raw.len() == 1 {
-            let s = match std::str::from_utf8(raw[0].as_slice()) {
+    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<IfRange> {
+        if let Some(line) = raw.one() {
+            let s = match std::str::from_utf8(line) {
                 Ok(s) => s,
                 Err(e) => Err(e)?,
             };
-            if let Ok(tm) = hyper::header::HttpDate::from_str(s) {
+            if let Ok(tm) = typed_headers::HttpDate::from_str(s) {
                 return Ok(IfRange::Date(tm));
             }
-            if let Ok(et) = hyper::header::EntityTag::from_str(s) {
+            if let Ok(et) = typed_headers::EntityTag::from_str(s) {
                 return Ok(IfRange::EntityTag(et));
             }
         }
-        Err(hyper::Error::Header)
+        Err(typed_headers::Error::Header)
     }
-}
 
-impl HeaderFormat for IfRange {
-    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
         let value = match self {
             &IfRange::Date(ref d) => format!("{}", d),
             &IfRange::EntityTag(ref t) => t.tag().to_string(),
         };
-        f.write_str(&value)
+        f.fmt_line(&value)
     }
 }
 
 #[derive(Debug,Clone,PartialEq)]
 pub enum ETagList {
-    Tags(Vec<hyper::header::EntityTag>),
+    Tags(Vec<typed_headers::EntityTag>),
     Star,
 }
 
@@ -228,30 +217,30 @@ pub struct IfMatch(pub ETagList);
 #[derive(Debug,Clone,PartialEq)]
 pub struct IfNoneMatch(pub ETagList);
 
-fn parse_etag_list(raw: &[Vec<u8>]) -> hyper::Result<ETagList> {
-    if raw.len() != 1 {
-        Err(hyper::Error::Header)?;
-    }
-    let s = std::str::from_utf8(raw[0].as_slice())?;
-    if s.trim() == "*" {
-        return Ok(ETagList::Star);
-    }
-    let mut v = Vec::new();
-    for t in s.split(',') {
-        if let Ok(t) = hyper::header::EntityTag::from_str(t.trim()) {
-            v.push(t);
+fn parse_etag_list<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<ETagList> {
+    if let Some(line) = raw.one() {
+        let s = std::str::from_utf8(line)?;
+        if s.trim() == "*" {
+            return Ok(ETagList::Star);
         }
+        let mut v = Vec::new();
+        for t in s.split(',') {
+            if let Ok(t) = typed_headers::EntityTag::from_str(t.trim()) {
+                v.push(t);
+            }
+        }
+        return Ok(ETagList::Tags(v));
     }
-    Ok(ETagList::Tags(v))
+    Err(typed_headers::Error::Header)?
 }
 
-fn fmt_etaglist(m: &ETagList, f: &mut fmt::Formatter) -> fmt::Result {
+fn fmt_etaglist(m: &ETagList, f: &mut typed_headers::Formatter) -> fmt::Result {
     let value = match m {
         &ETagList::Star => "*".to_string(),
         &ETagList::Tags(ref t) =>
                 t.iter().map(|t| t.tag()).collect::<Vec<&str>>().join(", ")
     };
-    f.write_str(&value)
+    f.fmt_line(&value)
 }
 
 impl Header for IfMatch {
@@ -259,13 +248,11 @@ impl Header for IfMatch {
         "If-Match"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<IfMatch> {
+    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<IfMatch> {
         Ok(IfMatch(parse_etag_list(raw)?))
     }
-}
 
-impl HeaderFormat for IfMatch {
-    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
         fmt_etaglist(&self.0, f)
     }
 }
@@ -275,13 +262,11 @@ impl Header for IfNoneMatch {
         "If-None-Match"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<IfNoneMatch> {
+    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<IfNoneMatch> {
         Ok(IfNoneMatch(parse_etag_list(raw)?))
     }
-}
 
-impl HeaderFormat for IfNoneMatch {
-    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
         fmt_etaglist(&self.0, f)
     }
 }
@@ -299,50 +284,46 @@ impl Header for XUpdateRange {
         "X-Update-Range"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<XUpdateRange> {
-        if raw.len() != 1 {
-            Err(hyper::Error::Header)?;
-        }
-        let mut s = std::str::from_utf8(raw[0].as_slice())?.trim();
+    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<XUpdateRange> {
+        let line = raw.one().ok_or(typed_headers::Error::Header)?;
+        let mut s = std::str::from_utf8(line)?.trim();
         if s == "append" {
             return Ok(XUpdateRange::Append);
         }
         if !s.starts_with("bytes ") {
-            Err(hyper::Error::Header)?;
+            Err(typed_headers::Error::Header)?;
         }
         s = &s[6..];
 
         let nums = s.split("-").collect::<Vec<&str>>();
         if nums.len() != 2 {
-            Err(hyper::Error::Header)?;
+            Err(typed_headers::Error::Header)?;
         }
         if nums[0] != "" && nums[1] != "" {
             return Ok(XUpdateRange::FromTo(
-                (nums[0]).parse::<u64>().map_err(|_|hyper::Error::Header)?,
-                (nums[1]).parse::<u64>().map_err(|_|hyper::Error::Header)?,
+                (nums[0]).parse::<u64>().map_err(|_|typed_headers::Error::Header)?,
+                (nums[1]).parse::<u64>().map_err(|_|typed_headers::Error::Header)?,
             ));
         }
         if nums[0] != "" {
             return Ok(XUpdateRange::AllFrom((nums[0]).parse::<u64>()
-                                        .map_err(|_|hyper::Error::Header)?));
+                                        .map_err(|_|typed_headers::Error::Header)?));
         }
         if nums[1] != "" {
             return Ok(XUpdateRange::Last((nums[1]).parse::<u64>()
-                                        .map_err(|_|hyper::Error::Header)?));
+                                        .map_err(|_|typed_headers::Error::Header)?));
         }
-        return Err(hyper::Error::Header);
+        return Err(typed_headers::Error::Header);
     }
-}
 
-impl HeaderFormat for XUpdateRange {
-    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
         let value = match self {
             &XUpdateRange::Append => "append".to_string(),
             &XUpdateRange::FromTo(b, e) => format!("{}-{}", b, e),
             &XUpdateRange::AllFrom(b) => format!("{}-", b),
             &XUpdateRange::Last(e) => format!("-{}", e),
         };
-        f.write_str(&value)
+        f.fmt_line(&value)
     }
 }
 
@@ -354,31 +335,27 @@ impl Header for ContentRange {
         "Content-Range"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<ContentRange> {
-        if raw.len() != 1 {
-            Err(hyper::Error::Header)?;
-        }
-        let mut s = std::str::from_utf8(raw[0].as_slice())?.trim();
+    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<ContentRange> {
+        let line = raw.one().ok_or(typed_headers::Error::Header)?;
+        let mut s = std::str::from_utf8(line)?.trim();
         if !s.starts_with("bytes") {
-            Err(hyper::Error::Header)?;
+            Err(typed_headers::Error::Header)?;
         }
         s = &s[6..];
 
         let noslash = s.split("/").collect::<Vec<&str>>();
         let nums = noslash[0].split("-").collect::<Vec<&str>>();
         if nums.len() != 2 {
-            Err(hyper::Error::Header)?;
+            Err(typed_headers::Error::Header)?;
         }
         return Ok(ContentRange(
-            (nums[0]).parse::<u64>().map_err(|_|hyper::Error::Header)?,
-            (nums[1]).parse::<u64>().map_err(|_|hyper::Error::Header)?,
+            (nums[0]).parse::<u64>().map_err(|_|typed_headers::Error::Header)?,
+            (nums[1]).parse::<u64>().map_err(|_|typed_headers::Error::Header)?,
         ));
     }
-}
 
-impl HeaderFormat for ContentRange {
-    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(&format!("{}-{}", self.0, self.1))
+    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
+        f.fmt_line(&format!("{}-{}", self.0, self.1))
     }
 }
 
@@ -451,12 +428,12 @@ fn trim_left<'a>(mut out: &'a[u8]) -> &'a[u8] {
 }
 
 // parse one token.
-fn scan_until(buf: &[u8], c: u8) -> hyper::Result<(&[u8], &[u8])> {
+fn scan_until(buf: &[u8], c: u8) -> typed_headers::Result<(&[u8], &[u8])> {
     let mut i = 1;
     let mut quote = false;
     while quote || buf[i] != c {
         if buf.is_empty() || is_whitespace(buf[i]) {
-            return Err(hyper::Error::Header);
+            return Err(typed_headers::Error::Header);
         }
         if buf[i] == b'"' {
             quote = !quote;
@@ -467,11 +444,11 @@ fn scan_until(buf: &[u8], c: u8) -> hyper::Result<(&[u8], &[u8])> {
 }
 
 // scan one word.
-fn scan_word(buf: &[u8]) -> hyper::Result<(&[u8], &[u8])> {
+fn scan_word(buf: &[u8]) -> typed_headers::Result<(&[u8], &[u8])> {
     for (i, &c) in buf.iter().enumerate() {
         if is_whitespace(c) || is_special(c) || c < 32 {
             if i == 0 {
-                return Err(hyper::Error::Header);
+                return Err(typed_headers::Error::Header);
             }
             return Ok((&buf[..i], &buf[i..]));
         }
@@ -480,7 +457,7 @@ fn scan_word(buf: &[u8]) -> hyper::Result<(&[u8], &[u8])> {
 }
 
 // get next token.
-fn get_token<'a>(buf: &'a[u8]) -> hyper::Result<(IfToken, &'a[u8])> {
+fn get_token<'a>(buf: &'a[u8]) -> typed_headers::Result<(IfToken, &'a[u8])> {
     let buf = trim_left(buf);
     if buf.is_empty() {
         return Ok((IfToken::End, buf));
@@ -516,17 +493,14 @@ impl Header for If {
         "If"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<If> {
-        if raw.len() != 1 {
-            Err(hyper::Error::Header)?;
-        }
+    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<If> {
 
         // one big state machine.
         let mut if_lists = If(Vec::new());
         let mut cur_list = IfList::new();
 
         let mut state = IfState::Start;
-        let mut input = raw[0].as_slice();
+        let mut input = raw.one().ok_or(typed_headers::Error::Header)?;
 
         loop {
             let (tok, rest) = get_token(input)?;
@@ -536,7 +510,7 @@ impl Header for If {
                     match tok {
                         IfToken::ListOpen => IfState::List,
                         IfToken::Pointy(url) => {
-                            let u = url::Url::parse(&url)?;
+                            let u = url::Url::parse(&url).map_err(|_| typed_headers::Error::Header)?;
                             cur_list.resource_tag = Some(u);
                             IfState::RTag
                         },
@@ -589,16 +563,14 @@ impl Header for If {
                         _ => IfState::Bad,
                     }
                 },
-                IfState::Bad => return Err(hyper::Error::Header),
+                IfState::Bad => return Err(typed_headers::Error::Header),
             };
         }
         Ok(if_lists)
     }
-}
 
-impl HeaderFormat for If {
-    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(&format!("[If header]"))
+    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
+        f.fmt_line(&format!("[If header]"))
     }
 }
 

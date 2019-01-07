@@ -19,7 +19,7 @@ macro_rules! statuserror {
 
 const SABRE: &'static str = "application/x-sabredav-partialupdate";
 
-impl crate::DavHandler {
+impl crate::DavInner {
 
     pub(crate) fn handle_put(&self, mut req: Request, mut res: Response) -> DavResult<()> {
 

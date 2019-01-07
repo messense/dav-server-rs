@@ -20,7 +20,7 @@ fn add_status(res: &mut MultiError, path: &WebPath, e: FsError) -> DavError {
     DavError::Status(status)
 }
 
-impl crate::DavHandler {
+impl crate::DavInner {
 
     pub(crate) fn do_copy(&self, source: &WebPath, topdest: &WebPath, dest: &WebPath, depth: Depth, multierror: &mut MultiError) -> FsResult<()> {
         debug!("do_copy {} {} depth {:?}", source, dest, depth);

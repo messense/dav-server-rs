@@ -1,14 +1,12 @@
-
-use hyper;
-use hyper::server::{Request,Response};
-use hyper::status::StatusCode;
-use hyper::header::ByteRangeSpec;
-
 use std::io::prelude::*;
 use std::io::BufWriter;
 
 use htmlescape;
+use http::status::StatusCode;
 use time;
+
+use crate::sync_adapter::{Request,Response};
+use crate::typed_headers::{self,ByteRangeSpec,HeaderMapExt};
 
 use crate::fs::*;
 use crate::errors::DavError;
@@ -17,10 +15,10 @@ use crate::headers;
 use crate::conditional;
 use crate::{fserror,statuserror,systemtime_to_httpdate,systemtime_to_timespec};
 
-impl crate::DavHandler {
+impl crate::DavInner {
     pub(crate) fn handle_get(&self, req: Request, mut res: Response) -> Result<(), DavError> {
 
-        let head = req.method == hyper::method::Method::Head;
+        let head = req.method == http::Method::HEAD;
 
         // check if it's a directory.
         let path = self.path(&req);
@@ -33,7 +31,7 @@ impl crate::DavHandler {
         let mut file = self.fs.open(&path, OpenOptions::read()).map_err(|e| fserror(&mut res, e))?;
         let meta = file.metadata().map_err(|e| fserror(&mut res, e))?;
         if !meta.is_file() {
-            return Err(statuserror(&mut res, StatusCode::MethodNotAllowed));
+            return Err(statuserror(&mut res, StatusCode::METHOD_NOT_ALLOWED));
         }
 
         let mut start = 0;
@@ -41,48 +39,51 @@ impl crate::DavHandler {
         let len = count;
         let mut do_range = true;
 
-        let file_etag = hyper::header::EntityTag::new(false, meta.etag());
+        let file_etag = typed_headers::EntityTag::new(false, meta.etag());
 
-        if let Some(r) = req.headers.get::<headers::IfRange>() {
+        if let Some(r) = req.headers.typed_get::<headers::IfRange>() {
             do_range = conditional::ifrange_match(&r, &file_etag, meta.modified().unwrap());
         }
 
         // see if we want to get a range.
         if do_range {
             do_range = false;
-            if let Some(r) = req.headers.get::<hyper::header::Range>() {
-                if let &hyper::header::Range::Bytes(ref ranges) = r {
-                    // we only support a single range
-                    if ranges.len() == 1 {
-                        match &ranges[0] {
-                            &ByteRangeSpec::FromTo(s, e) => {
-                                start = s; count = e - s + 1;
-                            },
-                            &ByteRangeSpec::AllFrom(s) => {
-                                start = s; count = len - s;
-                            },
-                            &ByteRangeSpec::Last(n) => {
-                                start = len - n; count = n;
-                            },
+            if let Some(r) = req.headers.typed_get::<typed_headers::Range>() {
+                match r {
+                    typed_headers::Range::Bytes(ref ranges) => {
+                        // we only support a single range
+                        if ranges.len() == 1 {
+                            match &ranges[0] {
+                                &ByteRangeSpec::FromTo(s, e) => {
+                                    start = s; count = e - s + 1;
+                                },
+                                &ByteRangeSpec::AllFrom(s) => {
+                                    start = s; count = len - s;
+                                },
+                                &ByteRangeSpec::Last(n) => {
+                                    start = len - n; count = n;
+                                },
+                            }
+                            if start >= len {
+                                return Err(statuserror(&mut res, StatusCode::RANGE_NOT_SATISFIABLE));
+                            }
+                            if start + count > len {
+                                count = len - start;
+                            }
+                            do_range = true;
                         }
-                        if start >= len {
-                            return Err(statuserror(&mut res, StatusCode::RangeNotSatisfiable));
-                        }
-                        if start + count > len {
-                            count = len - start;
-                        }
-                        do_range = true;
-                    }
+                    },
+                    _ => {},
                 }
             }
         }
 
         // set Last-Modified and ETag headers.
         if let Ok(modified) = meta.modified() {
-            res.headers_mut().set(hyper::header::LastModified(
+            res.headers_mut().typed_insert(typed_headers::LastModified(
                     systemtime_to_httpdate(modified)));
         }
-        res.headers_mut().set(hyper::header::ETag(file_etag));
+        res.headers_mut().typed_insert(typed_headers::ETag(file_etag));
 
         // handle the if-headers.
         if let Some(s) = conditional::if_match(&req, Some(&meta), &self.fs, &self.ls, &path) {
@@ -92,32 +93,30 @@ impl crate::DavHandler {
         if do_range {
             // seek to beginning of requested data.
             if let Err(_) = file.seek(std::io::SeekFrom::Start(start)) {
-                *res.status_mut() = StatusCode::RangeNotSatisfiable;
+                *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
                 return Ok(());
             }
 
             // set partial-content status and add content-range header.
             let r = format!("bytes {}-{}/{}", start, start + count - 1, len);
-            res.headers_mut().set_raw("Content-Range",
-                                    vec!(r.as_bytes().to_vec()));
-            *res.status_mut() = StatusCode::PartialContent;
+            res.headers_mut().insert("Content-Range", r.parse().unwrap());
+            *res.status_mut() = StatusCode::PARTIAL_CONTENT;
         } else {
             // normal request, send entire file.
-            *res.status_mut() = StatusCode::Ok;
+            *res.status_mut() = StatusCode::OK;
         }
 
         // set content-length and start.
-        res.headers_mut().set_raw("Content-Type",
-                                   vec!(path.get_mime_type_str().as_bytes().to_vec()));
-        res.headers_mut().set(hyper::header::ContentLength(count));
-        res.headers_mut().set(hyper::header::AcceptRanges(vec![hyper::header::RangeUnit::Bytes]));
+        res.headers_mut().insert("Content-Type", path.get_mime_type_str().parse().unwrap());
+        res.headers_mut().typed_insert(typed_headers::ContentLength(count));
+        res.headers_mut().typed_insert(typed_headers::AcceptRanges(vec![typed_headers::RangeUnit::Bytes]));
 
         if head {
             return Ok(())
         }
 
         // now just loop and send data.
-        let mut writer = res.start()?;
+        let mut writer = res.start();
 
         let mut buffer = [0; 8192];
         let zero = [0; 4096];
@@ -150,9 +149,9 @@ impl crate::DavHandler {
         if !path.is_collection() {
             let mut path = path.clone();
             path.add_slash();
-            res.headers_mut().set_raw("Location", vec!(path.as_bytes().to_vec()));
-            res.headers_mut().set(hyper::header::ContentLength(0));
-            *res.status_mut() = StatusCode::Found;
+            res.headers_mut().insert("Location", path.as_utf8_string_with_prefix().parse().unwrap());
+            res.headers_mut().typed_insert(typed_headers::ContentLength(0));
+            *res.status_mut() = StatusCode::FOUND;
             return Ok(());
         }
 
@@ -160,13 +159,12 @@ impl crate::DavHandler {
         let entries = self.fs.read_dir(path).map_err(|e| fserror(&mut res, e))?;
 
         // start output
-        let contenttype = vec!(b"text/html; charset=utf-8".to_vec());
-        res.headers_mut().set_raw("Content-Type", contenttype);
-        *res.status_mut() = StatusCode::Ok;
+        res.headers_mut().insert("Content-Type", "text/html; charset=utf-8".parse().unwrap());
+        *res.status_mut() = StatusCode::OK;
         if head {
             return Ok(())
         }
-        let mut w = BufWriter::new(res.start()?);
+        let mut w = BufWriter::new(res.start());
 
         // transform all entries into a dirent struct.
         struct Dirent {
@@ -218,7 +216,7 @@ impl crate::DavHandler {
         });
 
         // and output html
-        let upath = path.as_utf8_string_with_prefix();
+        let upath = htmlescape::encode_minimal(&path.as_url_string());
         writeln!(w, "<html><head>")?;
         writeln!(w, "<title>Index of {}</title>", upath)?;
         writeln!(w, "<style>")?;

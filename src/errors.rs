@@ -2,7 +2,7 @@
 use std::error::Error;
 use std::io::ErrorKind;
 use xml;
-use hyper::status::StatusCode;
+use http::StatusCode;
 
 #[derive(Debug)]
 pub(crate) enum DavError {
@@ -64,27 +64,27 @@ impl From<xml::writer::Error> for DavError {
 
 fn ioerror_to_status(ioerror: &std::io::Error) -> StatusCode {
     match ioerror.kind() {
-        ErrorKind::NotFound => StatusCode::NotFound,
-        ErrorKind::PermissionDenied => StatusCode::Forbidden,
-        ErrorKind::AlreadyExists => StatusCode::Conflict,
-        ErrorKind::TimedOut => StatusCode::GatewayTimeout,
-        _ => StatusCode::BadGateway,
+        ErrorKind::NotFound => StatusCode::NOT_FOUND,
+        ErrorKind::PermissionDenied => StatusCode::FORBIDDEN,
+        ErrorKind::AlreadyExists => StatusCode::CONFLICT,
+        ErrorKind::TimedOut => StatusCode::GATEWAY_TIMEOUT,
+        _ => StatusCode::BAD_GATEWAY,
     }
 }
 
 impl DavError {
      pub(crate) fn statuscode(&self) -> StatusCode {
         match self {
-            &DavError::XmlReadError => StatusCode::BadRequest,
-            &DavError::XmlParseError => StatusCode::BadRequest,
-            &DavError::InvalidPath => StatusCode::BadRequest,
-            &DavError::IllegalPath => StatusCode::BadGateway,
-            &DavError::ForbiddenPath => StatusCode::Forbidden,
-            &DavError::UnknownMethod => StatusCode::NotImplemented,
+            &DavError::XmlReadError => StatusCode::BAD_REQUEST,
+            &DavError::XmlParseError => StatusCode::BAD_REQUEST,
+            &DavError::InvalidPath => StatusCode::BAD_REQUEST,
+            &DavError::IllegalPath => StatusCode::BAD_GATEWAY,
+            &DavError::ForbiddenPath => StatusCode::FORBIDDEN,
+            &DavError::UnknownMethod => StatusCode::NOT_IMPLEMENTED,
             &DavError::IoError(ref e) => ioerror_to_status(e),
             &DavError::Status(e) => e,
-            &DavError::XmlReaderError(ref _e) => StatusCode::BadRequest,
-            &DavError::XmlWriterError(ref _e) => StatusCode::InternalServerError,
+            &DavError::XmlReaderError(ref _e) => StatusCode::BAD_REQUEST,
+            &DavError::XmlWriterError(ref _e) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
