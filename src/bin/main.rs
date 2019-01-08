@@ -44,11 +44,11 @@ impl Server {
     pub fn new(directory: String) -> Self {
         let dh = if directory != "" {
             let fs = localfs::LocalFs::new(directory, true);
-            DavHandler::new("", fs, None)
+            DavHandler::new("", None, fs, None)
         } else {
             let fs = memfs::MemFs::new();
             let ls = memls::MemLs::new();
-            DavHandler::new("", fs, Some(ls))
+            DavHandler::new("", None, fs, Some(ls))
         };
         Server{ dh }
     }

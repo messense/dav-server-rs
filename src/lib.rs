@@ -39,7 +39,7 @@
 //!     let dir = "/tmp";
 //!     let addr = ([127, 0, 0, 1], 4918).into();
 //!
-//!     let dav_server = DavHandler::new("", LocalFs::new(dir, false), Some(MemLs::new()));
+//!     let dav_server = DavHandler::new("", None, LocalFs::new(dir, false), Some(MemLs::new()));
 //!     let make_service = move || {
 //!         let dav_server = dav_server.clone();
 //!         hyper::service::service_fn(move |req: hyper::Request<hyper::Body>| {
@@ -107,7 +107,7 @@ use futures::{Future, Stream};
 use http::Method as httpMethod;
 use http::StatusCode;
 
-use crate::typed_headers::{Date, HeaderMapExt};
+use crate::typed_headers::HeaderMapExt;
 use crate::sync_adapter::{Request, Response};
 use crate::webpath::WebPath;
 
@@ -143,10 +143,11 @@ pub struct DavHandler(Arc<DavInner>);
 
 // The actual struct.
 pub(crate) struct DavInner {
-    pub(crate) prefix:     String,
-    pub(crate) fs:         Box<DavFileSystem>,
-    pub(crate) ls:         Option<Box<DavLockSystem>>,
-    pub(crate) allow:      Option<HashSet<Method>>,
+    pub prefix:     String,
+    pub fs:         Box<DavFileSystem>,
+    pub ls:         Option<Box<DavLockSystem>>,
+    pub allow:      Option<HashSet<Method>>,
+    pub principal:  Option<String>,
 }
 
 pub(crate) fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {
@@ -247,13 +248,33 @@ impl DavHandler {
         })
     }
 
-    // constructor.
-    pub fn new<S: Into<String>>(prefix: S, fs: Box<DavFileSystem>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
+    /// Create a new DavHandler.
+    ///
+    /// prefix | The prefix to be stripped from the request URL
+    /// user   | Optional username (or principal) of the requesting entity. Used with locking.
+    /// fs     | The filesystem backend.
+    /// ls     | Optional locksystem backend
+    ///
+    pub fn new(prefix: impl Into<String>, user: Option<&str>, fs: Box<DavFileSystem>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
         let inner = DavInner{
             prefix: prefix.into(),
             fs: fs,
             ls: ls,
             allow: None,
+            principal: user.map(|s| s.to_string()),
+        };
+        DavHandler(Arc::new(inner))
+    }
+
+    /// Clone an existing handler, and possibly override any of its properties.
+    /// Note that the allowed method set is not copied (it is set to "all" again).
+    pub fn clone_with(&self, prefix: Option<impl Into<String>>, user: Option<&str>, fs: Option<Box<DavFileSystem>>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
+        let inner = DavInner{
+            prefix: prefix.map(|s| s.into()).unwrap_or(self.0.prefix.clone()),
+            fs: fs.unwrap_or(self.0.fs.clone()),
+            ls: ls.or(self.0.ls.clone()),
+            allow: None,
+            principal: user.map(|s| s.to_string()).or(self.0.principal.clone()),
         };
         DavHandler(Arc::new(inner))
     }
@@ -261,13 +282,15 @@ impl DavHandler {
 
 impl DavInner {
 
+    // helper.
     pub(crate) fn has_parent(&self, path: &WebPath) -> bool {
         let p = path.parent();
         self.fs.metadata(&p).map(|m| m.is_dir()).unwrap_or(false)
     }
 
+    // helper.
     pub(crate) fn path(&self, req: &Request) -> WebPath {
-        // XXX FIXME need to make sure this never fails
+        // This never fails (has been checked before)
         WebPath::from_uri(&req.uri, &self.prefix).unwrap()
     }
 
@@ -284,6 +307,7 @@ impl DavInner {
         Ok((path, meta))
     }
 
+    // drain request body and return length.
     pub(crate) fn drain_request(&self, req: &mut Request) -> usize {
         let mut buffer = [0; 8192];
         let mut done = 0;
@@ -296,19 +320,17 @@ impl DavInner {
         done
     }
 
-    // dispatcher.
+    // internal dispatcher.
     fn handle(&self, mut req: Request, mut res: Response) {
 
-        // XXX FIXME what does this do? Is it for webdav litmus?
-        if let None = req.headers.typed_get::<Date>() {
-            let now = SystemTime::now();
-            res.headers_mut().typed_insert(Date(typed_headers::HttpDate::from(now)));
+        // debug when running the webdav litmus tests.
+        if log_enabled!(log::Level::Debug) {
+            if let Some(t) = req.headers.typed_get::<headers::XLitmus>() {
+                debug!("X-Litmus: {}", t);
+            }
         }
 
-        if let Some(t) = req.headers.typed_get::<headers::XLitmus>() {
-            debug!("X-Litmus: {}", t);
-        }
-
+        // translate HTTP method to Webdav method.
         let method = match dav_method(&req.method) {
             Ok(m) => m,
             Err(e) => {
@@ -319,6 +341,7 @@ impl DavInner {
             },
         };
 
+        // see if method is allowed.
         if let Some(ref a) = self.allow {
             if !a.contains(&method) {
                 debug!("method {} not allowed on request {}", &req.method, &req.uri);
@@ -329,7 +352,6 @@ impl DavInner {
         }
 
         // make sure the request path is valid.
-        // XXX why do this twice ... oh well.
         let path = match WebPath::from_uri(&req.uri, &self.prefix) {
             Ok(p) => p,
             Err(e) => { 
@@ -343,6 +365,7 @@ impl DavInner {
         // the body here first. If there was a body, reject request
         // with Unsupported Media Type.
         match method {
+            Method::Patch |
             Method::Put |
             Method::PropFind |
             Method::PropPatch |
@@ -375,6 +398,19 @@ impl DavInner {
         }
     }
 
+    /// Only allow certain methods. By default, all methods are allowed, and
+    /// advertised in the Allow: DAV header. You need to call this function
+    /// multiple times, for every method you want to allow, but the calls
+    /// can be chained in a builder-like pattern.
+    ///
+    /// ```
+    /// let dav = DavHandler::new(....)
+    ///     .allow(dav::Method::Get)
+    ///     .allow(dav::Method::PropFind)
+    ///     .allow(dav::Method::Options);
+    /// ```
+    ///
+    /// This needs to be replaced by something like a `MethodSet`.
     pub fn allow(mut self, m: Method) -> DavInner {
         match self.allow {
             Some(ref mut a) => { a.insert(m); },
