@@ -37,7 +37,7 @@ enum Error {
 
 /// This more-or-less mirrors hyper-0.10's struct Request. We'll refactor
 /// it to be more like http::Request later.
-pub struct Request {
+pub(crate) struct Request {
     pub method:  http::Method,
     pub headers: http::HeaderMap,
     pub uri:     http::Uri,
@@ -71,7 +71,7 @@ impl Read for Request {
 
 /// This more-or-less mirrors hyper-0.10's struct Response, which fortunately
 /// is mostly the same as the one from the http crate.
-pub struct Response {
+pub(crate) struct Response {
     response:    http::Response<()>,
     body_buf:    BytesMut,
     resp_stream: futures::sink::Wait<mpsc::Sender<RespItem>>,
@@ -151,10 +151,11 @@ impl Drop for Response {
     }
 }
 
+/// A simple type alias for a boxed stream of <Bytes, io::Error>.
 pub type BoxedByteStream = Box<Stream<Item = Bytes, Error = io::Error> + Send + 'static>;
 
 /// main entry point.
-pub fn handler<ReqBody, ReqError, OldHandler>(
+pub(crate) fn handler<ReqBody, ReqError, OldHandler>(
     req: http::Request<ReqBody>,
     oldhandler: OldHandler,
 ) -> impl Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
