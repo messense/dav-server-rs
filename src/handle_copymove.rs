@@ -126,12 +126,12 @@ impl crate::DavInner {
         let depth = match req.headers.get::<Depth>() {
             Some(&Depth::Infinity) | None => Depth::Infinity,
             Some(&Depth::Zero) if method == Method::Copy => Depth::Zero,
-            _ => return Err(statuserror(&mut res, SC::BadRequest)),
+            _ => return Err(statuserror(&mut res, SC::BAD_REQUEST)),
         };
 
         // decode and validate destination.
         let dest = req.headers.get::<headers::Destination>()
-                    .ok_or(statuserror(&mut res, SC::BadRequest))?;
+                    .ok_or(statuserror(&mut res, SC::BAD_REQUEST))?;
         let dest = match WebPath::from_str(&dest.0, &self.prefix) {
             Err(e) => Err(daverror(&mut res, e)),
             Ok(d) => Ok(d),
@@ -183,7 +183,7 @@ impl crate::DavInner {
 
         // check if source == dest
         if path == dest {
-            Err(statuserror(&mut res, SC::Forbidden))?;
+            Err(statuserror(&mut res, SC::FORBIDDEN))?;
         }
 
         // check If and If-* headers for source URL

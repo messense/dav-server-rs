@@ -31,7 +31,7 @@ impl crate::DavInner {
 
         match self.fs.create_dir(&path) {
             // RFC 4918 9.3.1 MKCOL Status Codes.
-            Err(FsError::Exists) => Err(statuserror(&mut res, SC::MethodNotAllowed)),
+            Err(FsError::Exists) => Err(statuserror(&mut res, SC::METHOD_NOT_ALLOWED)),
             Err(FsError::NotFound) => Err(statuserror(&mut res, SC::Conflict)),
             Err(e) => Err(fserror(&mut res, e)),
             Ok(()) => {

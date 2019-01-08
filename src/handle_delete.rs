@@ -88,7 +88,7 @@ impl crate::DavInner {
         let depth = match req.headers.get::<Depth>() {
             Some(&Depth::Infinity) | None => Depth::Infinity,
             Some(&Depth::Zero) => Depth::Zero,
-            _ => return Err(statuserror(&mut res, SC::BadRequest)),
+            _ => return Err(statuserror(&mut res, SC::BAD_REQUEST)),
         };
 
         let mut path = self.path(&req);

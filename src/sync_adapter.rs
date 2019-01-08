@@ -74,6 +74,7 @@ pub struct Response {
     response:    http::Response<()>,
     body_buf:    BytesMut,
     resp_stream: futures::sink::Wait<mpsc::Sender<RespItem>>,
+    did_hdrs:   bool,
 }
 
 // This looks a lot like the hyper-0.10 API surface we use.
@@ -83,6 +84,7 @@ impl Response {
             response:    http::Response::new(()),
             body_buf:    BytesMut::new(),
             resp_stream: resp_stream.wait(),
+            did_hdrs:   false,
         }
     }
 
@@ -95,7 +97,7 @@ impl Response {
         self.response.status_mut()
     }
 
-    pub fn start(mut self) -> Self {
+    fn send_head(&mut self) {
         let mut response = http::Response::new(());
         mem::swap(&mut self.response, &mut response);
         let (parts, _) = response.into_parts();
@@ -105,7 +107,12 @@ impl Response {
                 headers: parts.headers,
             })
             .ok();
+    }
+
+    pub fn start(mut self) -> Self {
+        self.send_head();
         self.body_buf.reserve(32768);
+        self.did_hdrs = true;
         self
     }
 }
@@ -136,6 +143,9 @@ impl Write for Response {
 // make sure the response body is flushed.
 impl Drop for Response {
     fn drop(&mut self) {
+        if !self.did_hdrs {
+            self.send_head();
+        }
         self.flush().ok();
     }
 }

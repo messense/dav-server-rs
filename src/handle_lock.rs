@@ -3,22 +3,21 @@ use std::io::Cursor;
 use std::time::Duration;
 use std::cmp;
 
-use hyper::server::{Request,Response};
-use hyper::status::StatusCode as SC;
 
-use xmltree;
-use xmltree::Element;
-use crate::xmltree_ext;
-use crate::xmltree_ext::ElementExt;
+use http::StatusCode as SC;
+use xmltree::{self, Element};
 
+use crate::xmltree_ext::{self, ElementExt};
 use crate::ls::*;
 
 use crate::errors::DavError;
 use crate::headers::{self,Depth,Timeout,DavTimeout};
+use crate::typed_headers::HeaderMapExt;
 use crate::fs::{OpenOptions,FsError};
 use crate::conditional::{if_match,dav_if_match};
 use crate::webpath::WebPath;
 use crate::{daverror,statuserror,fserror};
+use crate::sync_adapter::{Request,Response};
 
 impl crate::DavInner {
     pub(crate) fn handle_lock(&self, mut req: Request, mut res: Response) -> Result<(), DavError> {
@@ -29,7 +28,7 @@ impl crate::DavInner {
         // must have a locksystem or bail
         let locksystem = match self.ls {
             Some(ref ls) => ls,
-            None => return Err(statuserror(&mut res, SC::MethodNotAllowed)),
+            None => return Err(statuserror(&mut res, SC::METHOD_NOT_ALLOWED)),
         };
 
         // path and meta
@@ -44,20 +43,20 @@ impl crate::DavInner {
             // get locktoken
             let (_, tokens) = dav_if_match(&req, &self.fs, &self.ls, &path);
             if tokens.len() != 1 {
-                return Err(statuserror(&mut res, SC::BadRequest));
+                return Err(statuserror(&mut res, SC::BAD_REQUEST));
             }
 
             // try refresh
             let timeout = get_timeout(&req, true, false);
             let lock = match locksystem.refresh(&path, &tokens[0], timeout) {
                 Ok(lock) => lock,
-                Err(_) => return Err(statuserror(&mut res, SC::PreconditionFailed)),
+                Err(_) => return Err(statuserror(&mut res, SC::PRECONDITION_FAILED)),
             };
 
             // output result
             let prop = build_lock_prop(&lock, true);
-            *res.status_mut() = SC::Ok;
-            let res = res.start()?;
+            *res.status_mut() = SC::OK;
+            let res = res.start();
             let mut emitter = xmltree_ext::emitter(res)?;
             prop.write_ev(&mut emitter)?;
 
@@ -65,10 +64,10 @@ impl crate::DavInner {
         }
 
         // handle Depth:
-        let deep = match req.headers.get::<Depth>() {
-            Some(&Depth::Infinity) | None => true,
-            Some(&Depth::Zero)=> false,
-            _ => return Err(statuserror(&mut res, SC::BadRequest)),
+        let deep = match req.headers.typed_get::<Depth>() {
+            Some(Depth::Infinity) | None => true,
+            Some(Depth::Zero)=> false,
+            _ => return Err(statuserror(&mut res, SC::BAD_REQUEST)),
         };
 
         // handle the if-headers.
@@ -79,11 +78,11 @@ impl crate::DavInner {
         // Cut & paste from method_get.rs ....
         let mut oo = OpenOptions::write();
         oo.create = true;
-        if req.headers.get::<headers::IfMatch>()
+        if req.headers.typed_get::<headers::IfMatch>()
             .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
                 oo.create_new = true;
         }
-        if req.headers.get::<headers::IfNoneMatch>()
+        if req.headers.typed_get::<headers::IfNoneMatch>()
             .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
                 oo.create = false;
         }
@@ -134,7 +133,7 @@ impl crate::DavInner {
         let timeout = get_timeout(&req, false, shared);
         let lock = match locksystem.lock(&path, owner.as_ref(), timeout, shared, deep) {
             Ok(lock) => lock,
-            Err(_) => return Err(statuserror(&mut res, SC::Locked)),
+            Err(_) => return Err(statuserror(&mut res, SC::LOCKED)),
         };
 
         // try to create file if it doesn't exist.
@@ -145,9 +144,9 @@ impl crate::DavInner {
                 Err(FsError::NotFound) |
                 Err(FsError::Exists) => {
                     let s = if !oo.create || oo.create_new {
-                        SC::PreconditionFailed
+                        SC::PRECONDITION_FAILED
                     } else {
-                        SC::Conflict
+                        SC::CONFLICT
                     };
                     locksystem.unlock(&path, &lock.token).ok();
                     return Err(statuserror(&mut res, s));
@@ -160,14 +159,14 @@ impl crate::DavInner {
         }
 
         // output result
-        res.headers_mut().set(headers::LockToken("<".to_string() + &lock.token + ">"));
+        res.headers_mut().typed_insert(headers::LockToken("<".to_string() + &lock.token + ">"));
         if let None = meta {
-            *res.status_mut() = SC::Created;
+            *res.status_mut() = SC::CREATED;
         } else {
-            *res.status_mut() = SC::Ok;
+            *res.status_mut() = SC::OK;
         }
 
-        let res = res.start()?;
+        let res = res.start();
         let mut emitter = xmltree_ext::emitter(res)?;
         let prop = build_lock_prop(&lock, true);
         prop.write_ev(&mut emitter)?;
@@ -180,23 +179,23 @@ impl crate::DavInner {
         // must have a locksystem or bail
         let locksystem = match self.ls {
             Some(ref ls) => ls,
-            None => return Err(statuserror(&mut res, SC::MethodNotAllowed)),
+            None => return Err(statuserror(&mut res, SC::METHOD_NOT_ALLOWED)),
         };
 
         // Must have Lock-Token header
-        let t = req.headers.get::<headers::LockToken>()
-            .ok_or(statuserror(&mut res, SC::BadRequest))?;
+        let t = req.headers.typed_get::<headers::LockToken>()
+            .ok_or(statuserror(&mut res, SC::BAD_REQUEST))?;
         let token = t.0.trim_matches(|c| c == '<' || c == '>');
 
         let (path, _) = self.fixpath(&req, &mut res).map_err(|e| fserror(&mut res, e))?;
 
         match locksystem.unlock(&path, token) {
             Ok(_) => {
-                *res.status_mut() = SC::NoContent;
+                *res.status_mut() = SC::NO_CONTENT;
                 Ok(())
             },
             Err(_) => {
-                Err(statuserror(&mut res, SC::Conflict))
+                Err(statuserror(&mut res, SC::CONFLICT))
             }
         }
     }
@@ -246,20 +245,21 @@ pub(crate) fn list_supportedlock(ls: Option<&Box<DavLockSystem>>) -> Element {
 
 // process timeout header
 fn get_timeout(req: &Request, refresh: bool, shared: bool) -> Option<Duration> {
-    let vec = match req.headers.get::<Timeout>() {
-        Some(&headers::Timeout(ref v)) if v.len() > 0 => v,
-        _ => return None,
-    };
     let max_timeout = if shared {
         Duration::new(86400, 0)
     } else {
         Duration::new(600, 0)
     };
-    match vec[0] {
-        DavTimeout::Infinite => {
-            if refresh { None } else { Some(max_timeout) }
-        },
-        DavTimeout::Seconds(n) => Some(cmp::min(max_timeout, Duration::new(n as u64, 0))),
+    match req.headers.typed_get::<Timeout>() {
+        Some(headers::Timeout(ref vec)) if vec.len() > 0 => {
+            match vec[0] {
+                DavTimeout::Infinite => {
+                    if refresh { None } else { Some(max_timeout) }
+                },
+                DavTimeout::Seconds(n) => Some(cmp::min(max_timeout, Duration::new(n as u64, 0))),
+            }
+        }
+        _ => None,
     }
 }
 

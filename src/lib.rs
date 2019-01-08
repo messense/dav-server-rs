@@ -64,11 +64,11 @@ mod headers;
 //mod handle_copymove;
 //mod handle_delete;
 mod handle_gethead;
-//mod handle_lock;
+mod handle_lock;
 //mod handle_mkcol;
-//mod handle_options;
-//mod handle_props;
-//mod handle_put;
+mod handle_options;
+mod handle_props;
+mod handle_put;
 mod multierror;
 mod conditional;
 mod xmltree_ext;
@@ -358,17 +358,20 @@ impl DavInner {
         debug!("== START REQUEST {:?} {}", method, path);
         if let Err(e) = match method {
             Method::Head | Method::Get => self.handle_get(req, res),
-            //Method::Put | Method::Patch => self.handle_put(req, res),
-            //Method::Options => self.handle_options(req, res),
-            //Method::PropFind => self.handle_propfind(req, res),
-            //Method::PropPatch => self.handle_proppatch(req, res),
+            Method::Put | Method::Patch => self.handle_put(req, res),
+            Method::Options => self.handle_options(req, res),
+            Method::PropFind => self.handle_propfind(req, res),
+            Method::PropPatch => self.handle_proppatch(req, res),
             //Method::MkCol => self.handle_mkcol(req, res),
             //Method::Copy => self.handle_copymove(method, req, res),
             //Method::Move => self.handle_copymove(method, req, res),
             //Method::Delete => self.handle_delete(req, res),
-            //Method::Lock => self.handle_lock(req, res),
-            //Method::Unlock => self.handle_unlock(req, res),
-            _ => self.handle_get(req, res),
+            Method::Lock => self.handle_lock(req, res),
+            Method::Unlock => self.handle_unlock(req, res),
+            _ => {
+                *res.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
+                return;
+            },
         } {
             debug!("== END REQUEST result {:?}", e);
         } else {

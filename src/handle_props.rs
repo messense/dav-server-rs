@@ -4,10 +4,7 @@ use std::io::BufWriter;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use hyper;
-use hyper::status::StatusCode as SC;
-use hyper::server::{Request,Response};
-use hyper::net::Streaming;
+use http::StatusCode as SC;
 
 use xml::EmitterConfig;
 use xml::common::XmlVersion;
@@ -15,8 +12,11 @@ use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
 
 use xmltree::Element;
+
+use crate::sync_adapter::{Request,Response};
 use crate::xmltree_ext::*;
 
+use crate::typed_headers::HeaderMapExt;
 use crate::fserror;
 use crate::headers;
 use crate::webpath::*;
@@ -57,10 +57,10 @@ lazy_static! {
     static ref PROPNAME : Vec<Element> = init_staticprop(PROPNAME_STR);
 }
 
-type Emitter<'a> = EventWriter<BufWriter<Response<'a, Streaming>>>;
+type Emitter = EventWriter<BufWriter<Response>>;
 
-struct PropWriter<'a, 'k: 'a> {
-    emitter:    Emitter<'k>,
+struct PropWriter<'a> {
+    emitter:    Emitter,
     name:       &'a str,
     props:      Vec<Element>,
     fs:         &'a Box<DavFileSystem>,
@@ -101,17 +101,17 @@ impl DavInner {
 
         let xmldata = self.read_request_max(&mut req, 8192);
 
-        let cc = vec!(b"no-store, no-cache, must-revalidate".to_vec());
-        let pg = vec!(b"no-cache".to_vec());
-        res.headers_mut().set_raw("Cache-Control", cc);
-        res.headers_mut().set_raw("Pragma", pg);
+        let cc = "no-store, no-cache, must-revalidate".parse().unwrap();
+        let pg = "no-cache".parse().unwrap();
+        res.headers_mut().insert("Cache-Control", cc);
+        res.headers_mut().insert("Pragma", pg);
 
-        let depth = match req.headers.get::<headers::Depth>() {
-            Some(&headers::Depth::Infinity) | None => {
-                if let None = req.headers.get::<headers::XLitmus>() {
-                    *res.status_mut() = SC::Forbidden;
-                    write!(res.start()?, "PROPFIND requests with a Depth of \"infinity\" are not allowed\r\n")?;
-                    return Err(DavError::Status(SC::Forbidden));
+        let depth = match req.headers.typed_get::<headers::Depth>() {
+            Some(headers::Depth::Infinity) | None => {
+                if let None = req.headers.typed_get::<headers::XLitmus>() {
+                    *res.status_mut() = SC::FORBIDDEN;
+                    write!(res.start(), "PROPFIND requests with a Depth of \"infinity\" are not allowed\r\n")?;
+                    return Err(DavError::Status(SC::FORBIDDEN));
                 }
                 headers::Depth::Infinity
             },
@@ -203,49 +203,48 @@ impl DavInner {
             Some(NS_DAV_URI) => match prop.name.as_str() {
                 "getcontentlanguage" => {
                     if prop.text.is_none() || prop.children.len() > 0 {
-                        return SC::Conflict;
+                        return SC::CONFLICT;
                     }
                     // only here to make "litmus" happy, really...
                     if let Some(ref s) = prop.text {
-                        use hyper::header::Header;
-                        use hyper::header::ContentLanguage;
-                        match ContentLanguage::parse_header(&[s.as_bytes().to_vec()]) {
+                        use crate::typed_headers::{ContentLanguage,Header,Raw};
+                        match ContentLanguage::parse_header(&Raw::from(s.as_str())) {
                             Ok(ContentLanguage(ref v)) if v.len() > 0 => {},
-                            _ => return SC::Conflict,
+                            _ => return SC::CONFLICT,
                         }
                     }
-                    if can_deadprop { SC::Continue } else { SC::Forbidden }
+                    if can_deadprop { SC::CONTINUE } else { SC::FORBIDDEN }
                 },
                 "displayname" => {
                     if prop.text.is_none() || prop.children.len() > 0 {
-                        return SC::Conflict;
+                        return SC::CONFLICT;
                     }
-                    if can_deadprop { SC::Continue } else { SC::Forbidden }
+                    if can_deadprop { SC::CONTINUE } else { SC::FORBIDDEN }
                 },
                 "getlastmodified" => {
                     // we might allow setting modified time
                     // by using utimes() on unix. Not yet though.
                     if prop.text.is_none() || prop.children.len() > 0 {
-                        return SC::Conflict;
+                        return SC::CONFLICT;
                     }
-                    SC::Forbidden
+                    SC::FORBIDDEN
                 },
-                _ => SC::Forbidden,
+                _ => SC::FORBIDDEN,
             },
             Some(NS_APACHE_URI) => match prop.name.as_str() {
                 "executable" => {
                     // we could allow toggling the execute bit.
                     // to be implemented.
                     if prop.text.is_none() || prop.children.len() > 0 {
-                        return SC::Conflict;
+                        return SC::CONFLICT;
                     }
-                    SC::Forbidden
+                    SC::FORBIDDEN
                 },
-                _ => SC::Forbidden,
+                _ => SC::FORBIDDEN,
             },
             Some(NS_XS4ALL_URI) => {
                 // no xs4all properties can be changed.
-                SC::Forbidden
+                SC::FORBIDDEN
             },
             Some(NS_MS_URI) => match prop.name.as_str() {
                 "Win32CreationTime" |
@@ -253,16 +252,16 @@ impl DavInner {
                 "Win32LastAccessTime" |
                 "Win32LastModifiedTime" => {
                     if prop.text.is_none() || prop.children.len() > 0 {
-                        return SC::Conflict;
+                        return SC::CONFLICT;
                     }
                     // Always report back that we successfully
                     // changed these, even if we didn't --
                     // makes the windows webdav client work.
-                    SC::Ok
+                    SC::OK
                 },
-                _ => SC::Forbidden,
+                _ => SC::FORBIDDEN,
             },
-            _ => SC::Continue,
+            _ => SC::CONTINUE,
         }
     }
 
@@ -274,17 +273,17 @@ impl DavInner {
                 "getcontentlanguage" |
                 "displayname" => {
                     if can_deadprop {
-                        SC::Ok
+                        SC::OK
                     } else {
-                        SC::Forbidden
+                        SC::FORBIDDEN
                     }
                 },
-                _ => SC::Forbidden,
+                _ => SC::FORBIDDEN,
             },
             Some(NS_APACHE_URI) |
             Some(NS_XS4ALL_URI) |
-            Some(NS_MS_URI) => SC::Forbidden,
-            _ => SC::Continue,
+            Some(NS_MS_URI) => SC::FORBIDDEN,
+            _ => SC::CONTINUE,
         }
     }
 
@@ -309,7 +308,7 @@ impl DavInner {
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             if let Err(_l) = locksystem.check(&path, false, t) {
-                return Err(statuserror(&mut res, SC::Locked));
+                return Err(statuserror(&mut res, SC::LOCKED));
             }
         }
 
@@ -338,13 +337,13 @@ impl DavInner {
                 match elem.name.as_str() {
                     "set" => {
                         match self.liveprop_set(&n, can_deadprop) {
-                            SC::Continue => set.push(element_to_davprop_full(&n)),
+                            SC::CONTINUE => set.push(element_to_davprop_full(&n)),
                             s => ret.push((s, element_to_davprop(&n))),
                         }
                     },
                     "remove" => {
                         match self.liveprop_remove(&n, can_deadprop) {
-                            SC::Continue => rem.push(element_to_davprop(&n)),
+                            SC::CONTINUE => rem.push(element_to_davprop(&n)),
                             s => ret.push((s, element_to_davprop(&n))),
                         }
                     },
@@ -354,16 +353,16 @@ impl DavInner {
         }
 
         // if any set/remove failed, stop processing here.
-        if ret.iter().any(|&(ref s, _)| s != &SC::Ok) {
+        if ret.iter().any(|&(ref s, _)| s != &SC::OK) {
             ret = ret.into_iter().map(|(s, p)|
-                if s == SC::Ok {
-                    (SC::FailedDependency, p)
+                if s == SC::OK {
+                    (SC::FAILED_DEPENDENCY, p)
                 } else {
                     (s, p)
                 }
             ).collect::<Vec<_>>();
             ret.extend(set.into_iter().chain(rem.into_iter())
-                    .map(|p| (SC::FailedDependency, p)));
+                    .map(|p| (SC::FAILED_DEPENDENCY, p)));
         } else if set.len() > 0 || rem.len() > 0 {
             // hmmm ... we assume nothing goes wrong here at the
             // moment. if it does, we should roll back the earlier
@@ -393,14 +392,14 @@ impl DavInner {
     }
 }
 
-impl<'a, 'k> PropWriter<'a, 'k> {
+impl<'a> PropWriter<'a> {
 
-    pub fn new(req: &'a Request, mut res: Response<'k>, name: &'a str, mut props: Vec<Element>, fs: &'a Box<DavFileSystem>, ls: Option<&'a Box<DavLockSystem>>) -> DavResult<PropWriter<'a, 'k>> {
+    pub fn new(req: &'a Request, mut res: Response, name: &'a str, mut props: Vec<Element>, fs: &'a Box<DavFileSystem>, ls: Option<&'a Box<DavLockSystem>>) -> DavResult<PropWriter<'a>> {
 
-        let contenttype = vec!(b"application/xml; charset=utf-8".to_vec());
-        res.headers_mut().set_raw("Content-Type", contenttype);
-        *res.status_mut() = SC::MultiStatus;
-        let res = res.start()?;
+        let contenttype = "application/xml; charset=utf-8".parse().unwrap();
+        res.headers_mut().insert("content-type", contenttype);
+        *res.status_mut() = SC::MULTI_STATUS;
+        let res = res.start();
 
         let mut emitter = EventWriter::new_with_config(
                               BufWriter::new(res),
@@ -438,8 +437,8 @@ impl<'a, 'k> PropWriter<'a, 'k> {
             props.append(&mut v);
         }
 
-        let ua = match req.headers.get::<hyper::header::UserAgent>() {
-            Some(s) => &s.0,
+        let ua = match req.headers.get("user-agent") {
+            Some(s) => s.to_str().unwrap_or(""),
             None => "",
         };
 
@@ -463,7 +462,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                 e.text = Some(t.to_string());
             }
         }
-        (SC::Ok, e)
+        (SC::OK, e)
     }
 
     fn get_quota(&self, qc: &mut QuotaCache, path: &WebPath, meta: &DavMetaData) -> FsResult<(u64, Option<u64>)> {
@@ -557,13 +556,13 @@ impl<'a, 'k> PropWriter<'a, 'k> {
                         let dir = Element::new2("D:collection");
                         elem.children.push(dir);
                     }
-                    return (SC::Ok, elem);
+                    return (SC::OK, elem);
                 },
                 "supportedlock" => {
-                    return (SC::Ok, list_supportedlock(self.ls));
+                    return (SC::OK, list_supportedlock(self.ls));
                 },
                 "lockdiscovery" => {
-                    return (SC::Ok, list_lockdiscovery(self.ls, path));
+                    return (SC::OK, list_lockdiscovery(self.ls, path));
                 },
                 "quota-available-bytes" => {
                     if let Ok((_, Some(avail))) = self.get_quota(&mut qc, path, meta) {
@@ -650,11 +649,11 @@ impl<'a, 'k> PropWriter<'a, 'k> {
             let dprop = element_to_davprop(prop);
             if let Ok(xml) = self.fs.get_prop(path, dprop) {
                 if let Ok(e) = Element::parse(Cursor::new(xml)) {
-                    return (SC::Ok, e);
+                    return (SC::OK, e);
                 }
             }
         }
-        (SC::NotFound, prop.clone())
+        (SC::NOT_FOUND, prop.clone())
     }
 
     fn write_props(&mut self, path: &WebPath, meta: &DavMetaData) -> Result<(), DavError> {
@@ -673,7 +672,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         let mut qc = self.q_cache;
         for p in &self.props {
             let (sc, elem) = self.build_prop(p, path, meta, &mut qc, do_content);
-            if sc == SC::Ok || (self.name != "propname" && self.name != "allprop") {
+            if sc == SC::OK || (self.name != "propname" && self.name != "allprop") {
                 add_sc_elem(&mut props, sc, elem);
             }
         }
@@ -683,7 +682,7 @@ impl<'a, 'k> PropWriter<'a, 'k> {
         if (self.name == "propname" || self.name == "allprop") && self.fs.have_props(path) {
             if let Ok(v) = self.fs.get_props(path, do_content) {
                 v.into_iter().map(davprop_to_element).
-                    for_each(|e| add_sc_elem(&mut props, SC::Ok, e));
+                    for_each(|e| add_sc_elem(&mut props, SC::OK, e));
             }
         }
 

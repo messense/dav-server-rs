@@ -1,7 +1,7 @@
+use http::StatusCode as SC;
 
-use hyper;
-use hyper::server::{Request,Response};
-use hyper::status::StatusCode as SC;
+use crate::sync_adapter::{Request,Response};
+use crate::typed_headers::{self, HeaderMapExt};
 use crate::headers;
 use crate::fs::{DavMetaData,FsResult};
 use crate::{dav_method,Method,DavResult};
@@ -12,16 +12,16 @@ impl crate::DavInner {
         {
             let h = res.headers_mut();
             if self.ls.is_some() {
-                h.set(headers::DAV("1,2,3,sabredav-partialupdate".to_string()));
+                h.typed_insert(headers::DAV("1,2,3,sabredav-partialupdate".to_string()));
             } else {
-                h.set(headers::DAV("1,3,sabredav-partialupdate".to_string()));
+                h.typed_insert(headers::DAV("1,3,sabredav-partialupdate".to_string()));
             }
-            h.set(headers::MSAuthorVia("DAV".to_string()));
-            h.set(hyper::header::ContentLength(0));
+            h.typed_insert(headers::MSAuthorVia("DAV".to_string()));
+            h.typed_insert(typed_headers::ContentLength(0));
         }
         let meta = self.fs.metadata(&self.path(&req));
         self.do_options(&req, &mut res, meta)?;
-        *res.status_mut() = SC::Ok;
+        *res.status_mut() = SC::OK;
         Ok(())
     }
 
@@ -71,8 +71,8 @@ impl crate::DavInner {
             mm(&mut v, "UNLOCK", Method::Unlock);
         }
 
-        let a = v.clone().join(",").as_bytes().to_owned();
-        res.headers_mut().set_raw("Allow", vec!(a));
+        let a = v.clone().join(",").parse().unwrap();
+        res.headers_mut().insert("allow", a);
 
         Ok(())
     }
