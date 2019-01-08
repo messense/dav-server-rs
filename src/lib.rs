@@ -65,7 +65,7 @@ mod headers;
 //mod handle_delete;
 mod handle_gethead;
 mod handle_lock;
-//mod handle_mkcol;
+mod handle_mkcol;
 mod handle_options;
 mod handle_props;
 mod handle_put;
@@ -362,7 +362,7 @@ impl DavInner {
             Method::Options => self.handle_options(req, res),
             Method::PropFind => self.handle_propfind(req, res),
             Method::PropPatch => self.handle_proppatch(req, res),
-            //Method::MkCol => self.handle_mkcol(req, res),
+            Method::MkCol => self.handle_mkcol(req, res),
             //Method::Copy => self.handle_copymove(method, req, res),
             //Method::Move => self.handle_copymove(method, req, res),
             //Method::Delete => self.handle_delete(req, res),
