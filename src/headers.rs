@@ -290,7 +290,7 @@ impl Header for XUpdateRange {
         if s == "append" {
             return Ok(XUpdateRange::Append);
         }
-        if !s.starts_with("bytes ") {
+        if !s.starts_with("bytes=") {
             Err(typed_headers::Error::Header)?;
         }
         s = &s[6..];
