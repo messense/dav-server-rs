@@ -43,7 +43,7 @@ impl MemLs {
 
 impl DavLockSystem for MemLs {
 
-    fn lock(&self, path: &WebPath, owner: Option<&Element>, timeout: Option<Duration>, shared: bool, deep: bool) -> Result<DavLock, DavLock> {
+    fn lock(&self, path: &WebPath, principal: Option<&str>, owner: Option<&Element>, timeout: Option<Duration>, shared: bool, deep: bool) -> Result<DavLock, DavLock> {
         let inner = &mut *self.0.lock().unwrap();
 
         // any locks in the path?
@@ -67,6 +67,7 @@ impl DavLockSystem for MemLs {
         let lock = DavLock{
             token:      Uuid::new_v4().to_urn().to_string(),
             path:       path.clone(),
+            principal:  principal.map(|s| s.to_string()),
             owner:      owner.cloned(),
             timeout_at: timeout_at,
             timeout:    timeout,
@@ -116,7 +117,7 @@ impl DavLockSystem for MemLs {
         Ok(lock.clone())
     }
 
-    fn check(&self, path: &WebPath, deep: bool, submitted_tokens: Vec<&str>) -> Result<(), DavLock> {
+    fn check(&self, path: &WebPath, _principal: Option<&str>, deep: bool, submitted_tokens: Vec<&str>) -> Result<(), DavLock> {
         let inner = &*self.0.lock().unwrap();
         let st = submitted_tokens.clone();
         let rc = check_locks_to_path(&inner.tree, path, &submitted_tokens, false);

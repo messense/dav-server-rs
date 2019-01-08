@@ -132,7 +132,7 @@ impl crate::DavInner {
 
         // create lock
         let timeout = get_timeout(&req, false, shared);
-        let lock = match locksystem.lock(&path, owner.as_ref(), timeout, shared, deep) {
+        let lock = match locksystem.lock(&path, None, owner.as_ref(), timeout, shared, deep) {
             Ok(lock) => lock,
             Err(_) => return Err(statuserror(&mut res, SC::LOCKED)),
         };

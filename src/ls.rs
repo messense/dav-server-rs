@@ -10,6 +10,7 @@ use crate::webpath::WebPath;
 pub struct DavLock {
     pub token:      String,
     pub path:       WebPath,
+    pub principal:  Option<String>,
     pub owner: 	    Option<Element>,
     pub timeout_at: Option<SystemTime>,
     pub timeout:    Option<Duration>,
@@ -25,7 +26,7 @@ pub trait DavLockSystem : Debug + Sync + Send + BoxCloneLs {
 
     /// Lock a node. Returns Ok(new_lock) if succeeded,
 	/// or Err(conflicting_lock) if failed.
-    fn lock(&self, path: &WebPath, owner: Option<&Element>, timeout: Option<Duration>, shared: bool, deep: bool) -> Result<DavLock, DavLock>;
+    fn lock(&self, path: &WebPath, principal: Option<&str>, owner: Option<&Element>, timeout: Option<Duration>, shared: bool, deep: bool) -> Result<DavLock, DavLock>;
 
     /// Unlock a node. Returns empty Ok if succeeded, empty Err if failed
     /// (because lock doesn't exist)
@@ -36,7 +37,7 @@ pub trait DavLockSystem : Debug + Sync + Send + BoxCloneLs {
 
     /// Check if node is locked and if so, if we own all the locks.
     /// If not, returns as Err one conflicting lock.
-    fn check(&self, path: &WebPath, deep: bool, submitted_tokens: Vec<&str>) -> Result<(), DavLock>;
+    fn check(&self, path: &WebPath, principal: Option<&str>, deep: bool, submitted_tokens: Vec<&str>) -> Result<(), DavLock>;
 
     /// Find and return all locks that cover a given path.
     fn discover(&self, path: &WebPath) -> Vec<DavLock>;

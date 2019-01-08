@@ -202,12 +202,12 @@ impl crate::DavInner {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             if method == Method::Move {
                 // for MOVE check if source path is locked
-                if let Err(_l) = locksystem.check(&path, true, t.clone()) {
+                if let Err(_l) = locksystem.check(&path, None, true, t.clone()) {
                     return multierror.finalstatus(&path, SC::LOCKED);
                 }
             }
             // for MOVE and COPY check if destination is locked
-            if let Err(_l) = locksystem.check(&dest, true, t) {
+            if let Err(_l) = locksystem.check(&dest, None, true, t) {
                 return multierror.finalstatus(&path, SC::LOCKED);
             }
         }
