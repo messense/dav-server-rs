@@ -1,7 +1,8 @@
 
-use hyper::server::{Request,Response};
-use hyper::status::StatusCode as SC;
+use http::StatusCode as SC;
 
+use crate::sync_adapter::{Request,Response};
+use crate::typed_headers::{HeaderMapExt};
 use crate::DavResult;
 use crate::{statuserror,fserror,fserror_to_status};
 use crate::errors::DavError;
@@ -24,7 +25,7 @@ fn add_status(res: &mut MultiError, path: &WebPath, e: FsError) -> DavError {
 // mappings are not 100% the same.
 fn dir_status(res: &mut MultiError, path: &WebPath, e: FsError) -> DavError {
     let status = match e {
-        FsError::Exists => SC::Conflict,
+        FsError::Exists => SC::CONFLICT,
         e => fserror_to_status(e),
     };
     if let Err(x) = res.add_status(path, status) {
@@ -85,9 +86,9 @@ impl crate::DavInner {
 
         // RFC4918 9.6.1 DELETE for Collections.
         // Not that allowing Depth: 0 is NOT RFC compliant.
-        let depth = match req.headers.get::<Depth>() {
-            Some(&Depth::Infinity) | None => Depth::Infinity,
-            Some(&Depth::Zero) => Depth::Zero,
+        let depth = match req.headers.typed_get::<Depth>() {
+            Some(Depth::Infinity) | None => Depth::Infinity,
+            Some(Depth::Zero) => Depth::Zero,
             _ => return Err(statuserror(&mut res, SC::BAD_REQUEST)),
         };
 
@@ -112,7 +113,7 @@ impl crate::DavInner {
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             if let Err(_l) = locksystem.check(&path, true, t) {
-                return Err(statuserror(&mut res, SC::Locked));
+                return Err(statuserror(&mut res, SC::LOCKED));
             }
         }
 
@@ -123,7 +124,7 @@ impl crate::DavInner {
             if let Some(ref locksystem) = self.ls {
                 locksystem.delete(&path).ok();
             }
-            return multierror.finalstatus(&path, SC::NoContent);
+            return multierror.finalstatus(&path, SC::NO_CONTENT);
         }
 
         let status = multierror.close()?;

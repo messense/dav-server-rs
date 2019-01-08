@@ -61,8 +61,8 @@
 
 mod errors;
 mod headers;
-//mod handle_copymove;
-//mod handle_delete;
+mod handle_copymove;
+mod handle_delete;
 mod handle_gethead;
 mod handle_lock;
 mod handle_mkcol;
@@ -363,15 +363,11 @@ impl DavInner {
             Method::PropFind => self.handle_propfind(req, res),
             Method::PropPatch => self.handle_proppatch(req, res),
             Method::MkCol => self.handle_mkcol(req, res),
-            //Method::Copy => self.handle_copymove(method, req, res),
-            //Method::Move => self.handle_copymove(method, req, res),
-            //Method::Delete => self.handle_delete(req, res),
+            Method::Copy => self.handle_copymove(method, req, res),
+            Method::Move => self.handle_copymove(method, req, res),
+            Method::Delete => self.handle_delete(req, res),
             Method::Lock => self.handle_lock(req, res),
             Method::Unlock => self.handle_unlock(req, res),
-            _ => {
-                *res.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
-                return;
-            },
         } {
             debug!("== END REQUEST result {:?}", e);
         } else {
