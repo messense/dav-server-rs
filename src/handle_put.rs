@@ -10,12 +10,6 @@ use crate::headers;
 use crate::{statuserror,fserror,systemtime_to_httpdate};
 use crate::conditional::if_match_get_tokens;
 
-macro_rules! statuserror {
-    ($res:ident, $s:ident) => {
-        return Err(statuserror(&mut $res, SC::$s))?
-    }
-}
-
 const SABRE: &'static str = "application/x-sabredav-partialupdate";
 
 impl crate::DavInner {
@@ -45,8 +39,7 @@ impl crate::DavInner {
         if req.method == http::Method::PATCH {
             if !req.headers.typed_get::<headers::ContentType>()
                     .map_or(false, |ct| ct.0 == SABRE) {
-                //return Err(statuserror(&mut res, SC::UNSUPPORTED_MEDIA_TYPE));
-                statuserror!(res, UNSUPPORTED_MEDIA_TYPE);
+                return Err(statuserror(&mut res, SC::UNSUPPORTED_MEDIA_TYPE));
             }
             if !have_count {
                 return Err(statuserror(&mut res, SC::LENGTH_REQUIRED));

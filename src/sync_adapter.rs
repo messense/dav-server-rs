@@ -30,6 +30,7 @@ enum Error {
     HttpError(http::Error),
     ReqBody(String),
     ReqProxy,
+    ReqProxySend,
     RespProxy,
     BodyTooLarge,
 }
@@ -213,11 +214,34 @@ where
     let (reqbody, respbody) = spawn_on_pool(parts, oldhandler);
 
     // first send the request body.
-    let reqbody = reqbody.sink_map_err(|_| Error::ReqProxy);
+    let reqbody = reqbody.sink_map_err(|e| {
+        debug!("proxy_to_pool: request body forwarding error {:?}", e);
+        // Map the error from the channel to one of our own errors.
+        //
+        // Unfortunately, we cannot match on mpsc::SendError because the
+        // inner member is private. Not even SendError<_>(..) works ...
+        let desc = {
+            use std::error::Error;
+            e.description()
+        };
+        if desc.starts_with("send failed") {
+            Error::ReqProxySend
+        } else {
+            Error::ReqProxy
+        }
+    });
     let forward_request = body.forward(reqbody);
 
     // now receive the response.
     let fut = forward_request
+        .then(|res| {
+            // Ignore ReqProxySend, it means the worker has gone away-
+            // but there might still be a Response in the return channel.
+            match res {
+                Ok(_) | Err(Error::ReqProxySend) => Ok(()),
+                Err(e) => Err(e),
+            }
+        })
         .and_then(|_| respbody.into_future().map_err(|_| Error::RespProxy))
         .then(move |res| {
             // So the first item from the stream is response status + response headers.
@@ -225,10 +249,12 @@ where
                 Ok((Some(RespItem::Head { status, headers }), strm)) => (status, headers, strm),
                 _ => return Err(Error::RespProxy),
             };
+            debug!("proxy_to_pool: read response from channel");
 
             // the rest of the stream is the response body, a stream of Bytes.
             let strm = strm
                 .map(|item: RespItem| {
+                    debug!("proxy_to_pool: read body RespItem");
                     match item {
                         RespItem::Body(item) => item,
                         _ => Bytes::new(),
@@ -267,7 +293,8 @@ where
                 let err = io::Error::new(io::ErrorKind::BrokenPipe, "error reading response channel");
                 return future::Either::A(future::err(err));
             },
-            Err(Error::ReqProxy) => (StatusCode::INTERNAL_SERVER_ERROR, "error writing request channel".into()),
+            Err(Error::ReqProxySend) => (StatusCode::INTERNAL_SERVER_ERROR, "error writing request channel".into()),
+            Err(Error::ReqProxy) => (StatusCode::INTERNAL_SERVER_ERROR, "error reading request body".into()),
             Err(Error::ReqBody(e)) => (StatusCode::BAD_REQUEST, format!("reading body: {}", e)),
             Err(Error::BodyTooLarge) => (StatusCode::PAYLOAD_TOO_LARGE, "request body too large".into()),
             Err(Error::HttpError(e)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("head: {}", e)),
