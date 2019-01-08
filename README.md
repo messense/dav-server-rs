@@ -1,13 +1,16 @@
 
 ## webdav-handler
 
-A webdav handler for the Rust "hyper" HTTP server library. Uses a
-interface similar to the Go x/net/webdav package:
+A futures/stream based webdav handler for Rust, using the types from
+the `http` crate. It has an interface similar to the Go x/net/webdav package:
 
-- the library contains an HTTP handler (for Hyper 0.10.x at the moment)
+- the library contains an HTTP handler
 - you supply a "filesystem" for backend storage, which can optionally
   implement reading/writing "DAV properties"
 - you can supply a "locksystem" that handles the webdav locks
+
+With some glue code, this handler can be used from HTTP server
+libraries/frameworks such as hyper or actix-web.
 
 Currently passes the "basic", "copymove", "props", "locks" and "http"
 checks of the Webdav Litmus Test testsuite. That's all of the base
