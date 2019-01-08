@@ -269,31 +269,15 @@ impl DavInner {
     }
 
     pub(crate) fn drain_request(&self, req: &mut Request) -> usize {
-        let (_, done) = self.do_read_request_max(req, 0);
-        done
-    }
-
-    pub(crate) fn read_request_max(&self, req: &mut Request, max: usize) -> Vec<u8> {
-        let (v, _) = self.do_read_request_max(req, max);
-        v
-    }
-
-    pub(crate) fn do_read_request_max(&self, req: &mut Request, max: usize) -> (Vec<u8>, usize) {
-        let mut v = Vec::new();
         let mut buffer = [0; 8192];
         let mut done = 0;
         loop {
             match req.read(&mut buffer[..]) {
-                Ok(n) if n > 0 => {
-                    if v.len() < max {
-                        v.extend_from_slice(&buffer[..n]);
-                    }
-                    done += n;
-                }
+                Ok(n) if n > 0 => done += n,
                 _ => break,
             }
         }
-        (v, done)
+        done
     }
 
     // dispatcher.

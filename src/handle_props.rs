@@ -1,5 +1,5 @@
 
-use std::io::{Cursor,Write};
+use std::io::{Cursor,Read,Write};
 use std::io::BufWriter;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -99,7 +99,9 @@ impl DavInner {
         // No checks on If: and If-* headers here, because I do not see
         // the point and there's nothing in RFC4918 that indicates we should.
 
-        let xmldata = self.read_request_max(&mut req, 8192);
+        // read request.
+        let mut xmldata = Vec::with_capacity(4096);
+        req.read_to_end(&mut xmldata)?;
 
         let cc = "no-store, no-cache, must-revalidate".parse().unwrap();
         let pg = "no-cache".parse().unwrap();
@@ -290,7 +292,8 @@ impl DavInner {
     pub(crate) fn handle_proppatch(&self, mut req: Request, mut res: Response) -> Result<(), DavError> {
 
         // read request.
-        let xmldata = self.read_request_max(&mut req, 65536);
+        let mut xmldata = Vec::with_capacity(4096);
+        req.read_to_end(&mut xmldata)?;
 
         // file must exist.
         let (path, meta) = match self.fixpath(&req, &mut res) {

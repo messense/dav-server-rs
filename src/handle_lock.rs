@@ -1,5 +1,5 @@
 
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 use std::time::Duration;
 use std::cmp;
 
@@ -23,7 +23,8 @@ impl crate::DavInner {
     pub(crate) fn handle_lock(&self, mut req: Request, mut res: Response) -> Result<(), DavError> {
 
         // read request.
-        let xmldata = self.read_request_max(&mut req, 65536);
+        let mut xmldata = Vec::with_capacity(4096);
+        req.read_to_end(&mut xmldata)?;
 
         // must have a locksystem or bail
         let locksystem = match self.ls {
