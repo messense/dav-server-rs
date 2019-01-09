@@ -77,16 +77,16 @@ impl crate::DavInner {
             return Err(statuserror(&mut res, s));
         }
 
-        // Cut & paste from method_get.rs ....
+        // Cut & paste from method_put.rs ....
         let mut oo = OpenOptions::write();
         oo.create = true;
         if req.headers.typed_get::<headers::IfMatch>()
             .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
-                oo.create_new = true;
+                oo.create = false;
         }
         if req.headers.typed_get::<headers::IfNoneMatch>()
             .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
-                oo.create = false;
+                oo.create_new = true;
         }
 
         // parse xml

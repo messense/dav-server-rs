@@ -326,18 +326,11 @@ impl DavInner {
     fn handle(&self, mut req: Request, mut res: Response) {
 
         // debug when running the webdav litmus tests.
-        //if log_enabled!(log::Level::Debug) {
+        if log_enabled!(log::Level::Debug) {
             if let Some(t) = req.headers.typed_get::<headers::XLitmus>() {
                 debug!("X-Litmus: {}", t);
-                debug!("headers: {:?}", req.headers);
             }
-            if let Some(t) = req.headers.typed_get::<typed_headers::Authorization<typed_headers::Basic>>() {
-                debug!("Authorization (typed): {:?}", t);
-            }
-            if let Some(t) = req.headers.get("Authorization") {
-                debug!("Authorization (normal): {:?}", t);
-            }
-        //}
+        }
 
         // translate HTTP method to Webdav method.
         let method = match dav_method(&req.method) {
