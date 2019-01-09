@@ -1,13 +1,16 @@
 
 ## webdav-handler
 
-A webdav handler for the Rust "hyper" HTTP server library. Uses a
-interface similar to the Go x/net/webdav package:
+A futures/stream based webdav handler for Rust, using the types from
+the `http` crate. It has an interface similar to the Go x/net/webdav package:
 
-- the library contains an HTTP handler (for Hyper 0.10.x at the moment)
+- the library contains an HTTP handler
 - you supply a "filesystem" for backend storage, which can optionally
   implement reading/writing "DAV properties"
 - you can supply a "locksystem" that handles the webdav locks
+
+With some glue code, this handler can be used from HTTP server
+libraries/frameworks such as hyper or actix-web.
 
 Currently passes the "basic", "copymove", "props", "locks" and "http"
 checks of the Webdav Litmus Test testsuite. That's all of the base
@@ -28,7 +31,6 @@ Also included are two locksystems:
 # testing
 
 ```
-cd src
 RUST_LOG=webdav_handler=debug cargo run
 ```
 
@@ -40,11 +42,15 @@ For other options, run `cargo run -- --help`
 The standard for webdav compliance testing is "litmus", which is available
 at https://github.com/tolsen/litmus .
 
+For some tests, "litmus" assumes that it is using basic authentication, so
+you must run the test server with the `--auth` flag.
+
 You do not have to install the litmus binary, it's possible to run the tests
 straight from the unpacked & compiled litmus directory:
 
 ```
-$ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. ./litmus http://localhost:4918/
+$ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. \
+	./litmus http://localhost:4918/ someuser somepass
 
 -> running `basic':
  0. init.................. pass
@@ -55,7 +61,8 @@ $ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. ./litmus http
  5. mkcol_over_plain...... pass
  6. delete................ pass
  7. delete_null........... pass
- 8. delete_fragment....... pass
+ 8. delete_fragment....... WARNING: DELETE removed collection resource with Request-URI including fragment; unsafe
+    ...................... pass (with 1 warning)
  9. mkcol................. pass
 10. mkcol_percent_encoded. pass
 11. mkcol_again........... pass
@@ -66,6 +73,7 @@ $ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. ./litmus http
 16. chk_ETag.............. pass
 17. finish................ pass
 <- summary for `basic': of 18 tests run: 18 passed, 0 failed. 100.0%
+-> 1 warning was issued.
 -> running `copymove':
  0. init.................. pass
  1. begin................. pass
@@ -98,17 +106,17 @@ $ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. ./litmus http
  8. propset............... pass
  9. propget............... pass
 10. propfind_empty........ WARNING: Server did not return the property: displayname
-                           WARNING: Server did not return the property: getcontentlanguage
+WARNING: Server did not return the property: getcontentlanguage
     ...................... pass (with 2 warnings)
 11. propfind_allprop_include...................... WARNING: Server did not return the property: displayname
-                                                   WARNING: Server did not return the property: getcontentlanguage
-                                                   WARNING: Server did not return the property: acl
-                                                   WARNING: Server did not return the property: resource-id
+WARNING: Server did not return the property: getcontentlanguage
+WARNING: Server did not return the property: acl
+WARNING: Server did not return the property: resource-id
     ...................... pass (with 4 warnings)
 12. propfind_propname..... WARNING: Server did not return the property: displayname
-                           WARNING: Server did not return the property: getcontentlanguage
-                           WARNING: Server did not return the property: acl
-                           WARNING: Server did not return the property: resource-id
+WARNING: Server did not return the property: getcontentlanguage
+WARNING: Server did not return the property: acl
+WARNING: Server did not return the property: resource-id
     ...................... pass (with 4 warnings)
 13. proppatch_liveunprotect...................... pass
 14. propextended.......... pass
@@ -137,6 +145,77 @@ $ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. ./litmus http
 37. finish................ pass
 <- summary for `props': of 38 tests run: 38 passed, 0 failed. 100.0%
 -> 10 warnings were issued.
+-> running `locks':
+ 0. init.................. pass
+ 1. begin................. pass
+ 2. options............... pass
+ 3. precond............... pass
+ 4. init_locks............ pass
+ 5. lock_on_no_file....... pass
+ 6. double_sharedlock..... pass
+ 7. supportedlock......... pass
+ 8. unlock_on_no_file..... pass
+ 9. put................... pass
+10. lock_excl............. pass
+11. lock_excl_fail........ pass
+12. lockdiscovery......... pass
+13. discover.............. pass
+14. refresh............... pass
+15. notowner_modify....... pass
+16. notowner_lock......... pass
+17. owner_modify.......... pass
+18. notowner_modify....... pass
+19. notowner_lock......... pass
+20. copy.................. pass
+21. cond_put.............. pass
+22. fail_cond_put......... pass
+23. cond_put_with_not..... pass
+24. cond_put_corrupt_token pass
+25. complex_cond_put...... pass
+26. fail_complex_cond_put. pass
+27. unlock................ pass
+28. fail_cond_put_unlocked pass
+29. lock_shared........... pass
+30. lock_excl_fail........ pass
+31. notowner_modify....... pass
+32. notowner_lock......... pass
+33. owner_modify.......... pass
+34. double_sharedlock..... pass
+35. lock_excl_fail........ pass
+36. notowner_modify....... pass
+37. notowner_lock......... pass
+38. cond_put.............. pass
+39. fail_cond_put......... pass
+40. cond_put_with_not..... pass
+41. cond_put_corrupt_token pass
+42. complex_cond_put...... pass
+43. fail_complex_cond_put. pass
+44. unlock................ pass
+45. lock_infinite......... pass
+46. lockdiscovery......... pass
+47. supportedlock......... pass
+48. notowner_modify....... pass
+49. notowner_lock......... pass
+50. discover.............. pass
+51. refresh............... pass
+52. unlock_fail........... pass
+53. lock_invalid_depth.... pass
+54. unlock................ pass
+55. prep_collection....... pass
+56. conflicting_locks..... pass
+57. lock_collection....... pass
+58. supportedlock......... pass
+59. owner_modify.......... pass
+60. notowner_modify....... pass
+61. newowner_modify_notoken...................... pass
+62. newowner_modify_correcttoken...................... pass
+63. refresh............... pass
+64. indirect_refresh...... pass
+65. unlock................ pass
+66. unmap_lockroot........ pass
+67. lockcleanup........... pass
+68. finish................ pass
+<- summary for `locks': of 69 tests run: 69 passed, 0 failed. 100.0%
 -> running `http':
  0. init.................. pass
  1. begin................. pass

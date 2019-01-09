@@ -43,17 +43,17 @@ impl MemLs {
 
 impl DavLockSystem for MemLs {
 
-    fn lock(&self, path: &WebPath, owner: Option<&Element>, timeout: Option<Duration>, shared: bool, deep: bool) -> Result<DavLock, DavLock> {
+    fn lock(&self, path: &WebPath, principal: Option<&str>, owner: Option<&Element>, timeout: Option<Duration>, shared: bool, deep: bool) -> Result<DavLock, DavLock> {
         let inner = &mut *self.0.lock().unwrap();
 
         // any locks in the path?
-        let rc = check_locks_to_path(&inner.tree, path, &Vec::new(), shared);
+        let rc = check_locks_to_path(&inner.tree, path, None, true, &Vec::new(), shared);
         debug!("lock: check_locks_to_path: {:?}", rc);
         rc?;
 
         // if it's a deep lock we need to check if there are locks furter along the path.
         if deep {
-            let rc = check_locks_from_path(&inner.tree, path, &Vec::new(), shared);
+            let rc = check_locks_from_path(&inner.tree, path, None, true, &Vec::new(), shared);
             debug!("lock: check_locks_from_path: {:?}", rc);
             rc?;
         }
@@ -67,6 +67,7 @@ impl DavLockSystem for MemLs {
         let lock = DavLock{
             token:      Uuid::new_v4().to_urn().to_string(),
             path:       path.clone(),
+            principal:  principal.map(|s| s.to_string()),
             owner:      owner.cloned(),
             timeout_at: timeout_at,
             timeout:    timeout,
@@ -116,16 +117,16 @@ impl DavLockSystem for MemLs {
         Ok(lock.clone())
     }
 
-    fn check(&self, path: &WebPath, deep: bool, submitted_tokens: Vec<&str>) -> Result<(), DavLock> {
+    fn check(&self, path: &WebPath, principal: Option<&str>, ignore_principal: bool, deep: bool, submitted_tokens: Vec<&str>) -> Result<(), DavLock> {
         let inner = &*self.0.lock().unwrap();
-        let st = submitted_tokens.clone();
-        let rc = check_locks_to_path(&inner.tree, path, &submitted_tokens, false);
-        debug!("check: check_lock_to_path: {:?}: {:?}", st, rc);
+        let _st = submitted_tokens.clone();
+        let rc = check_locks_to_path(&inner.tree, path, principal, ignore_principal, &submitted_tokens, false);
+        debug!("check: check_lock_to_path: {:?}: {:?}", _st, rc);
         rc?;
 
         // if it's a deep lock we need to check if there are locks furter along the path.
         if deep {
-            let rc = check_locks_from_path(&inner.tree, path, &submitted_tokens, false);
+            let rc = check_locks_from_path(&inner.tree, path, principal, ignore_principal, &submitted_tokens, false);
             debug!("check: check_locks_from_path: {:?}", rc);
             rc?;
         }
@@ -147,7 +148,7 @@ impl DavLockSystem for MemLs {
 }
 
 // check if there are any locks along the path.
-fn check_locks_to_path(tree: &Tree, path: &WebPath, submitted_tokens: &Vec<&str>, shared_ok: bool) -> Result<(), DavLock> {
+fn check_locks_to_path(tree: &Tree, path: &WebPath, principal: Option<&str>, ignore_principal: bool, submitted_tokens: &Vec<&str>, shared_ok: bool) -> Result<(), DavLock> {
 
     // path segments
     let segs = path_to_segs(path, true);
@@ -174,7 +175,9 @@ fn check_locks_to_path(tree: &Tree, path: &WebPath, submitted_tokens: &Vec<&str>
             if i < last_seg && !nl.deep {
                 continue
             }
-            if submitted_tokens.iter().any(|t| &nl.token == t) {
+            if submitted_tokens.iter().any(|t| &nl.token == t) &&
+                (ignore_principal ||
+                 principal == nl.principal.as_ref().map(|p| p.as_str())) {
                 // fine, we hold this lock.
                 holds_lock = true;
             } else {
@@ -200,30 +203,32 @@ fn check_locks_to_path(tree: &Tree, path: &WebPath, submitted_tokens: &Vec<&str>
 }
 
 // See if there are locks in any path below this collection.
-fn check_locks_from_path(tree: &Tree, path: &WebPath, submitted_tokens: &Vec<&str>, shared_ok: bool) -> Result<(), DavLock> {
+fn check_locks_from_path(tree: &Tree, path: &WebPath, principal: Option<&str>, ignore_principal: bool, submitted_tokens: &Vec<&str>, shared_ok: bool) -> Result<(), DavLock> {
     let node_id = match lookup_node(tree, path) {
         Some(id) => id,
         None => return Ok(()),
     };
-    check_locks_from_node(tree, node_id, submitted_tokens, shared_ok)
+    check_locks_from_node(tree, node_id, principal, ignore_principal, submitted_tokens, shared_ok)
 }
 
 // See if there are locks in any nodes below this node.
-fn check_locks_from_node(tree: &Tree, node_id: u64, submitted_tokens: &Vec<&str>, shared_ok: bool) -> Result<(), DavLock> {
+fn check_locks_from_node(tree: &Tree, node_id: u64, principal: Option<&str>, ignore_principal: bool, submitted_tokens: &Vec<&str>, shared_ok: bool) -> Result<(), DavLock> {
     let node_locks = match tree.get_node(node_id) {
         Ok(n) => n,
         Err(_) => return Ok(()),
     };
     for nl in node_locks {
         if !nl.shared || !shared_ok {
-            if !submitted_tokens.iter().any(|t| t == &nl.token) {
+            if !submitted_tokens.iter().any(|t| t == &nl.token) ||
+                (!ignore_principal &&
+                 principal != nl.principal.as_ref().map(|p| p.as_str())) {
                 return Err(nl.to_owned());
             }
         }
     }
     if let Ok(children) = tree.get_children(node_id) {
         for (_, node_id) in children {
-            if let Err(l) = check_locks_from_node(tree, node_id, submitted_tokens, shared_ok) {
+            if let Err(l) = check_locks_from_node(tree, node_id, principal, ignore_principal, submitted_tokens, shared_ok) {
                 return Err(l);
             }
         }

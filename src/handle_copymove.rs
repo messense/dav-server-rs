@@ -1,7 +1,8 @@
 
-use hyper::server::{Request,Response};
-use hyper::status::StatusCode as SC;
+use http::StatusCode as SC;
 
+use crate::sync_adapter::{Request,Response};
+use crate::typed_headers::HeaderMapExt;
 use crate::{Method,DavResult};
 use crate::{statuserror,daverror,fserror,fserror_to_status};
 use crate::errors::DavError;
@@ -20,7 +21,7 @@ fn add_status(res: &mut MultiError, path: &WebPath, e: FsError) -> DavError {
     DavError::Status(status)
 }
 
-impl crate::DavHandler {
+impl crate::DavInner {
 
     pub(crate) fn do_copy(&self, source: &WebPath, topdest: &WebPath, dest: &WebPath, depth: Depth, multierror: &mut MultiError) -> FsResult<()> {
         debug!("do_copy {} {} depth {:?}", source, dest, depth);
@@ -114,7 +115,7 @@ impl crate::DavHandler {
             add_status(&mut multierror, source, e);
             Err(DavError::Status(multierror.close()?))
         } else {
-            let s = if existed { SC::NoContent } else { SC::Created };
+            let s = if existed { SC::NO_CONTENT } else { SC::CREATED };
             multierror.finalstatus(source, s)
         }
     }
@@ -122,16 +123,16 @@ impl crate::DavHandler {
     pub(crate) fn handle_copymove(&self, method: Method, req: Request, mut res: Response) -> DavResult<()> {
 
         // get and check headers.
-        let overwrite = req.headers.get::<headers::Overwrite>().map_or(true, |o| o.0);
-        let depth = match req.headers.get::<Depth>() {
-            Some(&Depth::Infinity) | None => Depth::Infinity,
-            Some(&Depth::Zero) if method == Method::Copy => Depth::Zero,
-            _ => return Err(statuserror(&mut res, SC::BadRequest)),
+        let overwrite = req.headers.typed_get::<headers::Overwrite>().map_or(true, |o| o.0);
+        let depth = match req.headers.typed_get::<Depth>() {
+            Some(Depth::Infinity) | None => Depth::Infinity,
+            Some(Depth::Zero) if method == Method::Copy => Depth::Zero,
+            _ => return Err(statuserror(&mut res, SC::BAD_REQUEST)),
         };
 
         // decode and validate destination.
-        let dest = req.headers.get::<headers::Destination>()
-                    .ok_or(statuserror(&mut res, SC::BadRequest))?;
+        let dest = req.headers.typed_get::<headers::Destination>()
+                    .ok_or(statuserror(&mut res, SC::BAD_REQUEST))?;
         let dest = match WebPath::from_str(&dest.0, &self.prefix) {
             Err(e) => Err(daverror(&mut res, e)),
             Ok(d) => Ok(d),
@@ -154,7 +155,7 @@ impl crate::DavHandler {
 
         // parent of the destination must exist.
         if !self.has_parent(&dest) {
-            Err(statuserror(&mut res, SC::Conflict))?;
+            Err(statuserror(&mut res, SC::CONFLICT))?;
         }
 
         // for the destination, also check if it's a symlink. If we are going
@@ -178,12 +179,12 @@ impl crate::DavHandler {
         // check if overwrite is "F"
         let exists = dmeta.is_ok();
         if !overwrite && exists {
-            Err(statuserror(&mut res, SC::PreconditionFailed))?;
+            Err(statuserror(&mut res, SC::PRECONDITION_FAILED))?;
         }
 
         // check if source == dest
         if path == dest {
-            Err(statuserror(&mut res, SC::Forbidden))?;
+            Err(statuserror(&mut res, SC::FORBIDDEN))?;
         }
 
         // check If and If-* headers for source URL
@@ -199,15 +200,16 @@ impl crate::DavHandler {
         // just a simple status.
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+            let principal = self.principal.as_ref().map(|s| s.as_str());
             if method == Method::Move {
                 // for MOVE check if source path is locked
-                if let Err(_l) = locksystem.check(&path, true, t.clone()) {
-                    return multierror.finalstatus(&path, SC::Locked);
+                if let Err(_l) = locksystem.check(&path, principal, false, true, t.clone()) {
+                    return multierror.finalstatus(&path, SC::LOCKED);
                 }
             }
             // for MOVE and COPY check if destination is locked
-            if let Err(_l) = locksystem.check(&dest, true, t) {
-                return multierror.finalstatus(&path, SC::Locked);
+            if let Err(_l) = locksystem.check(&dest, principal, false, true, t) {
+                return multierror.finalstatus(&path, SC::LOCKED);
             }
         }
 
@@ -228,7 +230,7 @@ impl crate::DavHandler {
             match self.do_copy(&path, &dest, &dest, depth, &mut multierror) {
                 Err(_) => return Err(DavError::Status(multierror.close()?)),
                 Ok(_) => {
-                    let s = if exists { SC::NoContent } else { SC::Created };
+                    let s = if exists { SC::NO_CONTENT } else { SC::CREATED };
                     multierror.finalstatus(&path, s)
                 }
             }

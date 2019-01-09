@@ -5,7 +5,7 @@ use std::io::{Read,Write,Seek};
 use std::fmt::Debug;
 
 use crate::webpath::WebPath;
-use hyper::status::StatusCode;
+use http::StatusCode;
 
 macro_rules! notimplemented {
     ($method:expr) => {

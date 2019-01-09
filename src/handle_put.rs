@@ -1,25 +1,18 @@
-
-use hyper;
-use hyper::server::{Request,Response};
-use hyper::status::StatusCode as SC;
-
 use std::io::prelude::*;
 
+use http::StatusCode as SC;
+
+use crate::sync_adapter::{Request,Response};
+use crate::typed_headers::{self, HeaderMapExt};
 use crate::DavResult;
 use crate::fs::*;
 use crate::headers;
 use crate::{statuserror,fserror,systemtime_to_httpdate};
 use crate::conditional::if_match_get_tokens;
 
-macro_rules! statuserror {
-    ($res:ident, $s:ident) => {
-        return Err(statuserror(&mut $res, SC::$s))?
-    }
-}
-
 const SABRE: &'static str = "application/x-sabredav-partialupdate";
 
-impl crate::DavHandler {
+impl crate::DavInner {
 
     pub(crate) fn handle_put(&self, mut req: Request, mut res: Response) -> DavResult<()> {
 
@@ -32,7 +25,7 @@ impl crate::DavHandler {
         oo.create = true;
         oo.truncate = true;
 
-        if let Some(n) = req.headers.get::<hyper::header::ContentLength>() {
+        if let Some(n) = req.headers.typed_get::<typed_headers::ContentLength>() {
             count = n.0;
             have_count = true;
         }
@@ -40,40 +33,39 @@ impl crate::DavHandler {
         let meta = self.fs.metadata(&path);
 
         // close connection on error.
-        res.headers_mut().set(hyper::header::Connection::close());
+        res.headers_mut().typed_insert(typed_headers::Connection::close());
 
         // SabreDAV style PATCH?
-        if req.method == hyper::method::Method::Patch {
-            if !req.headers.get::<headers::ContentType>()
+        if req.method == http::Method::PATCH {
+            if !req.headers.typed_get::<headers::ContentType>()
                     .map_or(false, |ct| ct.0 == SABRE) {
-                //return Err(statuserror(&mut res, SC::UnsupportedMediaType));
-                statuserror!(res, UnsupportedMediaType);
+                return Err(statuserror(&mut res, SC::UNSUPPORTED_MEDIA_TYPE));
             }
             if !have_count {
-                return Err(statuserror(&mut res, SC::LengthRequired));
+                return Err(statuserror(&mut res, SC::LENGTH_REQUIRED));
             };
-            let r = req.headers.get::<headers::XUpdateRange>()
-                .ok_or(statuserror(&mut res, SC::BadRequest))?;
+            let r = req.headers.typed_get::<headers::XUpdateRange>()
+                .ok_or(statuserror(&mut res, SC::BAD_REQUEST))?;
             match r {
-                &headers::XUpdateRange::FromTo(b, e) => {
+                headers::XUpdateRange::FromTo(b, e) => {
                     if e - b + 1 != count {
-                        *res.status_mut() = SC::RangeNotSatisfiable;
+                        *res.status_mut() = SC::RANGE_NOT_SATISFIABLE;
                         return Ok(());
                     }
                     start = b;
                 },
-                &headers::XUpdateRange::AllFrom(b) => {
+                headers::XUpdateRange::AllFrom(b) => {
                     start = b;
                 },
-                &headers::XUpdateRange::Last(n) => {
+                headers::XUpdateRange::Last(n) => {
                     if let Ok(ref m) = meta {
                         if n > m.len() {
-                            return Err(statuserror(&mut res, SC::RangeNotSatisfiable));
+                            return Err(statuserror(&mut res, SC::RANGE_NOT_SATISFIABLE));
                         }
                         start = m.len() - n;
                     }
                 },
-                &headers::XUpdateRange::Append => {
+                headers::XUpdateRange::Append => {
                     oo.append = true;
                 }
             }
@@ -82,14 +74,14 @@ impl crate::DavHandler {
         }
 
         // Apache-style Content-Range header?
-        if let Some(x) = req.headers.get::<headers::ContentRange>() {
+        if let Some(x) = req.headers.typed_get::<headers::ContentRange>() {
 
             let b = x.0;
             let e = x.1;
 
             if have_count {
                 if e - b + 1 != count {
-                    return Err(statuserror(&mut res, SC::RangeNotSatisfiable));
+                    return Err(statuserror(&mut res, SC::RANGE_NOT_SATISFIABLE));
                 }
             } else {
                 count = e - b + 1;
@@ -109,19 +101,20 @@ impl crate::DavHandler {
         // if locked check if we hold that lock.
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-            if let Err(_l) = locksystem.check(&path, false, t) {
-                return Err(statuserror(&mut res, SC::Locked));
+            let principal = self.principal.as_ref().map(|s| s.as_str());
+            if let Err(_l) = locksystem.check(&path, principal, false, false, t) {
+                return Err(statuserror(&mut res, SC::LOCKED));
             }
         }
 
         // tweak open options.
-        if req.headers.get::<headers::IfMatch>()
-            .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
-                oo.create_new = true;
-        }
-        if req.headers.get::<headers::IfNoneMatch>()
+        if req.headers.typed_get::<headers::IfMatch>()
             .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
                 oo.create = false;
+        }
+        if req.headers.typed_get::<headers::IfNoneMatch>()
+            .map_or(false, |h| &h.0 == &headers::ETagList::Star) {
+                oo.create_new = true;
         }
 
         let mut file = match self.fs.open(&path, oo) {
@@ -129,9 +122,9 @@ impl crate::DavHandler {
             Err(FsError::NotFound) |
             Err(FsError::Exists) => {
                 let s = if !oo.create || oo.create_new {
-                    SC::PreconditionFailed
+                    SC::PRECONDITION_FAILED
                 } else {
-                    SC::Conflict
+                    SC::CONFLICT
                 };
                 return Err(statuserror(&mut res, s))
             },
@@ -141,12 +134,12 @@ impl crate::DavHandler {
         if do_range {
             // seek to beginning of requested data.
             if let Err(_) = file.seek(std::io::SeekFrom::Start(start)) {
-                return Err(statuserror(&mut res, SC::RangeNotSatisfiable));
+                return Err(statuserror(&mut res, SC::RANGE_NOT_SATISFIABLE));
             }
         }
 
-        let bytes = vec![hyper::header::RangeUnit::Bytes];
-        res.headers_mut().set(hyper::header::AcceptRanges(bytes));
+        let bytes = vec![typed_headers::RangeUnit::Bytes];
+        res.headers_mut().typed_insert(typed_headers::AcceptRanges(bytes));
 
         // loop, read body, write to file.
         let mut buffer = [0; 8192];
@@ -177,27 +170,27 @@ impl crate::DavHandler {
         }
         file.flush()?;
         if bad {
-            return Err(statuserror(&mut res, SC::BadRequest));
+            return Err(statuserror(&mut res, SC::BAD_REQUEST));
         }
 
         // Report whether we created or updated the file.
         *res.status_mut() = match meta {
-            Ok(_) => SC::NoContent,
+            Ok(_) => SC::NO_CONTENT,
             Err(_) => {
-                res.headers_mut().set(hyper::header::ContentLength(0));
-                SC::Created
+                res.headers_mut().typed_insert(typed_headers::ContentLength(0));
+                SC::CREATED
             },
         };
 
         // no errors, connection may be kept open.
-        res.headers_mut().remove::<hyper::header::Connection>();
+        res.headers_mut().remove(http::header::CONNECTION);
 
         if let Ok(m) = file.metadata() {
-            let file_etag = hyper::header::EntityTag::new(false, m.etag());
-            res.headers_mut().set(hyper::header::ETag(file_etag));
+            let file_etag = typed_headers::EntityTag::new(false, m.etag());
+            res.headers_mut().typed_insert(typed_headers::ETag(file_etag));
 
             if let Ok(modified) = m.modified() {
-                res.headers_mut().set(hyper::header::LastModified(
+                res.headers_mut().typed_insert(typed_headers::LastModified(
                         systemtime_to_httpdate(modified)));
             }
         }

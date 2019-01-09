@@ -5,9 +5,9 @@ use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path,PathBuf};
 
-use hyper;
 use mime_guess;
 use percent_encoding as pct;
+use url;
 
 use crate::DavError;
 
@@ -176,17 +176,17 @@ impl WebPath {
         })
     }
 
-    /// from hyper req.uri
-    pub fn from_uri(uri: &hyper::uri::RequestUri, prefix: &str) -> Result<Self, ParseError> {
-        match uri {
-            &hyper::uri::RequestUri::AbsolutePath(ref r) => {
-                WebPath::from_str(r, prefix)
-            },
-            &hyper::uri::RequestUri::Star => {
+    /// from request.uri
+    pub fn from_uri(uri: &http::uri::Uri, prefix: &str) -> Result<Self, ParseError> {
+        match uri.path() {
+            "*" => {
                 Ok(WebPath{
                     prefix: b"".to_vec(),
                     path: b"*".to_vec(),
                 })
+            },
+            path if path.starts_with("/") => {
+                WebPath::from_str(path, prefix)
             },
             _ => {
                 Err(ParseError::InvalidPath)
@@ -194,8 +194,8 @@ impl WebPath {
         }
     }
 
-    /// from hyper Url and (not-url-encoded) prefix string.
-    pub fn from_url(url: &hyper::Url, prefix: &str) -> Result<Self, ParseError> {
+    /// from url::Url and (not-url-encoded) prefix string.
+    pub fn from_url(url: &url::Url, prefix: &str) -> Result<Self, ParseError> {
         WebPath::from_str(url.path(), prefix)
     }
 

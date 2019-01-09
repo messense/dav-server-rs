@@ -38,7 +38,7 @@ fn tm_limit(d: Option<Duration>) -> Duration {
 
 impl DavLockSystem for FakeLs {
 
-    fn lock(&self, path: &WebPath, owner: Option<&Element>, timeout: Option<Duration>, shared: bool, deep: bool) -> Result<DavLock, DavLock> {
+    fn lock(&self, path: &WebPath, principal: Option<&str>, owner: Option<&Element>, timeout: Option<Duration>, shared: bool, deep: bool) -> Result<DavLock, DavLock> {
         let timeout = tm_limit(timeout);
         let timeout_at = SystemTime::now() + timeout;
 
@@ -49,6 +49,7 @@ impl DavLockSystem for FakeLs {
         let lock = DavLock{
             token:      token,
             path:       path.clone(),
+            principal:  principal.map(|s| s.to_string()),
             owner:      owner.cloned(),
             timeout_at: Some(timeout_at),
             timeout:    Some(timeout),
@@ -76,6 +77,7 @@ impl DavLockSystem for FakeLs {
         let lock = DavLock{
             token:      token.to_string(),
             path:       path.clone(),
+            principal:  None,
             owner:      None,
             timeout_at: Some(timeout_at),
             timeout:    Some(timeout),
@@ -85,7 +87,7 @@ impl DavLockSystem for FakeLs {
         Ok(lock)
     }
 
-    fn check(&self, _path: &WebPath, _deep: bool, _submitted_tokens: Vec<&str>) -> Result<(), DavLock> {
+    fn check(&self, _path: &WebPath, _principal: Option<&str>, _ignore_principal: bool, _deep: bool, _submitted_tokens: Vec<&str>) -> Result<(), DavLock> {
         Ok(())
     }
 

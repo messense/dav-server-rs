@@ -14,12 +14,11 @@ use std::io::{Error,ErrorKind};
 use std::sync::{Arc,Mutex};
 use std::collections::HashMap;
 
-use crate::webpath::WebPath;
-use hyper::status::StatusCode;
+use http::StatusCode;
 
 use crate::fs::*;
-
 use crate::tree;
+use crate::webpath::WebPath;
 
 type Tree = tree::Tree<Vec<u8>, MemFsNode>;
 
@@ -226,10 +225,10 @@ impl DavFileSystem for MemFs {
         let mut res = Vec::new();
         for p in remove.into_iter() {
             props.remove(&propkey(&p.namespace, &p.name));
-            res.push((StatusCode::Ok, p));
+            res.push((StatusCode::OK, p));
         }
         for p in set.into_iter() {
-            res.push((StatusCode::Ok, cloneprop(&p)));
+            res.push((StatusCode::OK, cloneprop(&p)));
             props.insert(propkey(&p.namespace, &p.name), p);
         }
         Ok(res)

@@ -1,21 +1,20 @@
 use std::time::SystemTime;
 
-use hyper;
-use hyper::server::Request;
-use hyper::status::StatusCode;
-use hyper::method::Method;
-use hyper::header::EntityTag;
+use http::StatusCode;
+use http::Method;
+
+use crate::sync_adapter::Request;
+use crate::typed_headers::{self,EntityTag,HeaderMapExt};
 
 use crate::headers;
-use crate::systemtime_to_timespec;
 use crate::fs::{DavFileSystem,DavMetaData};
 use crate::ls::DavLockSystem;
 use crate::webpath::WebPath;
 
-pub(crate) fn ifrange_match(hdr: &headers::IfRange, tag: &hyper::header::EntityTag, date: SystemTime) -> bool {
+pub(crate) fn ifrange_match(hdr: &headers::IfRange, tag: &typed_headers::EntityTag, date: SystemTime) -> bool {
 	match hdr {
         &headers::IfRange::Date(ref d) => {
-            systemtime_to_timespec(date) <= d.0.to_timespec()
+            typed_headers::HttpDate::from(date) < *d
         },
         &headers::IfRange::EntityTag(ref t) => {
             t == tag
@@ -23,7 +22,7 @@ pub(crate) fn ifrange_match(hdr: &headers::IfRange, tag: &hyper::header::EntityT
     }
 }
 
-pub(crate) fn etaglist_match(tags: &headers::ETagList, tag: &hyper::header::EntityTag) -> bool {
+pub(crate) fn etaglist_match(tags: &headers::ETagList, tag: &typed_headers::EntityTag) -> bool {
     match tags {
         &headers::ETagList::Star => true,
         &headers::ETagList::Tags(ref t) => t.iter().any(|x| x == tag)
@@ -35,42 +34,40 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
 
     let modified = meta.and_then(|m| m.modified().ok());
 
-    if let Some(r) = req.headers.get::<headers::IfMatch>() {
+    if let Some(r) = req.headers.typed_get::<headers::IfMatch>() {
         let etag = meta.map(|m| EntityTag::new(false, m.etag()));
         if etag.map_or(true, |m| !etaglist_match(&r.0, &m)) {
             debug!("precondition fail: If-Match {:?}", r);
-            return Some(StatusCode::PreconditionFailed);
+            return Some(StatusCode::PRECONDITION_FAILED);
         }
-    } else if let Some(r) = req.headers.get::<hyper::header::IfUnmodifiedSince>() {
+    } else if let Some(r) = req.headers.typed_get::<typed_headers::IfUnmodifiedSince>() {
         match modified {
-            None => return Some(StatusCode::PreconditionFailed),
+            None => return Some(StatusCode::PRECONDITION_FAILED),
             Some(m) => {
-                let ts = systemtime_to_timespec(m);
-                if ts > (r.0).0.to_timespec() {
+                if typed_headers::HttpDate::from(m) > r.0 {
                     debug!("precondition fail: If-Unmodified-Since {:?}", r.0);
-                    return Some(StatusCode::PreconditionFailed);
+                    return Some(StatusCode::PRECONDITION_FAILED);
                 }
             }
         }
     }
 
-    if let Some(r) = req.headers.get::<headers::IfNoneMatch>() {
+    if let Some(r) = req.headers.typed_get::<headers::IfNoneMatch>() {
         let etag = meta.map(|m| EntityTag::new(false, m.etag()));
         if etag.map_or(false, |m| etaglist_match(&r.0, &m)) {
             debug!("precondition fail: If-None-Match {:?}", r);
-            if req.method == Method::Get || req.method == Method::Head {
-                return Some(StatusCode::NotModified);
+            if req.method == Method::GET || req.method == Method::HEAD {
+                return Some(StatusCode::NOT_MODIFIED);
             } else {
-                return Some(StatusCode::PreconditionFailed);
+                return Some(StatusCode::PRECONDITION_FAILED);
             }
         }
-    } else if let Some(r) = req.headers.get::<hyper::header::IfModifiedSince>() {
-        if req.method == Method::Get || req.method == Method::Head {
+    } else if let Some(r) = req.headers.typed_get::<typed_headers::IfModifiedSince>() {
+        if req.method == Method::GET || req.method == Method::HEAD {
             if let Some(m) = modified {
-                let ts = systemtime_to_timespec(m);
-                if ts > (r.0).0.to_timespec() {
+                if typed_headers::HttpDate::from(m) > r.0 {
                     debug!("not-modified If-Modified-Since {:?}", r.0);
-                    return Some(StatusCode::NotModified);
+                    return Some(StatusCode::NOT_MODIFIED);
                 }
             }
         }
@@ -91,7 +88,7 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, ls: &Option<B
     let mut tokens : Vec<String> = Vec::new();
     let mut any_list_ok = false;
 
-    let r = match req.headers.get::<headers::If>() {
+    let r = match req.headers.typed_get::<headers::If>() {
         Some(r) => r,
         None => return (true, tokens),
     };
@@ -136,7 +133,7 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, ls: &Option<B
                         false
                     } else {
                         match ls {
-                            &Some(ref ls) => ls.check(p, false, vec![s]).is_ok(),
+                            &Some(ref ls) => ls.check(p, None, true, false, vec![s]).is_ok(),
                             &None => false,
                         }
                     }
@@ -179,7 +176,7 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, ls: &Option<B
 pub(crate) fn if_match(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<DavFileSystem>, ls: &Option<Box<DavLockSystem>>, path: &WebPath) -> Option<StatusCode> {
     match dav_if_match(req, fs, ls, path) {
         (true, _) => {},
-        (false, _) => return Some(StatusCode::PreconditionFailed),
+        (false, _) => return Some(StatusCode::PRECONDITION_FAILED),
     }
     http_if_match(req, meta)
 }
@@ -191,7 +188,7 @@ pub(crate) fn if_match_get_tokens(req: &Request, meta: Option<&Box<DavMetaData>>
     }
     match dav_if_match(req, fs, ls, path) {
         (true, v) => Ok(v),
-        (false, _) => Err(StatusCode::PreconditionFailed),
+        (false, _) => Err(StatusCode::PRECONDITION_FAILED),
     }
 }
 
