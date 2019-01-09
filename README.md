@@ -49,7 +49,7 @@ You do not have to install the litmus binary, it's possible to run the tests
 straight from the unpacked & compiled litmus directory:
 
 ```
-$ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. \\  
+$ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. \
 	./litmus http://localhost:4918/ someuser somepass
 
 -> running `basic':
