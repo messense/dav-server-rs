@@ -583,9 +583,9 @@ mod tests {
         // accept a "plain  word" as StateToken, instead of only
         // a Coded-Url (<...>). We allow that as well, but I have
         // no idea if we need to (or should!).
-        let val = br#"  <http://x.yz/> ([W/"etag"] Not <DAV:nope> )
+        let val = r#"  <http://x.yz/> ([W/"etag"] Not <DAV:nope> )
             (Not<urn:x>[W/"bla"] plain:word:123) "#;
-        let hdr = If::parse_header(&vec![val.to_vec()]);
+        let hdr = If::parse_header(&typed_headers::Raw::from(val));
         assert!(hdr.is_ok());
     }
 }
