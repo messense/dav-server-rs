@@ -29,7 +29,7 @@
 //!
 //! Example:
 //!
-//! ```
+//! ```no_run
 //! use hyper;
 //! use bytes::Bytes;
 //! use futures::{future::Future, stream::Stream};
@@ -87,7 +87,9 @@ mod tree;
 
 mod sync_adapter;
 
+#[doc(hidden)]
 pub mod typed_headers;
+
 pub mod fs;
 pub mod ls;
 pub mod localfs;
