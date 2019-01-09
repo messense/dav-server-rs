@@ -101,7 +101,8 @@ impl crate::DavInner {
         // if locked check if we hold that lock.
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-            if let Err(_l) = locksystem.check(&path, None, false, t) {
+            let principal = self.principal.as_ref().map(|s| s.as_str());
+            if let Err(_l) = locksystem.check(&path, principal, false, false, t) {
                 return Err(statuserror(&mut res, SC::LOCKED));
             }
         }

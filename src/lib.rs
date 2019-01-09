@@ -85,9 +85,9 @@ mod conditional;
 mod xmltree_ext;
 mod tree;
 
-mod typed_headers;
 mod sync_adapter;
 
+pub mod typed_headers;
 pub mod fs;
 pub mod ls;
 pub mod localfs;
@@ -268,7 +268,7 @@ impl DavHandler {
 
     /// Clone an existing handler, and possibly override any of its properties.
     /// Note that the allowed method set is not copied (it is set to "all" again).
-    pub fn clone_with(&self, prefix: Option<impl Into<String>>, user: Option<&str>, fs: Option<Box<DavFileSystem>>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
+    pub fn clone_with(&self, prefix: Option<&str>, user: Option<&str>, fs: Option<Box<DavFileSystem>>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
         let inner = DavInner{
             prefix: prefix.map(|s| s.into()).unwrap_or(self.0.prefix.clone()),
             fs: fs.unwrap_or(self.0.fs.clone()),
@@ -324,11 +324,18 @@ impl DavInner {
     fn handle(&self, mut req: Request, mut res: Response) {
 
         // debug when running the webdav litmus tests.
-        if log_enabled!(log::Level::Debug) {
+        //if log_enabled!(log::Level::Debug) {
             if let Some(t) = req.headers.typed_get::<headers::XLitmus>() {
                 debug!("X-Litmus: {}", t);
+                debug!("headers: {:?}", req.headers);
             }
-        }
+            if let Some(t) = req.headers.typed_get::<typed_headers::Authorization<typed_headers::Basic>>() {
+                debug!("Authorization (typed): {:?}", t);
+            }
+            if let Some(t) = req.headers.get("Authorization") {
+                debug!("Authorization (normal): {:?}", t);
+            }
+        //}
 
         // translate HTTP method to Webdav method.
         let method = match dav_method(&req.method) {

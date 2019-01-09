@@ -37,7 +37,7 @@ pub trait DavLockSystem : Debug + Sync + Send + BoxCloneLs {
 
     /// Check if node is locked and if so, if we own all the locks.
     /// If not, returns as Err one conflicting lock.
-    fn check(&self, path: &WebPath, principal: Option<&str>, deep: bool, submitted_tokens: Vec<&str>) -> Result<(), DavLock>;
+    fn check(&self, path: &WebPath, principal: Option<&str>, ignore_principal: bool, deep: bool, submitted_tokens: Vec<&str>) -> Result<(), DavLock>;
 
     /// Find and return all locks that cover a given path.
     fn discover(&self, path: &WebPath) -> Vec<DavLock>;

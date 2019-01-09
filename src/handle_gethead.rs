@@ -86,7 +86,7 @@ impl crate::DavInner {
         res.headers_mut().typed_insert(typed_headers::ETag(file_etag));
 
         // handle the if-headers.
-        if let Some(s) = conditional::if_match(&req, Some(&meta), &self.fs, &self.ls, &path) {
+        if let Some(s) = conditional::if_match(&req,Some(&meta), &self.fs, &self.ls, &path) {
             return Err(statuserror(&mut res, s));
         }
 

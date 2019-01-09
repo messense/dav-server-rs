@@ -133,7 +133,7 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, ls: &Option<B
                         false
                     } else {
                         match ls {
-                            &Some(ref ls) => ls.check(p, None, false, vec![s]).is_ok(),
+                            &Some(ref ls) => ls.check(p, None, true, false, vec![s]).is_ok(),
                             &None => false,
                         }
                     }

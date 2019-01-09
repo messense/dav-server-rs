@@ -31,7 +31,6 @@ Also included are two locksystems:
 # testing
 
 ```
-cd src
 RUST_LOG=webdav_handler=debug cargo run
 ```
 
@@ -43,11 +42,14 @@ For other options, run `cargo run -- --help`
 The standard for webdav compliance testing is "litmus", which is available
 at https://github.com/tolsen/litmus .
 
+For some tests, "litmus" assumes that it is using basic authentication, so
+you must run the test server with the `--auth` flag.
+
 You do not have to install the litmus binary, it's possible to run the tests
 straight from the unpacked & compiled litmus directory:
 
 ```
-$ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. ./litmus http://localhost:4918/
+$ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. ./litmus http://localhost:4918/ someuser somepass
 
 -> running `basic':
  0. init.................. pass

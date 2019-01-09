@@ -48,6 +48,7 @@ impl crate::DavInner {
             }
 
             // try refresh
+            // FIXME: you can refresh a lock owned by someone else. is that OK?
             let timeout = get_timeout(&req, true, false);
             let lock = match locksystem.refresh(&path, &tokens[0], timeout) {
                 Ok(lock) => lock,
@@ -132,7 +133,8 @@ impl crate::DavInner {
 
         // create lock
         let timeout = get_timeout(&req, false, shared);
-        let lock = match locksystem.lock(&path, None, owner.as_ref(), timeout, shared, deep) {
+        let principal = self.principal.as_ref().map(|s| s.as_str());
+        let lock = match locksystem.lock(&path, principal, owner.as_ref(), timeout, shared, deep) {
             Ok(lock) => lock,
             Err(_) => return Err(statuserror(&mut res, SC::LOCKED)),
         };

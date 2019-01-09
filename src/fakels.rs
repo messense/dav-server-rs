@@ -87,7 +87,7 @@ impl DavLockSystem for FakeLs {
         Ok(lock)
     }
 
-    fn check(&self, _path: &WebPath, _principal: Option<&str>, _deep: bool, _submitted_tokens: Vec<&str>) -> Result<(), DavLock> {
+    fn check(&self, _path: &WebPath, _principal: Option<&str>, _ignore_principal: bool, _deep: bool, _submitted_tokens: Vec<&str>) -> Result<(), DavLock> {
         Ok(())
     }
 
