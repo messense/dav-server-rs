@@ -39,7 +39,7 @@
 //!     let dir = "/tmp";
 //!     let addr = ([127, 0, 0, 1], 4918).into();
 //!
-//!     let dav_server = DavHandler::new("", None, LocalFs::new(dir, false), Some(MemLs::new()));
+//!     let dav_server = DavHandler::new(None, LocalFs::new(dir, false), Some(MemLs::new()));
 //!     let make_service = move || {
 //!         let dav_server = dav_server.clone();
 //!         hyper::service::service_fn(move |req: hyper::Request<hyper::Body>| {
@@ -100,11 +100,10 @@ pub mod webpath;
 
 use std::io::Read;
 use std::time::{UNIX_EPOCH,SystemTime};
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use bytes;
-use futures::{Future, Stream};
+use futures::{future, Future, Stream};
 
 use http::Method as httpMethod;
 use http::StatusCode;
@@ -123,34 +122,78 @@ type DavResult<T> = Result<T, DavError>;
 
 /// HTTP Methods supported by DavHandler.
 #[derive(Debug,PartialEq,Eq,Hash,Clone,Copy)]
+#[repr(u32)]
 pub enum Method {
-    Head,
-    Get,
-    Put,
-    Patch,
-    Options,
-    PropFind,
-    PropPatch,
-    MkCol,
-    Copy,
-    Move,
-    Delete,
-    Lock,
-    Unlock,
+    Head        = 0x0001,
+    Get         = 0x0002,
+    Put         = 0x0004,
+    Patch       = 0x0008,
+    Options     = 0x0010,
+    PropFind    = 0x0020,
+    PropPatch   = 0x0040,
+    MkCol       = 0x0080,
+    Copy        = 0x0100,
+    Move        = 0x0200,
+    Delete      = 0x0400,
+    Lock        = 0x0800,
+    Unlock      = 0x1000,
 }
 
 /// The webdav handler struct.
 #[derive(Clone)]
-pub struct DavHandler(Arc<DavInner>);
+pub struct DavHandler {
+    config:     Arc<DavConfig>,
+}
 
-// The actual struct.
-pub(crate) struct DavInner {
+/// Configuration.
+#[derive(Clone, Default)]
+pub struct DavConfig {
+    /// Prefix to be stripped off when handling request.
+    pub prefix:     Option<String>,
+    /// Filesystem backend.
+    pub fs:         Option<Box<DavFileSystem>>,
+    /// Locksystem backend.
+    pub ls:         Option<Box<DavLockSystem>>,
+    /// Set of allowed methods (None means "all methods")
+    pub allow:      Option<AllowedMethods>,
+    /// Principal is webdav speak for "user", used to give locks an owner (if a locksystem is
+    /// active).
+    pub principal:  Option<String>,
+}
+
+// The actual inner struct.
+pub (crate) struct DavInner {
     pub prefix:     String,
     pub fs:         Box<DavFileSystem>,
     pub ls:         Option<Box<DavLockSystem>>,
-    pub allow:      Option<HashSet<Method>>,
+    pub allow:      Option<AllowedMethods>,
     pub principal:  Option<String>,
 }
+
+impl From<DavConfig> for DavInner {
+    fn from(cfg: DavConfig) -> Self {
+        DavInner {
+            prefix:     cfg.prefix.unwrap_or("".to_string()),
+            fs:         cfg.fs.unwrap(),
+            ls:         cfg.ls,
+            allow:      cfg.allow,
+            principal:  cfg.principal,
+        }
+    }
+}
+
+impl From<&DavConfig> for DavInner {
+    fn from(cfg: &DavConfig) -> Self {
+        DavInner {
+            prefix:     cfg.prefix.as_ref().map(|p| p.to_owned()).unwrap_or("".to_string()),
+            fs:         cfg.fs.clone().unwrap(),
+            ls:         cfg.ls.clone(),
+            allow:      cfg.allow,
+            principal:  cfg.principal.clone(),
+        }
+    }
+}
+
 
 pub(crate) fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {
     match t.duration_since(UNIX_EPOCH) {
@@ -232,7 +275,75 @@ pub (crate) fn fserror_to_status(e: FsError) -> StatusCode {
     }
 }
 
+/// A set of allowed methods.
+#[derive(Clone, Copy)]
+pub struct AllowedMethods(u32);
+
+impl AllowedMethods {
+
+    /// New set, all methods allowed.
+    pub fn all() -> AllowedMethods {
+        AllowedMethods(0xffffffff)
+    }
+
+    /// New set, no methods allowed.
+    pub fn none() -> AllowedMethods {
+        AllowedMethods(0)
+    }
+
+    /// Add a method.
+    pub fn add(&mut self, m: Method) {
+        self.0 |= m as u32;
+    }
+
+    /// Remove a method.
+    pub fn remove(&mut self, m: Method) {
+        self.0 &= !(m as u32);
+    }
+
+    /// Check if method is allowed.
+    pub fn allowed(&self, m: Method) -> bool {
+        self.0 & (m as u32) > 0
+    }
+}
+
+// return a 404 reply.
+fn notfound() -> impl Future<Item = http::Response<BoxedByteStream>, Error = std::io::Error> {
+	let body = futures::stream::once(Ok(bytes::Bytes::from("Not Found")));
+	let body: BoxedByteStream = Box::new(body);
+	let response = http::Response::builder()
+		.status(404)
+		.header("connection", "close")
+		.body(body)
+		.unwrap();
+	return Box::new(futures::future::ok(response));
+}
+
 impl DavHandler {
+    /// Create a new DavHandler.
+    ///
+    /// -- | --
+    /// prefix | URL prefix to be stripped off.
+    /// fs     | The filesystem backend.
+    /// ls     | Optional locksystem backend
+    pub fn new(prefix: Option<&str>, fs: Box<DavFileSystem>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
+        let config = DavConfig{
+            prefix: prefix.map(|s| s.to_string()),
+            fs: Some(fs),
+            ls: ls,
+            allow: None,
+            principal: None,
+        };
+        DavHandler{ config: Arc::new(config) }
+    }
+
+    /// Create a new DavHandler with a more detailed configuration.
+    ///
+    /// For example, pass in a specific AllowedMethods set.
+    pub fn new_with(config: DavConfig) -> DavHandler {
+        DavHandler{ config: Arc::new(config) }
+    }
+
     /// Handle a webdav request.
     ///
     /// Only one error kind is ever returned: ErrorKind::BrokenPipe. In that case we
@@ -244,41 +355,45 @@ impl DavHandler {
         ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
         ReqError: ToString,
     {
-        let inner = self.0.clone();
-        sync_adapter::handler(req, move |req, resp| {
+        if self.config.fs.is_none() {
+            return future::Either::A(notfound());
+        }
+        let inner = DavInner::from(&*self.config);
+        let fut = sync_adapter::handler(req, move |req, resp| {
             inner.handle(req, resp)
-        })
+        });
+        future::Either::B(fut)
     }
 
-    /// Create a new DavHandler.
+    /// Handle a webdav request, overriding parts of the config.
     ///
-    /// prefix | The prefix to be stripped from the request URL
-    /// user   | Optional username (or principal) of the requesting entity. Used with locking.
-    /// fs     | The filesystem backend.
-    /// ls     | Optional locksystem backend
+    /// For example, the `principal` can be set for this request.
     ///
-    pub fn new(prefix: impl Into<String>, user: Option<&str>, fs: Box<DavFileSystem>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
-        let inner = DavInner{
-            prefix: prefix.into(),
-            fs: fs,
-            ls: ls,
-            allow: None,
-            principal: user.map(|s| s.to_string()),
+    /// Or, the default config has no locksystem, and you pass in
+    /// a fake locksystem (FakeLs) because this is a request from a
+    /// windows or osx client that needs to see locking support.
+    pub fn handle_with<ReqBody, ReqError>(&self, config: DavConfig, req: http::Request<ReqBody>)
+      -> impl Future<Item = http::Response<BoxedByteStream>, Error = std::io::Error>
+    where
+        ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqError: ToString,
+    {
+        let orig = &*self.config;
+        let newconf = DavConfig {
+            prefix: config.prefix.or(orig.prefix.clone()),
+            fs: config.fs.or(orig.fs.clone()),
+            ls: config.ls.or(orig.ls.clone()),
+            allow: config.allow.or(orig.allow.clone()),
+            principal: config.principal.or(orig.principal.clone()),
         };
-        DavHandler(Arc::new(inner))
-    }
-
-    /// Clone an existing handler, and possibly override any of its properties.
-    /// Note that the allowed method set is not copied (it is set to "all" again).
-    pub fn clone_with(&self, prefix: Option<&str>, user: Option<&str>, fs: Option<Box<DavFileSystem>>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
-        let inner = DavInner{
-            prefix: prefix.map(|s| s.into()).unwrap_or(self.0.prefix.clone()),
-            fs: fs.unwrap_or(self.0.fs.clone()),
-            ls: ls.or(self.0.ls.clone()),
-            allow: None,
-            principal: user.map(|s| s.to_string()).or(self.0.principal.clone()),
-        };
-        DavHandler(Arc::new(inner))
+        if self.config.fs.is_none() {
+            return future::Either::A(notfound());
+        }
+        let inner = DavInner::from(newconf);
+        let fut = sync_adapter::handler(req, move |req, resp| {
+            inner.handle(req, resp)
+        });
+        future::Either::B(fut)
     }
 }
 
@@ -345,8 +460,8 @@ impl DavInner {
 
         // see if method is allowed.
         if let Some(ref a) = self.allow {
-            if !a.contains(&method) {
-                debug!("method {} not allowed on request {}", &req.method, &req.uri);
+            if !a.allowed(method) {
+                debug!("method {} not allowed on request {}", req.method, req.uri);
                 res.headers_mut().typed_insert(typed_headers::Connection::close());
                 *res.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
                 return;
@@ -398,30 +513,5 @@ impl DavInner {
         } else {
             debug!("== END REQUEST result OK");
         }
-    }
-
-    /// Only allow certain methods. By default, all methods are allowed, and
-    /// advertised in the Allow: DAV header. You need to call this function
-    /// multiple times, for every method you want to allow, but the calls
-    /// can be chained in a builder-like pattern.
-    ///
-    /// ```
-    /// let dav = DavHandler::new(....)
-    ///     .allow(dav::Method::Get)
-    ///     .allow(dav::Method::PropFind)
-    ///     .allow(dav::Method::Options);
-    /// ```
-    ///
-    /// This needs to be replaced by something like a `MethodSet`.
-    pub fn allow(mut self, m: Method) -> DavInner {
-        match self.allow {
-            Some(ref mut a) => { a.insert(m); },
-            None => {
-                let mut h = HashSet::new();
-                h.insert(m);
-                self.allow = Some(h);
-            },
-        }
-        self
     }
 }

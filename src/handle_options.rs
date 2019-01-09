@@ -37,7 +37,7 @@ impl crate::DavInner {
             if (y == Method::Options ||
                 (y != method || islock(y) != islock(method))) &&
                 (!islock(y) || self.ls.is_some()) &&
-                self.allow.as_ref().map_or(true, |x| x.contains(&y)) {
+                self.allow.map(|x| x.allowed(y)).unwrap_or(true) {
                 v.push(m.to_string());
             }
         };

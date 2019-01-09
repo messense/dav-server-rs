@@ -21,6 +21,7 @@ use futures::{
 use hyper;
 
 use webdav_handler::{
+    DavConfig,
     DavHandler,
     localfs,
     memfs,
@@ -44,22 +45,22 @@ impl Server {
     pub fn new(directory: String, auth: bool) -> Self {
         let dh = if directory != "" {
             let fs = localfs::LocalFs::new(directory, true);
-            DavHandler::new("", None, fs, None)
+            DavHandler::new(None, fs, None)
         } else {
             let fs = memfs::MemFs::new();
             let ls = memls::MemLs::new();
-            DavHandler::new("", None, fs, Some(ls))
+            DavHandler::new(None, fs, Some(ls))
         };
         Server{ dh, auth }
     }
 
     fn handle(&self, req: hyper::Request<hyper::Body>) -> BoxedFuture {
 
-        let handler = if self.auth {
+        let user = if self.auth {
             // we want the client to authenticate.
             match req.headers().typed_get::<Authorization<Basic>>() {
                 Some(Authorization(basic)) => {
-                    self.dh.clone_with(None, Some(&basic.username), None, None)
+                    Some(basic.username.to_string())
                 },
                 None => {
                     // return a 401 reply.
@@ -75,7 +76,12 @@ impl Server {
                 },
             }
         } else {
-            self.dh.clone()
+            None
+        };
+
+        let config = DavConfig {
+            principal:  user,
+            ..DavConfig::default()
         };
 
         // transform hyper::Request into http::Request, run handler,
@@ -83,7 +89,7 @@ impl Server {
         let (parts, body) = req.into_parts();
         let body = body.map(|item| Bytes::from(item));
         let req = http::Request::from_parts(parts, body);
-        let fut = handler.handle(req)
+        let fut = self.dh.handle_with(config, req)
             .and_then(|resp| {
                 let (parts, body) = resp.into_parts();
                 let body = hyper::Body::wrap_stream(body);
