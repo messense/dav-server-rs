@@ -27,19 +27,20 @@
 //! - memls: ephemeral in-memory locksystem.
 //! - fakels: fake locksystem. just enough LOCK/UNLOCK support for OSX/Windows.
 //!
-//! Example:
+//! Example server that serves the /tmp directory in r/w mode. You should be
+//! able to mount this network share from Linux, OSX and Windows.
 //!
 //! ```no_run
 //! use hyper;
 //! use bytes::Bytes;
 //! use futures::{future::Future, stream::Stream};
-//! use webdav_handler::{DavHandler, localfs::LocalFs, memls::MemLs};
+//! use webdav_handler::{DavHandler, localfs::LocalFs, fakels::FakeLs};
 //!
 //! fn main() {
 //!     let dir = "/tmp";
 //!     let addr = ([127, 0, 0, 1], 4918).into();
 //!
-//!     let dav_server = DavHandler::new(None, LocalFs::new(dir, false), Some(MemLs::new()));
+//!     let dav_server = DavHandler::new(None, LocalFs::new(dir, false), Some(FakeLs::new()));
 //!     let make_service = move || {
 //!         let dav_server = dav_server.clone();
 //!         hyper::service::service_fn(move |req: hyper::Request<hyper::Body>| {
@@ -145,7 +146,7 @@ pub struct DavHandler {
     config:     Arc<DavConfig>,
 }
 
-/// Configuration.
+/// Configuration of the handler.
 #[derive(Default)]
 pub struct DavConfig {
     /// Prefix to be stripped off when handling request.
@@ -279,7 +280,7 @@ pub (crate) fn fserror_to_status(e: FsError) -> StatusCode {
     }
 }
 
-/// A set of allowed methods.
+/// A set of allowed `Method`s.
 #[derive(Clone, Copy)]
 pub struct AllowedMethods(u32);
 
@@ -334,12 +335,10 @@ impl Drop for Dropper {
 }
 
 impl DavHandler {
-    /// Create a new DavHandler.
-    ///
-    /// -- | --
-    /// prefix | URL prefix to be stripped off.
-    /// fs     | The filesystem backend.
-    /// ls     | Optional locksystem backend
+    /// Create a new `DavHandler`.
+    /// - `prefix`: URL prefix to be stripped off.
+    /// - `fs:` The filesystem backend.
+    /// - `ls:` Optional locksystem backend
     pub fn new(prefix: Option<&str>, fs: Box<DavFileSystem>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
         let config = DavConfig{
             prefix: prefix.map(|s| s.to_string()),
@@ -352,17 +351,25 @@ impl DavHandler {
         DavHandler{ config: Arc::new(config) }
     }
 
-    /// Create a new DavHandler with a more detailed configuration.
+    /// Create a new `DavHandler` with a more detailed configuration.
     ///
-    /// For example, pass in a specific AllowedMethods set.
+    /// For example, pass in a specific `AllowedMethods` set.
     pub fn new_with(mut config: DavConfig) -> DavHandler {
         config.reqhooks = None;
         DavHandler{ config: Arc::new(config) }
     }
 
+    /// No matter how many `DavHandler`s are created, they all run on a single
+    /// shared threadpool. The default size is `8` threads. With this function, you
+    /// can change the number of threads, but only if it is called BEFORE any
+    /// requests are served.
+    pub fn num_threads(num: usize) {
+        sync_adapter::num_threads(num)
+    }
+
     /// Handle a webdav request.
     ///
-    /// Only one error kind is ever returned: ErrorKind::BrokenPipe. In that case we
+    /// Only one error kind is ever returned: `ErrorKind::BrokenPipe`. In that case we
     /// were not able to generate a response at all, and the server should just
     /// close the connection.
     pub fn handle<ReqBody, ReqError>(&self, req: http::Request<ReqBody>)
@@ -386,7 +393,7 @@ impl DavHandler {
     /// For example, the `principal` can be set for this request.
     ///
     /// Or, the default config has no locksystem, and you pass in
-    /// a fake locksystem (FakeLs) because this is a request from a
+    /// a fake locksystem (`FakeLs`) because this is a request from a
     /// windows or osx client that needs to see locking support.
     pub fn handle_with<ReqBody, ReqError>(&self, config: DavConfig, req: http::Request<ReqBody>)
       -> impl Future<Item = http::Response<BoxedByteStream>, Error = std::io::Error>

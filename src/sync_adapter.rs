@@ -21,7 +21,8 @@ enum RespItem {
 
 // Thread pool itself. FIXME: size?
 lazy_static! {
-    static ref THREAD_POOL: Mutex<ThreadPool> = Mutex::new(ThreadPool::new(8));
+    static ref NUM_THREADS: Mutex<usize> = Mutex::new(8);
+    static ref THREAD_POOL: Mutex<ThreadPool> = Mutex::new(ThreadPool::new(*NUM_THREADS.lock().unwrap()));
 }
 
 // Internal errors.
@@ -33,6 +34,10 @@ enum Error {
     ReqProxySend,
     RespProxy,
     BodyTooLarge,
+}
+
+pub(crate) fn num_threads(num: usize) {
+    *NUM_THREADS.lock().unwrap() = num;
 }
 
 /// This more-or-less mirrors hyper-0.10's struct Request. We'll refactor
