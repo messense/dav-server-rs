@@ -131,10 +131,11 @@ impl Write for Response {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        let b = self.body_buf.take();
-        if b.len() > 0 {
+        if self.body_buf.len() > 0 {
+            let b = Bytes::from(self.body_buf.clone());
+            self.body_buf.truncate(0);
             self.resp_stream
-                .send(RespItem::Body(b.into()))
+                .send(RespItem::Body(b))
                 .map_err(|_| io::ErrorKind::BrokenPipe)?;
         }
         Ok(())
