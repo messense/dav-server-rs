@@ -146,7 +146,7 @@ pub struct DavHandler {
 }
 
 /// Configuration.
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct DavConfig {
     /// Prefix to be stripped off when handling request.
     pub prefix:     Option<String>,
@@ -159,6 +159,8 @@ pub struct DavConfig {
     /// Principal is webdav speak for "user", used to give locks an owner (if a locksystem is
     /// active).
     pub principal:  Option<String>,
+    /// Closures to be called in the worker thread at the start and the end of the request.
+    pub reqhooks:   Option<(Box<Fn() + Send + Sync + 'static>, Box<Fn() + Send + Sync + 'static>)>,
 }
 
 // The actual inner struct.
@@ -168,6 +170,7 @@ pub (crate) struct DavInner {
     pub ls:         Option<Box<DavLockSystem>>,
     pub allow:      Option<AllowedMethods>,
     pub principal:  Option<String>,
+    pub reqhooks:   Option<(Box<Fn() + Send + Sync + 'static>, Box<Fn() + Send + Sync + 'static>)>,
 }
 
 impl From<DavConfig> for DavInner {
@@ -178,6 +181,7 @@ impl From<DavConfig> for DavInner {
             ls:         cfg.ls,
             allow:      cfg.allow,
             principal:  cfg.principal,
+            reqhooks:   cfg.reqhooks,
         }
     }
 }
@@ -190,10 +194,10 @@ impl From<&DavConfig> for DavInner {
             ls:         cfg.ls.clone(),
             allow:      cfg.allow,
             principal:  cfg.principal.clone(),
+            reqhooks:    None,
         }
     }
 }
-
 
 pub(crate) fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {
     match t.duration_since(UNIX_EPOCH) {
@@ -319,6 +323,16 @@ fn notfound() -> impl Future<Item = http::Response<BoxedByteStream>, Error = std
 	return Box::new(futures::future::ok(response));
 }
 
+// helper to call a closure on drop.
+struct Dropper(Option<Box<dyn Fn()>>);
+impl Drop for Dropper {
+    fn drop(&mut self) {
+        if let Some(f) = &self.0 {
+            f()
+        }
+    }
+}
+
 impl DavHandler {
     /// Create a new DavHandler.
     ///
@@ -333,6 +347,7 @@ impl DavHandler {
             ls: ls,
             allow: None,
             principal: None,
+            reqhooks: None,
         };
         DavHandler{ config: Arc::new(config) }
     }
@@ -340,7 +355,8 @@ impl DavHandler {
     /// Create a new DavHandler with a more detailed configuration.
     ///
     /// For example, pass in a specific AllowedMethods set.
-    pub fn new_with(config: DavConfig) -> DavHandler {
+    pub fn new_with(mut config: DavConfig) -> DavHandler {
+        config.reqhooks = None;
         DavHandler{ config: Arc::new(config) }
     }
 
@@ -358,7 +374,7 @@ impl DavHandler {
         if self.config.fs.is_none() {
             return future::Either::A(notfound());
         }
-        let inner = DavInner::from(&*self.config);
+        let mut inner = DavInner::from(&*self.config);
         let fut = sync_adapter::handler(req, move |req, resp| {
             inner.handle(req, resp)
         });
@@ -385,11 +401,12 @@ impl DavHandler {
             ls: config.ls.or(orig.ls.clone()),
             allow: config.allow.or(orig.allow.clone()),
             principal: config.principal.or(orig.principal.clone()),
+            reqhooks: config.reqhooks,
         };
         if self.config.fs.is_none() {
             return future::Either::A(notfound());
         }
-        let inner = DavInner::from(newconf);
+        let mut inner = DavInner::from(newconf);
         let fut = sync_adapter::handler(req, move |req, resp| {
             inner.handle(req, resp)
         });
@@ -438,7 +455,16 @@ impl DavInner {
     }
 
     // internal dispatcher.
-    fn handle(&self, mut req: Request, mut res: Response) {
+    fn handle(&mut self, mut req: Request, mut res: Response) {
+
+        // run hooks at start and end of request.
+        let mut dropper = Dropper(None);
+        let mut x = None;
+        std::mem::swap(&mut self.reqhooks, &mut x);
+        if let Some((starthook, stophook)) = x {
+            dropper.0.get_or_insert(stophook);
+            starthook();
+        }
 
         // debug when running the webdav litmus tests.
         if log_enabled!(log::Level::Debug) {
