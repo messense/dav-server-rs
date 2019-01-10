@@ -345,9 +345,9 @@ where
             body_buf: Bytes::new(),
         };
         let resp = Response::new(resp_tx);
-        info!("entering function on pool");
+        debug!("entering function on pool");
         oldhandler(req, resp);
-        info!("exiting function on pool");
+        debug!("exiting function on pool");
     });
     (req_tx, resp_rx)
 }
