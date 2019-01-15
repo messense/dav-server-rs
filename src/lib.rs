@@ -297,13 +297,15 @@ impl AllowedMethods {
     }
 
     /// Add a method.
-    pub fn add(&mut self, m: Method) {
+    pub fn add(&mut self, m: Method) -> &Self {
         self.0 |= m as u32;
+        self
     }
 
     /// Remove a method.
-    pub fn remove(&mut self, m: Method) {
+    pub fn remove(&mut self, m: Method) -> &Self {
         self.0 &= !(m as u32);
+        self
     }
 
     /// Check if method is allowed.
@@ -410,7 +412,7 @@ impl DavHandler {
             principal: config.principal.or(orig.principal.clone()),
             reqhooks: config.reqhooks,
         };
-        if self.config.fs.is_none() {
+        if newconf.fs.is_none() {
             return future::Either::A(notfound());
         }
         let mut inner = DavInner::from(newconf);
