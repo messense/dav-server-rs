@@ -1,15 +1,18 @@
 use std::time::SystemTime;
 
+use futures::prelude::*;
+use futures03::compat::Future01CompatExt;
 use http::StatusCode;
-use http::Method;
+use http::{self, Method};
 
-use crate::sync_adapter::Request;
 use crate::typed_headers::{self,EntityTag,HeaderMapExt};
 
 use crate::headers;
 use crate::fs::{DavFileSystem,DavMetaData};
 use crate::ls::DavLockSystem;
 use crate::webpath::WebPath;
+
+type Request = http::Request<()>;
 
 pub(crate) fn ifrange_match(hdr: &headers::IfRange, tag: &typed_headers::EntityTag, date: SystemTime) -> bool {
 	match hdr {
@@ -34,13 +37,13 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
 
     let modified = meta.and_then(|m| m.modified().ok());
 
-    if let Some(r) = req.headers.typed_get::<headers::IfMatch>() {
+    if let Some(r) = req.headers().typed_get::<headers::IfMatch>() {
         let etag = meta.map(|m| EntityTag::new(false, m.etag()));
         if etag.map_or(true, |m| !etaglist_match(&r.0, &m)) {
             debug!("precondition fail: If-Match {:?}", r);
             return Some(StatusCode::PRECONDITION_FAILED);
         }
-    } else if let Some(r) = req.headers.typed_get::<typed_headers::IfUnmodifiedSince>() {
+    } else if let Some(r) = req.headers().typed_get::<typed_headers::IfUnmodifiedSince>() {
         match modified {
             None => return Some(StatusCode::PRECONDITION_FAILED),
             Some(m) => {
@@ -52,18 +55,18 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
         }
     }
 
-    if let Some(r) = req.headers.typed_get::<headers::IfNoneMatch>() {
+    if let Some(r) = req.headers().typed_get::<headers::IfNoneMatch>() {
         let etag = meta.map(|m| EntityTag::new(false, m.etag()));
         if etag.map_or(false, |m| etaglist_match(&r.0, &m)) {
             debug!("precondition fail: If-None-Match {:?}", r);
-            if req.method == Method::GET || req.method == Method::HEAD {
+            if req.method() == &Method::GET || req.method() == &Method::HEAD {
                 return Some(StatusCode::NOT_MODIFIED);
             } else {
                 return Some(StatusCode::PRECONDITION_FAILED);
             }
         }
-    } else if let Some(r) = req.headers.typed_get::<typed_headers::IfModifiedSince>() {
-        if req.method == Method::GET || req.method == Method::HEAD {
+    } else if let Some(r) = req.headers().typed_get::<typed_headers::IfModifiedSince>() {
+        if req.method() == &Method::GET || req.method() == &Method::HEAD {
             if let Some(m) = modified {
                 if typed_headers::HttpDate::from(m) > r.0 {
                     debug!("not-modified If-Modified-Since {:?}", r.0);
@@ -83,12 +86,12 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
 // caller should set the http status to 412 PreconditionFailed if
 // the return value from this function is false.
 //
-pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, ls: &Option<Box<DavLockSystem>>, path: &WebPath) -> (bool, Vec<String>) {
+pub(crate) async fn dav_if_match<'a>(req: &'a Request, fs: &'a Box<DavFileSystem + 'static>, ls: &'a Option<Box<DavLockSystem + 'static>>, path: &'a WebPath) -> (bool, Vec<String>) {
 
     let mut tokens : Vec<String> = Vec::new();
     let mut any_list_ok = false;
 
-    let r = match req.headers.typed_get::<headers::If>() {
+    let r = match req.headers().typed_get::<headers::If>() {
         Some(r) => r,
         None => return (true, tokens),
     };
@@ -133,7 +136,7 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, ls: &Option<B
                         false
                     } else {
                         match ls {
-                            &Some(ref ls) => ls.check(p, None, true, false, vec![s]).is_ok(),
+                            &Some(ref ls) => blocking_io!(ls.check(p, None, true, false, vec![s])).is_ok(),
                             &None => false,
                         }
                     }
@@ -143,7 +146,7 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, ls: &Option<B
                         // invalid location, so always false.
                         false
                     } else {
-                        match fs.metadata(p) {
+                        match blocking_io!(fs.metadata(p)) {
                             Ok(meta) => {
                                 // exists and has metadata, now match.
                                 tag == &EntityTag::new(false, meta.etag())
@@ -173,8 +176,8 @@ pub(crate) fn dav_if_match(req: &Request, fs: &Box<DavFileSystem>, ls: &Option<B
 }
 
 // Handle both the HTTP conditional If: headers, and the webdav If: header.
-pub(crate) fn if_match(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<DavFileSystem>, ls: &Option<Box<DavLockSystem>>, path: &WebPath) -> Option<StatusCode> {
-    match dav_if_match(req, fs, ls, path) {
+pub(crate) async fn if_match<'a>(req: &'a Request, meta: Option<&'a Box<DavMetaData + 'static>>, fs: &'a Box<DavFileSystem + 'static>, ls: &'a Option<Box<DavLockSystem + 'static>>, path: &'a WebPath) -> Option<StatusCode> {
+    match await!(dav_if_match(req, fs, ls, path)) {
         (true, _) => {},
         (false, _) => return Some(StatusCode::PRECONDITION_FAILED),
     }
@@ -182,11 +185,11 @@ pub(crate) fn if_match(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<
 }
 
 // Like if_match, but also returns all "associated state-tokens"
-pub(crate) fn if_match_get_tokens(req: &Request, meta: Option<&Box<DavMetaData>>, fs: &Box<DavFileSystem>, ls: &Option<Box<DavLockSystem>>, path: &WebPath) -> Result<Vec<String>, StatusCode> {
+pub(crate) async fn if_match_get_tokens<'a>(req: &'a Request, meta: Option<&'a Box<DavMetaData + 'static>>, fs: &'a Box<DavFileSystem + 'static>, ls: &'a Option<Box<DavLockSystem + 'static>>, path: &'a WebPath) -> Result<Vec<String>, StatusCode> {
     if let Some(code) = http_if_match(req, meta) {
         return Err(code);
     }
-    match dav_if_match(req, fs, ls, path) {
+    match await!(dav_if_match(req, fs, ls, path)) {
         (true, v) => Ok(v),
         (false, _) => Err(StatusCode::PRECONDITION_FAILED),
     }

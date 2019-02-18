@@ -65,28 +65,45 @@
 //!     hyper::rt::run(server);
 //! }
 //! ```
+#![feature(async_await, await_macro, futures_api)]
 
 #[macro_use] extern crate hyperx;
 #[macro_use] extern crate log;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate percent_encoding;
 
+macro_rules! blocking_io {
+    ($expression:expr) => (
+        await!(futures::future::poll_fn(|| {
+            tokio_threadpool::blocking(|| {
+                $expression
+            })
+            .map_err(|_| panic!("the threadpool shut down"))
+        }).then(|r| r.unwrap()).compat())
+    )
+}
+
+macro_rules! bio_writeln {
+    ($w:expr, $($args:expr),+) => (
+        let _ = blocking_io!(writeln!($w, $($args),+));
+    )
+}
+
+mod asyncstream;
 mod errors;
 mod headers;
-mod handle_copymove;
-mod handle_delete;
+//mod handle_copymove;
+//mod handle_delete;
 mod handle_gethead;
-mod handle_lock;
-mod handle_mkcol;
-mod handle_options;
-mod handle_props;
-mod handle_put;
-mod multierror;
+//mod handle_lock;
+//mod handle_mkcol;
+//mod handle_options;
+//mod handle_props;
+//mod handle_put;
+//mod multierror;
 mod conditional;
 mod xmltree_ext;
 mod tree;
-
-mod sync_adapter;
 
 #[doc(hidden)]
 pub mod typed_headers;
@@ -99,27 +116,33 @@ pub mod memls;
 pub mod fakels;
 pub mod webpath;
 
-use std::io::Read;
+use std::io;
 use std::time::{UNIX_EPOCH,SystemTime};
 use std::sync::Arc;
 
-use bytes;
-use futures::{future, Future, Stream};
+use bytes::{self, Bytes};
+
+use futures::prelude::*;
+use futures::future;
+use futures03::compat::Future01CompatExt;
+use futures03::future::{FutureExt, TryFutureExt};
 
 use http::Method as httpMethod;
-use http::StatusCode;
+use http::{Request, Response, StatusCode};
 
+use crate::asyncstream::AsyncStream;
 use crate::typed_headers::HeaderMapExt;
-use crate::sync_adapter::{Request, Response};
 use crate::webpath::WebPath;
 
 pub(crate) use crate::errors::DavError;
 pub(crate) use crate::fs::*;
 pub(crate) use crate::ls::*;
 
-pub use crate::sync_adapter::BoxedByteStream;
+pub(crate) type DavResult<T> = Result<T, DavError>;
+pub(crate) type RespData = AsyncStream<Bytes, DavError>;
 
-type DavResult<T> = Result<T, DavError>;
+#[allow(unused)]
+pub type BoxedByteStream = Box<Stream<Item = Bytes, Error = io::Error> + Send + 'static>;
 
 /// HTTP Methods supported by DavHandler.
 #[derive(Debug,PartialEq,Eq,Hash,Clone,Copy)]
@@ -200,6 +223,19 @@ impl From<&DavConfig> for DavInner {
     }
 }
 
+impl Clone for DavInner {
+    fn clone(&self) -> Self {
+        DavInner {
+            prefix:     self.prefix.clone(),
+            fs:         self.fs.clone(),
+            ls:         self.ls.clone(),
+            allow:      self.allow.clone(),
+            principal:  self.principal.clone(),
+            reqhooks:   None,
+        }
+    }
+}
+
 pub(crate) fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {
     match t.duration_since(UNIX_EPOCH) {
         Ok(t) => time::Timespec{
@@ -244,6 +280,7 @@ pub(crate) fn dav_method(m: &http::Method) -> DavResult<Method> {
     Ok(m)
 }
 
+/*
 // map_err helper.
 pub (crate) fn statuserror(res: &mut Response, s: StatusCode) -> DavError {
     *res.status_mut() = s;
@@ -263,6 +300,7 @@ pub (crate) fn fserror(res: &mut Response, e: FsError) -> DavError {
     *res.status_mut() = s;
     DavError::Status(s)
 }
+*/
 
 // helper.
 pub (crate) fn fserror_to_status(e: FsError) -> StatusCode {
@@ -315,7 +353,7 @@ impl AllowedMethods {
 }
 
 // return a 404 reply.
-fn notfound() -> impl Future<Item = http::Response<BoxedByteStream>, Error = std::io::Error> {
+fn notfound() -> impl Future<Item = http::Response<BoxedByteStream>, Error = io::Error> {
 	let body = futures::stream::once(Ok(bytes::Bytes::from("Not Found")));
 	let body: BoxedByteStream = Box::new(body);
 	let response = http::Response::builder()
@@ -327,7 +365,7 @@ fn notfound() -> impl Future<Item = http::Response<BoxedByteStream>, Error = std
 }
 
 // helper to call a closure on drop.
-struct Dropper(Option<Box<dyn Fn()>>);
+struct Dropper(Option<Box<dyn Fn() + Send + Sync>>);
 impl Drop for Dropper {
     fn drop(&mut self) {
         if let Some(f) = &self.0 {
@@ -361,21 +399,13 @@ impl DavHandler {
         DavHandler{ config: Arc::new(config) }
     }
 
-    /// No matter how many `DavHandler`s are created, they all run on a single
-    /// shared threadpool. The default size is `8` threads. With this function, you
-    /// can change the number of threads, but only if it is called BEFORE any
-    /// requests are served.
-    pub fn num_threads(num: usize) {
-        sync_adapter::num_threads(num)
-    }
-
     /// Handle a webdav request.
     ///
     /// Only one error kind is ever returned: `ErrorKind::BrokenPipe`. In that case we
     /// were not able to generate a response at all, and the server should just
     /// close the connection.
-    pub fn handle<ReqBody, ReqError>(&self, req: http::Request<ReqBody>)
-      -> impl Future<Item = http::Response<BoxedByteStream>, Error = std::io::Error>
+    pub fn handle<ReqBody, ReqError>(&self, req: Request<ReqBody>)
+      -> impl Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
     where
         ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
         ReqError: ToString,
@@ -383,11 +413,16 @@ impl DavHandler {
         if self.config.fs.is_none() {
             return future::Either::A(notfound());
         }
-        let mut inner = DavInner::from(&*self.config);
-        let fut = sync_adapter::handler(req, move |req, resp| {
-            inner.handle(req, resp)
-        });
-        future::Either::B(fut)
+        let inner = DavInner::from(&*self.config);
+        let fut = inner
+            .handle(req)
+            .and_then(|res| {
+                let (parts, body) = res.into_parts();
+                let body = body.map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+                let body: BoxedByteStream = Box::new(body);
+                Ok(http::Response::from_parts(parts, body))
+            });
+        future::Either::B(Box::new(fut))
     }
 
     /// Handle a webdav request, overriding parts of the config.
@@ -397,8 +432,8 @@ impl DavHandler {
     /// Or, the default config has no locksystem, and you pass in
     /// a fake locksystem (`FakeLs`) because this is a request from a
     /// windows or osx client that needs to see locking support.
-    pub fn handle_with<ReqBody, ReqError>(&self, config: DavConfig, req: http::Request<ReqBody>)
-      -> impl Future<Item = http::Response<BoxedByteStream>, Error = std::io::Error>
+    pub fn handle_with<ReqBody, ReqError>(&self, config: DavConfig, req: Request<ReqBody>)
+      -> impl Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
     where
         ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
         ReqError: ToString,
@@ -415,11 +450,16 @@ impl DavHandler {
         if newconf.fs.is_none() {
             return future::Either::A(notfound());
         }
-        let mut inner = DavInner::from(newconf);
-        let fut = sync_adapter::handler(req, move |req, resp| {
-            inner.handle(req, resp)
-        });
-        future::Either::B(fut)
+        let inner = DavInner::from(newconf);
+        let fut = inner
+            .handle(req)
+            .and_then(|res| {
+                let (parts, body) = res.into_parts();
+                let body = body.map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+                let body: BoxedByteStream = Box::new(body);
+                Ok(http::Response::from_parts(parts, body))
+            });
+        future::Either::B(Box::new(fut))
     }
 }
 
@@ -432,14 +472,14 @@ impl DavInner {
     }
 
     // helper.
-    pub(crate) fn path(&self, req: &Request) -> WebPath {
+    pub(crate) fn path(&self, req: &Request<()>) -> WebPath {
         // This never fails (has been checked before)
-        WebPath::from_uri(&req.uri, &self.prefix).unwrap()
+        WebPath::from_uri(req.uri(), &self.prefix).unwrap()
     }
 
     // See if this is a directory and if so, if we have
     // to fixup the path by adding a slash at the end.
-    pub(crate) fn fixpath(&self, req: &Request, res: &mut Response) -> FsResult<(WebPath, Box<DavMetaData>)> {
+    pub(crate) fn fixpath(&self, req: &Request<()>, res: &mut Response<BoxedByteStream>) -> FsResult<(WebPath, Box<DavMetaData + 'static>)> {
         let mut path = self.path(&req);
         let meta = self.fs.metadata(&path)?;
         if meta.is_dir() && !path.is_collection() {
@@ -451,102 +491,118 @@ impl DavInner {
     }
 
     // drain request body and return length.
-    pub(crate) fn drain_request(&self, req: &mut Request) -> usize {
-        let mut buffer = [0; 8192];
-        let mut done = 0;
-        loop {
-            match req.read(&mut buffer[..]) {
-                Ok(n) if n > 0 => done += n,
-                _ => break,
-            }
-        }
-        done
+    pub(crate) fn drain_request<ReqBody, ReqError>(&self, body: ReqBody)
+        -> impl Future<Item=usize, Error=DavError>
+    where 
+        ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqError: ToString,
+    {
+        body.map_err(|_| DavError::IoError(io::Error::new(io::ErrorKind::UnexpectedEof, "UnexpectedEof")))
+            .fold(0, |acc, x| Ok::<_, DavError>(acc + x.len()))
     }
 
     // internal dispatcher.
-    fn handle(&mut self, mut req: Request, mut res: Response) {
+    fn handle<ReqBody, ReqError>(mut self, req: Request<ReqBody>)
+      -> impl Future<Item = Response<RespData>, Error = io::Error>
+    where
+        ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqError: ToString,
+    {
+        let fut = async move {
 
-        // run hooks at start and end of request.
-        let mut dropper = Dropper(None);
-        let mut x = None;
-        std::mem::swap(&mut self.reqhooks, &mut x);
-        if let Some((starthook, stophook)) = x {
-            dropper.0.get_or_insert(stophook);
-            starthook();
-        }
-
-        // debug when running the webdav litmus tests.
-        if log_enabled!(log::Level::Debug) {
-            if let Some(t) = req.headers.typed_get::<headers::XLitmus>() {
-                debug!("X-Litmus: {}", t);
+            // run hooks at start and end of request.
+            let mut dropper = Dropper(None);
+            let mut x = None;
+            std::mem::swap(&mut self.reqhooks, &mut x);
+            if let Some((starthook, stophook)) = x {
+                dropper.0.get_or_insert(stophook);
+                starthook();
             }
-        }
 
-        // translate HTTP method to Webdav method.
-        let method = match dav_method(&req.method) {
-            Ok(m) => m,
-            Err(e) => {
-                debug!("refusing method {} request {}", &req.method, &req.uri);
-                res.headers_mut().typed_insert(typed_headers::Connection::close());
-                *res.status_mut() = e.statuscode();
-                return;
-            },
-        };
-
-        // see if method is allowed.
-        if let Some(ref a) = self.allow {
-            if !a.allowed(method) {
-                debug!("method {} not allowed on request {}", req.method, req.uri);
-                res.headers_mut().typed_insert(typed_headers::Connection::close());
-                *res.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
-                return;
-            }
-        }
-
-        // make sure the request path is valid.
-        let path = match WebPath::from_uri(&req.uri, &self.prefix) {
-            Ok(p) => p,
-            Err(e) => { 
-                res.headers_mut().typed_insert(typed_headers::Connection::close());
-                daverror(&mut res, e);
-                return;
-            },
-        };
-
-        // some handlers expect a body, but most do not, so just drain
-        // the body here first. If there was a body, reject request
-        // with Unsupported Media Type.
-        match method {
-            Method::Patch |
-            Method::Put |
-            Method::PropFind |
-            Method::PropPatch |
-            Method::Lock => {},
-            _ => {
-                if self.drain_request(&mut req) > 0 {
-                    *res.status_mut() = StatusCode::UNSUPPORTED_MEDIA_TYPE;
-                    return;
+            // debug when running the webdav litmus tests.
+            if log_enabled!(log::Level::Debug) {
+                if let Some(t) = req.headers().typed_get::<headers::XLitmus>() {
+                    debug!("X-Litmus: {}", t);
                 }
             }
-        }
 
-        debug!("== START REQUEST {:?} {}", method, path);
-        if let Err(e) = match method {
-            Method::Head | Method::Get => self.handle_get(req, res),
-            Method::Put | Method::Patch => self.handle_put(req, res),
-            Method::Options => self.handle_options(req, res),
-            Method::PropFind => self.handle_propfind(req, res),
-            Method::PropPatch => self.handle_proppatch(req, res),
-            Method::MkCol => self.handle_mkcol(req, res),
-            Method::Copy => self.handle_copymove(method, req, res),
-            Method::Move => self.handle_copymove(method, req, res),
-            Method::Delete => self.handle_delete(req, res),
-            Method::Lock => self.handle_lock(req, res),
-            Method::Unlock => self.handle_unlock(req, res),
-        } {
-            debug!("== END REQUEST result {:?}", e);
-        } else {
-            debug!("== END REQUEST result OK");
-        }
+            // translate HTTP method to Webdav method.
+            let method = match dav_method(req.method()) {
+                Ok(m) => m,
+                Err(e) => {
+                    debug!("refusing method {} request {}", req.method(), req.uri());
+                    return Err(e);
+                }
+            };
+
+            // see if method is allowed.
+            if let Some(ref a) = self.allow {
+                if !a.allowed(method) {
+                    debug!("method {} not allowed on request {}", req.method(), req.uri());
+                    return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
+                }
+            }
+
+            // make sure the request path is valid.
+            let path = WebPath::from_uri(req.uri(), &self.prefix)?;
+
+            let (req, body) = {
+                let (parts, body) = req.into_parts();
+                (Request::from_parts(parts, ()), body)
+            };
+
+            // some handlers expect a body, but most do not, so just drain
+            // the body here first. If there was a body, reject request
+            // with Unsupported Media Type.
+            match method {
+                Method::Patch |
+                Method::Put |
+                Method::PropFind |
+                Method::PropPatch |
+                Method::Lock => {},
+                _ => {
+                    if await!(self.drain_request(body).compat())? > 0 {
+                        return Err(DavError::Status(StatusCode::UNSUPPORTED_MEDIA_TYPE));
+                    }
+                }
+            }
+
+            debug!("== START REQUEST {:?} {}", method, path);
+            let res = await!(match method {
+                Method::Head | Method::Get => self.handle_get(req),
+                _ => self.handle_get(req),
+                //Method::Put | Method::Patch => self.handle_put(req, res),
+                //Method::Options => self.handle_options(req, res),
+                //Method::PropFind => self.handle_propfind(req, res),
+                //Method::PropPatch => self.handle_proppatch(req, res),
+                //Method::MkCol => self.handle_mkcol(req, res),
+                //Method::Copy => self.handle_copymove(method, req, res),
+                //Method::Move => self.handle_copymove(method, req, res),
+                //Method::Delete => self.handle_delete(req, res),
+                //Method::Lock => self.handle_lock(req, res),
+                //Method::Unlock => self.handle_unlock(req, res),
+            });
+            match res {
+                Ok(_) => { debug!("== END REQUEST result OK") },
+                Err(ref e) => { debug!("== END REQUEST result {:?}", e) },
+            }
+            res
+        };
+
+        // Turn any DavError results into a HTTP error response.
+        async {
+            match await!(fut) {
+                Ok(resp) => Ok(resp),
+                Err(err) => {
+                    let mut resp = Response::builder();
+                    resp.status(err.statuscode());
+                    if err.must_close() {
+                        resp.header("connection", "close");
+                    }
+                    let resp = resp.body(AsyncStream::empty()).unwrap();
+                    Ok(resp)
+                }
+            }
+        }.boxed().compat()
     }
 }

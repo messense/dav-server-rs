@@ -28,6 +28,11 @@ Also included are two locksystems:
 - memls: ephemeral in-memory locksystem.
 - fakels: fake locksystem. just enough LOCK/UNLOCK support for OSX/Windows.
 
+# building
+
+This crate uses futures@0.3 and async/await internally, so you have to
+build it with a nightly toolchain.
+
 # testing
 
 ```

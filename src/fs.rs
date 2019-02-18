@@ -200,10 +200,10 @@ impl<FS: Clone + DavFileSystem + 'static> BoxCloneFs for FS {
 }
 
 /// Iterator, returned by read_dir(), that generates DavDirEntries.
-pub type DavReadDir = Iterator<Item=Box<DavDirEntry>>;
+pub type DavReadDir = Iterator<Item=Box<DavDirEntry>> + Send + Sync;
 
 /// One directory entry (or child node).
-pub trait DavDirEntry: Debug {
+pub trait DavDirEntry: Debug + Send + Sync {
     /// name of the entry.
     fn name(&self) -> Vec<u8>;
 
@@ -226,7 +226,7 @@ pub trait DavDirEntry: Debug {
 
 /// A DavFile should be readable/writeable/seekable, and be able
 /// to return its metadata.
-pub trait DavFile: Read + Write + Seek + Debug {
+pub trait DavFile: Read + Write + Seek + Debug + Send + Sync {
     fn metadata(&self) -> FsResult<Box<DavMetaData>>;
 }
 
@@ -234,7 +234,7 @@ pub trait DavFile: Read + Write + Seek + Debug {
 ///
 /// The BoxCloneMd trait is a helper trait that is automatically implemented
 /// so that Box\<DavMetaData\>.clone() works.
-pub trait DavMetaData : Debug + BoxCloneMd {
+pub trait DavMetaData : Debug + BoxCloneMd + Send + Sync {
 
     fn len(&self) -> u64;
     fn modified(&self) -> FsResult<SystemTime>;
