@@ -14,27 +14,17 @@ use crate::typed_headers::{self,ByteRangeSpec,HeaderMapExt};
 use crate::asyncstream::AsyncStream;
 use crate::fs::*;
 use crate::errors::DavError;
-use crate::webpath::WebPath;
 use crate::headers;
 use crate::conditional;
 use crate::{systemtime_to_httpdate,systemtime_to_timespec};
 use crate::RespData;
-
-fn path(req: &Request<()>, prefix: &str) -> WebPath {
-    WebPath::from_uri(&req.uri(), prefix).unwrap()
-}
 
 impl crate::DavInner {
 
     pub(crate) fn handle_get(self, req: Request<()>)
         -> impl Future03<Output=Result<Response<RespData>, DavError>>
     {
-        let req = {
-            let (parts, _body) = req.into_parts();
-            Request::from_parts(parts, ())
-        };
-
-        let path = path(&req, &self.prefix);
+        let path = self.path(&req);
 
         async move {
 
@@ -171,7 +161,7 @@ impl crate::DavInner {
 
     pub(crate) fn handle_dirlist(self, req: Request<()>, head: bool) -> impl Future03<Output=Result<Response<RespData>, DavError>> {
 
-        let path = path(&req, &self.prefix);
+        let path = self.path(&req);
 
         async move {
 

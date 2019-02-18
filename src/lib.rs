@@ -97,7 +97,7 @@ mod headers;
 mod handle_gethead;
 //mod handle_lock;
 //mod handle_mkcol;
-//mod handle_options;
+mod handle_options;
 //mod handle_props;
 //mod handle_put;
 //mod multierror;
@@ -568,11 +568,10 @@ impl DavInner {
             }
 
             debug!("== START REQUEST {:?} {}", method, path);
-            let res = await!(match method {
-                Method::Head | Method::Get => self.handle_get(req),
-                _ => self.handle_get(req),
+            let res = match method {
+                Method::Head | Method::Get => await!(self.handle_get(req)),
                 //Method::Put | Method::Patch => self.handle_put(req, res),
-                //Method::Options => self.handle_options(req, res),
+                Method::Options => await!(self.handle_options(req)),
                 //Method::PropFind => self.handle_propfind(req, res),
                 //Method::PropPatch => self.handle_proppatch(req, res),
                 //Method::MkCol => self.handle_mkcol(req, res),
@@ -581,7 +580,8 @@ impl DavInner {
                 //Method::Delete => self.handle_delete(req, res),
                 //Method::Lock => self.handle_lock(req, res),
                 //Method::Unlock => self.handle_unlock(req, res),
-            });
+                _ => await!(self.handle_options(req)),
+            };
             match res {
                 Ok(_) => { debug!("== END REQUEST result OK") },
                 Err(ref e) => { debug!("== END REQUEST result {:?}", e) },
