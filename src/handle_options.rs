@@ -4,20 +4,17 @@ use futures::prelude::*;
 use futures03::compat::Future01CompatExt;
 use futures03::future::Future as Future03;
 
-use crate::{dav_method,Method,DavResult, RespData};
-use crate::asyncstream::AsyncStream;
+use crate::{dav_method,empty_body,BoxedByteStream,Method,DavResult};
 use crate::headers;
 use crate::typed_headers::{self, HeaderMapExt};
 
 impl crate::DavInner {
 
     pub(crate) fn handle_options(self, req: Request<()>)
-        -> impl Future03<Output=DavResult<Response<RespData>>>
+        -> impl Future03<Output=DavResult<Response<BoxedByteStream>>>
     {
-        let path = self.path(&req);
-
         async move {
-            let mut res = Response::new(AsyncStream::empty());
+            let mut res = Response::new(empty_body());
 
             let h = res.headers_mut();
             if self.ls.is_some() {
@@ -43,6 +40,7 @@ impl crate::DavInner {
                 }
             };
 
+            let path = self.path(&req);
             let meta = blocking_io!(self.fs.metadata(&path));
             let is_unmapped = meta.is_err();
             let is_file = meta.and_then(|m| Ok(m.is_file())).unwrap_or_default();

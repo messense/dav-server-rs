@@ -4,25 +4,25 @@ use std::sync::Mutex;
 use futures::prelude::*;
 use futures03::compat::Future01CompatExt;
 use futures03::future::Future as Future03;
+use futures03::sink::SinkExt;
 
 use htmlescape;
 use http::{Request, Response, status::StatusCode};
 use time;
 
-use crate::typed_headers::{self,ByteRangeSpec,HeaderMapExt};
-
-use crate::asyncstream::AsyncStream;
-use crate::fs::*;
-use crate::errors::DavError;
-use crate::headers;
+use crate::{empty_body,systemtime_to_httpdate,systemtime_to_timespec};
+use crate::BoxedByteStream;
 use crate::conditional;
-use crate::{systemtime_to_httpdate,systemtime_to_timespec};
-use crate::RespData;
+use crate::errors::*;
+use crate::fs::*;
+use crate::headers;
+use crate::makestream;
+use crate::typed_headers::{self,ByteRangeSpec,HeaderMapExt};
 
 impl crate::DavInner {
 
     pub(crate) fn handle_get(self, req: Request<()>)
-        -> impl Future03<Output=Result<Response<RespData>, DavError>>
+        -> impl Future03<Output=Result<Response<BoxedByteStream>, DavError>>
     {
         let path = self.path(&req);
 
@@ -86,7 +86,7 @@ impl crate::DavInner {
                 }
             }
 
-            let mut res = Response::new(AsyncStream::empty());
+            let mut res = Response::new(empty_body());
 
             // set Last-Modified and ETag headers.
             if let Ok(modified) = meta.modified() {
@@ -127,7 +127,7 @@ impl crate::DavInner {
             }
 
             // now just loop and send data.
-            *res.body_mut() = AsyncStream::stream(async move |mut w| {
+            *res.body_mut() = Box::new(makestream::stream01(async move |mut tx| {
 
                 let mut buffer = [0; 8192];
                 let zero = [0; 4096];
@@ -150,22 +150,22 @@ impl crate::DavInner {
                     }
                     count -= n as u64;
                     debug!("sending {} bytes", data.len());
-                    await!(w.send(data));
+                    await!(tx.send(Ok(data.into())))?;
                 }
-                Ok(())
-	        });
+                Ok::<(), DavError>(())
+	        }));
 
             Ok(res)
         }
     }
 
-    pub(crate) fn handle_dirlist(self, req: Request<()>, head: bool) -> impl Future03<Output=Result<Response<RespData>, DavError>> {
+    pub(crate) fn handle_dirlist(self, req: Request<()>, head: bool) -> impl Future03<Output=Result<Response<BoxedByteStream>, DavError>> {
 
         let path = self.path(&req);
 
         async move {
 
-            let mut res = Response::new(AsyncStream::empty());
+            let mut res = Response::new(empty_body());
 
             // This is a directory. If the path doesn't end in "/", send a redir.
             // Most webdav clients handle redirect really bad, but a client asking
@@ -189,7 +189,8 @@ impl crate::DavInner {
                 return Ok(res);
             }
 
-            *res.body_mut() = AsyncStream::stream(async move |mut w| {
+            // now just loop and send data.
+            *res.body_mut() = Box::new(makestream::stream01(async move |mut tx| {
 
                 // transform all entries into a dirent struct.
                 struct Dirent {
@@ -232,7 +233,7 @@ impl crate::DavInner {
                             });
                         }
                     }
-                    Result::<_, DavError>::Ok(dirents)
+                    Result::<_, FsError>::Ok(dirents)
                 })?;
 
                 // now we can sort the dirent struct.
@@ -250,29 +251,31 @@ impl crate::DavInner {
 
                 // and output html
                 let upath = htmlescape::encode_minimal(&path.as_url_string());
-                bio_writeln!(w, "<html><head>");
-                bio_writeln!(w, "<title>Index of {}</title>", upath);
-                bio_writeln!(w, "<style>");
-                bio_writeln!(w, "table {{");
-                bio_writeln!(w, "  border-collapse: separate;");
-                bio_writeln!(w, "  border-spacing: 1.5em 0.25em;");
-                bio_writeln!(w, "}}");
-                bio_writeln!(w, "h1 {{");
-                bio_writeln!(w, "  padding-left: 0.3em;");
-                bio_writeln!(w, "}}");
-                bio_writeln!(w, ".mono {{");
-                bio_writeln!(w, "  font-family: monospace;");
-                bio_writeln!(w, "}}");
-                bio_writeln!(w, "</style>");
-                bio_writeln!(w, "</head>");
+                let mut w = String::new();
+                w.push_str("<html><head>");
+                w.push_str(&format!("<title>Index of {}</title>", upath));
+                w.push_str("<style>");
+                w.push_str("table {{");
+                w.push_str("  border-collapse: separate;");
+                w.push_str("  border-spacing: 1.5em 0.25em;");
+                w.push_str("}}");
+                w.push_str("h1 {{");
+                w.push_str("  padding-left: 0.3em;");
+                w.push_str("}}");
+                w.push_str(".mono {{");
+                w.push_str("  font-family: monospace;");
+                w.push_str("}}");
+                w.push_str("</style>");
+                w.push_str("</head>");
 
-                bio_writeln!(w, "<body>");
-                bio_writeln!(w, "<h1>Index of {}</h1>", upath);
-                bio_writeln!(w, "<table>");
-                bio_writeln!(w, "<tr>");
-                bio_writeln!(w, "<th>Name</th><th>Last modified</th><th>Size</th>");
-                bio_writeln!(w, "<tr><th colspan=\"3\"><hr></th></tr>");
-                bio_writeln!(w, "<tr><td><a href=\"..\">Parent Directory</a></td><td>&nbsp;</td><td class=\"mono\" align=\"right\">[DIR]</td></tr>");
+                w.push_str("<body>");
+                w.push_str(&format!("<h1>Index of {}</h1>", upath));
+                w.push_str("<table>");
+                w.push_str("<tr>");
+                w.push_str("<th>Name</th><th>Last modified</th><th>Size</th>");
+                w.push_str("<tr><th colspan=\"3\"><hr></th></tr>");
+                w.push_str("<tr><td><a href=\"..\">Parent Directory</a></td><td>&nbsp;</td><td class=\"mono\" align=\"right\">[DIR]</td></tr>");
+                await!(tx.send(Ok(w.into())))?;
 
                 for dirent in &dirents {
                     let modified = match dirent.meta.modified() {
@@ -288,15 +291,18 @@ impl crate::DavInner {
                         false => "[DIR]".to_string(),
                     };
                     let name = htmlescape::encode_minimal(&dirent.name);
-                    bio_writeln!(w, "<tr><td><a href=\"{}\">{}</a></td><td class=\"mono\">{}</td><td class=\"mono\" align=\"right\">{}</td></tr>",
+                    let s = format!("<tr><td><a href=\"{}\">{}</a></td><td class=\"mono\">{}</td><td class=\"mono\" align=\"right\">{}</td></tr>",
                              dirent.path, name, modified, size);
+                    await!(tx.send(Ok(s.into())))?;
                 }
 
-                bio_writeln!(w, "<tr><th colspan=\"3\"><hr></th></tr>");
-                bio_writeln!(w, "</table></body></html>");
+                let mut w = String::new();
+                w.push_str("<tr><th colspan=\"3\"><hr></th></tr>");
+                w.push_str("</table></body></html>");
+                await!(tx.send(Ok(w.into())))?;
 
                 Ok(())
-            });
+            }));
 
             Ok(res)
         }

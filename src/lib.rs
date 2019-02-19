@@ -83,13 +83,6 @@ macro_rules! blocking_io {
     )
 }
 
-macro_rules! bio_writeln {
-    ($w:expr, $($args:expr),+) => (
-        let _ = blocking_io!(writeln!($w, $($args),+));
-    )
-}
-
-mod asyncstream;
 mod errors;
 mod headers;
 //mod handle_copymove;
@@ -100,6 +93,7 @@ mod handle_mkcol;
 mod handle_options;
 //mod handle_props;
 mod handle_put;
+mod makestream;
 //mod multierror;
 mod conditional;
 mod xmltree_ext;
@@ -117,6 +111,7 @@ pub mod fakels;
 pub mod webpath;
 
 use std::io;
+use std::error::Error as StdError;
 use std::time::{UNIX_EPOCH,SystemTime};
 use std::sync::Arc;
 
@@ -127,11 +122,11 @@ use futures::future;
 use futures03::compat::Future01CompatExt;
 use futures03::future::{FutureExt, TryFutureExt};
 use futures03::future::Future as Future03;
+use futures03::stream::TryStreamExt;
 
 use http::Method as httpMethod;
 use http::{Request, Response, StatusCode};
 
-use crate::asyncstream::AsyncStream;
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::WebPath;
 
@@ -139,11 +134,10 @@ pub(crate) use crate::errors::DavError;
 pub(crate) use crate::fs::*;
 pub(crate) use crate::ls::*;
 
-pub(crate) type DavResult<T> = Result<T, DavError>;
-pub(crate) type RespData = AsyncStream<Bytes, DavError>;
-
 #[allow(unused)]
 pub type BoxedByteStream = Box<Stream<Item = Bytes, Error = io::Error> + Send + 'static>;
+pub(crate) type DavResult<T> = Result<T, DavError>;
+pub(crate) type BytesResult = io::Result<Bytes>;
 
 /// HTTP Methods supported by DavHandler.
 #[derive(Debug,PartialEq,Eq,Hash,Clone,Copy)]
@@ -281,6 +275,10 @@ pub(crate) fn dav_method(m: &http::Method) -> DavResult<Method> {
     Ok(m)
 }
 
+pub(crate) fn empty_body() -> BoxedByteStream {
+    Box::new(futures03::stream::empty::<BytesResult>().compat())
+}
+
 /*
 // map_err helper.
 pub (crate) fn statuserror(res: &mut Response, s: StatusCode) -> DavError {
@@ -409,21 +407,13 @@ impl DavHandler {
       -> impl Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
     where
         ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
-        ReqError: ToString,
+        ReqError: StdError + Send + Sync + 'static,
     {
         if self.config.fs.is_none() {
             return future::Either::A(notfound());
         }
         let inner = DavInner::from(&*self.config);
-        let fut = inner
-            .handle(req)
-            .and_then(|res| {
-                let (parts, body) = res.into_parts();
-                let body = body.map_err(|e| io::Error::new(io::ErrorKind::Other, e));
-                let body: BoxedByteStream = Box::new(body);
-                Ok(http::Response::from_parts(parts, body))
-            });
-        future::Either::B(Box::new(fut))
+        future::Either::B(inner.handle(req))
     }
 
     /// Handle a webdav request, overriding parts of the config.
@@ -437,7 +427,7 @@ impl DavHandler {
       -> impl Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
     where
         ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
-        ReqError: ToString,
+        ReqError: StdError + Send + Sync + 'static,
     {
         let orig = &*self.config;
         let newconf = DavConfig {
@@ -452,15 +442,7 @@ impl DavHandler {
             return future::Either::A(notfound());
         }
         let inner = DavInner::from(newconf);
-        let fut = inner
-            .handle(req)
-            .and_then(|res| {
-                let (parts, body) = res.into_parts();
-                let body = body.map_err(|e| io::Error::new(io::ErrorKind::Other, e));
-                let body: BoxedByteStream = Box::new(body);
-                Ok(http::Response::from_parts(parts, body))
-            });
-        future::Either::B(Box::new(fut))
+        future::Either::B(inner.handle(req))
     }
 }
 
@@ -496,7 +478,7 @@ impl DavInner {
         -> impl Future03<Output=DavResult<usize>>
     where 
         ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
-        ReqError: ToString,
+        ReqError: StdError + Send + Sync + 'static,
     {
         body.map_err(|_| DavError::IoError(io::Error::new(io::ErrorKind::UnexpectedEof, "UnexpectedEof")))
             .fold(0, |acc, x| Ok::<_, DavError>(acc + x.len()))
@@ -505,10 +487,10 @@ impl DavInner {
 
     // internal dispatcher.
     fn handle<ReqBody, ReqError>(mut self, req: Request<ReqBody>)
-      -> impl Future<Item = Response<RespData>, Error = io::Error>
+      -> impl Future<Item = Response<BoxedByteStream>, Error = io::Error>
     where
         ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
-        ReqError: ToString,
+        ReqError: StdError + Send + Sync + 'static,
     {
         let fut = async move {
 
@@ -600,7 +582,7 @@ impl DavInner {
                     if err.must_close() {
                         resp.header("connection", "close");
                     }
-                    let resp = resp.body(AsyncStream::empty()).unwrap();
+                    let resp = resp.body(empty_body()).unwrap();
                     Ok(resp)
                 }
             }

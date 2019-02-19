@@ -1,3 +1,5 @@
+use std::any::Any;
+use std::error::Error as StdError;
 use std::io;
 use std::io::prelude::*;
 
@@ -9,9 +11,8 @@ use futures03::compat::{Future01CompatExt, Stream01CompatExt};
 use futures03::future::Future as Future03;
 use futures03::stream::StreamExt;
 
-use crate::{DavError, DavResult, RespData};
-use crate::systemtime_to_httpdate;
-use crate::asyncstream::AsyncStream;
+use crate::{BoxedByteStream, DavError, DavResult};
+use crate::{empty_body,systemtime_to_httpdate};
 use crate::conditional::if_match_get_tokens;
 use crate::fs::*;
 use crate::headers;
@@ -19,13 +20,32 @@ use crate::typed_headers::{self, HeaderMapExt};
 
 const SABRE: &'static str = "application/x-sabredav-partialupdate";
 
+// This is a lovely hack.
+fn to_ioerror<E>(err: E) -> io::Error
+    where E: StdError + Sync + Send + 'static
+{
+    let e = &err as &dyn Any;
+    if e.is::<io::Error>() || e.is::<Box<io::Error>>() {
+        let err = Box::new(err) as Box<dyn Any>;
+        match err.downcast::<io::Error>() {
+            Ok(e) => *e,
+            Err(e) => match e.downcast::<Box<io::Error>>() {
+                Ok(e) => *(*e),
+                Err(_) => io::ErrorKind::Other.into(),
+            },
+        }
+    } else {
+        io::Error::new(io::ErrorKind::Other, err)
+    }
+}
+
 impl crate::DavInner {
 
     pub(crate) fn handle_put<ReqBody, ReqError>(self, req: Request<()>, body: ReqBody)
-        -> impl Future03<Output=DavResult<Response<RespData>>>
+        -> impl Future03<Output=DavResult<Response<BoxedByteStream>>>
     where
         ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
-        ReqError: ToString,
+        ReqError: StdError + Sync + Send + 'static
     {
 
         async move {
@@ -46,7 +66,7 @@ impl crate::DavInner {
             let meta = blocking_io!(self.fs.metadata(&path));
 
             // close connection on error.
-            let mut res = Response::new(AsyncStream::empty());
+            let mut res = Response::new(empty_body());
             res.headers_mut().typed_insert(typed_headers::Connection::close());
 
             // SabreDAV style PATCH?
@@ -163,8 +183,7 @@ impl crate::DavInner {
             let mut body = body.compat();
 
             while let Some(buffer) = await!(body.next()) {
-                // XXX FIXME correct ReqError type (Into<Box<Error>> ?)
-                let buffer = buffer.map_err(|_| io::Error::new(io::ErrorKind::Other, "IOERR"))?;
+                let buffer = buffer.map_err(|e| to_ioerror(e))?;
                 let mut n = buffer.len();
                 if have_count {
                     // bunch of consistency checks.

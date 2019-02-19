@@ -5,8 +5,7 @@ use futures::prelude::*;
 use futures03::compat::Future01CompatExt;
 use futures03::future::Future as Future03;
 
-use crate::{DavError, DavResult, RespData};
-use crate::asyncstream::AsyncStream;
+use crate::{BoxedByteStream,DavError, DavResult, empty_body};
 use crate::conditional::*;
 use crate::fs::*;
 use crate::headers;
@@ -15,7 +14,7 @@ use crate::typed_headers::HeaderMapExt;
 impl crate::DavInner {
 
     pub(crate) fn handle_mkcol(self, req: Request<()>)
-    -> impl Future03<Output=DavResult<Response<RespData>>>
+    -> impl Future03<Output=DavResult<Response<BoxedByteStream>>>
     {
         async move {
 
@@ -38,7 +37,7 @@ impl crate::DavInner {
                 }
             }
 
-            let mut res = Response::new(AsyncStream::empty());
+            let mut res = Response::new(empty_body());
 
             match blocking_io!(self.fs.create_dir(&path)) {
                 // RFC 4918 9.3.1 MKCOL Status Codes.

@@ -39,4 +39,5 @@ clap = "2.32.0"
 # for localfs.rs
 filetime = "0.2.4"
 libc = "0.2.46"
+tokio = "0.1.15"
 
