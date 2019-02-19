@@ -99,7 +99,7 @@ mod handle_gethead;
 mod handle_mkcol;
 mod handle_options;
 //mod handle_props;
-//mod handle_put;
+mod handle_put;
 //mod multierror;
 mod conditional;
 mod xmltree_ext;
@@ -126,6 +126,7 @@ use futures::prelude::*;
 use futures::future;
 use futures03::compat::Future01CompatExt;
 use futures03::future::{FutureExt, TryFutureExt};
+use futures03::future::Future as Future03;
 
 use http::Method as httpMethod;
 use http::{Request, Response, StatusCode};
@@ -492,13 +493,14 @@ impl DavInner {
 
     // drain request body and return length.
     pub(crate) fn drain_request<ReqBody, ReqError>(&self, body: ReqBody)
-        -> impl Future<Item=usize, Error=DavError>
+        -> impl Future03<Output=DavResult<usize>>
     where 
         ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
         ReqError: ToString,
     {
         body.map_err(|_| DavError::IoError(io::Error::new(io::ErrorKind::UnexpectedEof, "UnexpectedEof")))
             .fold(0, |acc, x| Ok::<_, DavError>(acc + x.len()))
+            .compat()
     }
 
     // internal dispatcher.
@@ -555,13 +557,13 @@ impl DavInner {
             // the body here first. If there was a body, reject request
             // with Unsupported Media Type.
             match method {
+                Method::Put => return await!(self.handle_put(req, body)),
                 Method::Patch |
-                Method::Put |
                 Method::PropFind |
                 Method::PropPatch |
                 Method::Lock => {},
                 _ => {
-                    if await!(self.drain_request(body).compat())? > 0 {
+                    if await!(self.drain_request(body))? > 0 {
                         return Err(DavError::Status(StatusCode::UNSUPPORTED_MEDIA_TYPE));
                     }
                 }
@@ -570,7 +572,6 @@ impl DavInner {
             debug!("== START REQUEST {:?} {}", method, path);
             let res = match method {
                 Method::Head | Method::Get => await!(self.handle_get(req)),
-                //Method::Put | Method::Patch => self.handle_put(req, res),
                 Method::Options => await!(self.handle_options(req)),
                 //Method::PropFind => self.handle_propfind(req, res),
                 //Method::PropPatch => self.handle_proppatch(req, res),
@@ -582,18 +583,18 @@ impl DavInner {
                 //Method::Unlock => self.handle_unlock(req, res),
                 _ => await!(self.handle_options(req)),
             };
-            match res {
-                Ok(_) => { debug!("== END REQUEST result OK") },
-                Err(ref e) => { debug!("== END REQUEST result {:?}", e) },
-            }
             res
         };
 
         // Turn any DavError results into a HTTP error response.
         async {
             match await!(fut) {
-                Ok(resp) => Ok(resp),
+                Ok(resp) => {
+                    debug!("== END REQUEST result OK");
+                    Ok(resp)
+                },
                 Err(err) => {
+                    debug!("== END REQUEST result {:?}", err);
                     let mut resp = Response::builder();
                     resp.status(err.statuscode());
                     if err.must_close() {
