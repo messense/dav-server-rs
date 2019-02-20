@@ -31,7 +31,7 @@ async fn map_result<I, E, F>(f: F, mut tx_err: MpscSender03<Result<I, E>>) -> Re
     Ok(())
 }
 
-pub(crate) fn stream03<I, E, F, R>(fut: F) -> impl Stream03<Item=Result<I, E>>
+pub(crate) fn stream03<I, E, F, R>(futwrap: F) -> impl Stream03<Item=Result<I, E>>
     where I: Sync + Send + 'static,
           E: std::error::Error + From<DavError> + Sync + Send + 'static,
           F: FnOnce(MpscSender03<Result<I, E>>) -> R,
@@ -39,7 +39,7 @@ pub(crate) fn stream03<I, E, F, R>(fut: F) -> impl Stream03<Item=Result<I, E>>
 {
     let (tx, rx) = futures03::channel::mpsc::channel::<Result<I, E>>(1);
     let tx_err = tx.clone();
-    tokio::spawn(map_result(fut(tx), tx_err).boxed().compat());
+    tokio::spawn(map_result(futwrap(tx), tx_err).boxed().compat());
     rx
 }
 

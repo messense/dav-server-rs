@@ -1,10 +1,12 @@
-
-use futures::prelude::*;
-use futures03::compat::Future01CompatExt;
+//
+// This uses recursive async functions. that's really funky ...
+// see https://github.com/rust-lang/rust/issues/53690#issuecomment-457993865
+//
 
 use http::{Request, Response, StatusCode};
 
 use crate::{BoxedByteStream,DavResult};
+use crate::common::*;
 use crate::conditional::if_match_get_tokens;
 use crate::errors::*;
 use crate::fs::*;
@@ -37,8 +39,8 @@ async fn dir_status<'a>(res: &'a mut MultiError, path: &'a WebPath, e: FsError) 
 }
 
 impl crate::DavInner {
-
-    pub(crate) async fn delete_items<'a>(&'a self, mut res: &'a mut MultiError, depth: Depth, meta: Box<DavMetaData + 'a>, path: &'a WebPath) -> DavResult<()> {
+    pub(crate) fn delete_items<'a>(&'a self, mut res: &'a mut MultiError, depth: Depth, meta: Box<DavMetaData + 'a>, path: &'a WebPath) -> impl Future03<Output=DavResult<()>> + Send + 'a {
+        async move {
         if !meta.is_dir() {
             debug!("delete_items (file) {} {:?}", path, depth);
             return match blocking_io!(self.fs.remove_file(path)) {
@@ -61,8 +63,7 @@ impl crate::DavInner {
             Err(e) => Err(await!(add_status(&mut res, path, e))),
         }?;
         let mut result = Ok(());
-        // XXX FIXME IMPORTANT WRAP IT IN BLOCKING_IO!
-        while let Some(dirent) = entries.next() {
+        while let Some(dirent) = blocking_io!(entries.next()) {
             // if metadata() fails, skip to next entry.
             // NOTE: dirent.metadata == symlink_metadata (!)
             let meta = match blocking_io!(dirent.metadata()) {
@@ -79,10 +80,8 @@ impl crate::DavInner {
 
             // do the actual work. If this fails with a non-fs related error,
             // return immediately.
-            // XXX FIXME EVEN MORE IMPORTANT UNCOMMENT AND FIX THIS XXX
-            panic!("won't work");
-            /*
-            if let Err(e) = await!(self.delete_items(&mut res, depth, meta, &npath)) {
+            let f = FutureObj03::new(Box::pin(self.delete_items(&mut res, depth, meta, &npath)));
+            if let Err(e) = await!(f) {
                 match e {
                     DavError::Status(_) => {
                         result = Err(e);
@@ -91,7 +90,6 @@ impl crate::DavInner {
                     _ => return Err(e),
                 }
             }
-            */
         }
 
         // if we got any error, return with the error,
@@ -102,6 +100,7 @@ impl crate::DavInner {
             Ok(x) => Ok(x),
             Err(e) => Err(await!(dir_status(&mut res, path, e))),
         }
+    }
     }
 
     pub(crate) async fn handle_delete(self, req: Request<()>)
@@ -143,13 +142,15 @@ impl crate::DavInner {
         }
 
         let path2 = path.clone();
+        //let fut = async move |tx| {
         let items = makestream::stream03(async move |tx| {
 
             // turn the Sink into something easier to pass around.
             let mut multierror = MultiError::new(tx);
 
             // now delete the path recursively.
-            if let Ok(()) = await!(self.delete_items(&mut multierror, depth, meta, &path)) {
+            let fut = self.delete_items(&mut multierror, depth, meta, &path);
+            if let Ok(()) = await!(fut) {
                 // Done. Now delete the path in the locksystem as well.
                 // Should really do this per resource, in case the delete partially fails. See TODO.pm
                 if let Some(ref locksystem) = self.ls {

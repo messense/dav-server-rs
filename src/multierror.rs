@@ -20,6 +20,7 @@ use crate::{BoxedByteStream,DavError,empty_body};
 use crate::makestream;
 use crate::webpath::WebPath;
 
+#[derive(Clone)]
 pub(crate) struct MultiError(futures03::channel::mpsc::Sender<Result<(WebPath, StatusCode), DavError>>);
 
 impl MultiError {
