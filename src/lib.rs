@@ -86,7 +86,7 @@ macro_rules! blocking_io {
 mod errors;
 mod headers;
 //mod handle_copymove;
-//mod handle_delete;
+mod handle_delete;
 mod handle_gethead;
 //mod handle_lock;
 mod handle_mkcol;
@@ -94,7 +94,7 @@ mod handle_options;
 //mod handle_props;
 mod handle_put;
 mod makestream;
-//mod multierror;
+mod multierror;
 mod conditional;
 mod xmltree_ext;
 mod tree;
@@ -560,7 +560,7 @@ impl DavInner {
                 Method::MkCol => await!(self.handle_mkcol(req)),
                 //Method::Copy => self.handle_copymove(method, req, res),
                 //Method::Move => self.handle_copymove(method, req, res),
-                //Method::Delete => self.handle_delete(req, res),
+                Method::Delete => await!(self.handle_delete(req)),
                 //Method::Lock => self.handle_lock(req, res),
                 //Method::Unlock => self.handle_unlock(req, res),
                 _ => await!(self.handle_options(req)),
