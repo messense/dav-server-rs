@@ -1,11 +1,8 @@
 
 use http::{Request, Response, StatusCode};
 
-use futures::prelude::*;
-use futures03::compat::Future01CompatExt;
-use futures03::future::Future as Future03;
-
 use crate::{BoxedByteStream,DavError, DavResult, empty_body};
+use crate::common::*;
 use crate::conditional::*;
 use crate::fs::*;
 use crate::headers;

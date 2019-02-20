@@ -1,10 +1,7 @@
 use http::{Request, Response};
 
-use futures::prelude::*;
-use futures03::compat::Future01CompatExt;
-use futures03::future::Future as Future03;
-
 use crate::{dav_method,empty_body,BoxedByteStream,Method,DavResult};
+use crate::common::*;
 use crate::headers;
 use crate::typed_headers::{self, HeaderMapExt};
 

@@ -1,10 +1,10 @@
 use std::io::prelude::*;
 use std::sync::Mutex;
 
-use futures::prelude::*;
-use futures03::compat::Future01CompatExt;
-use futures03::future::Future as Future03;
-use futures03::sink::SinkExt;
+//use futures::prelude::*;
+//use futures03::compat::Future01CompatExt;
+//use futures03::future::Future as Future03;
+//use futures03::sink::SinkExt;
 
 use htmlescape;
 use http::{Request, Response, status::StatusCode};
@@ -12,6 +12,7 @@ use time;
 
 use crate::{empty_body,systemtime_to_httpdate,systemtime_to_timespec};
 use crate::BoxedByteStream;
+use crate::common::*;
 use crate::conditional;
 use crate::errors::*;
 use crate::fs::*;

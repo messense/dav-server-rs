@@ -1,15 +1,13 @@
 use std::time::SystemTime;
 
-use futures::prelude::*;
-use futures03::compat::Future01CompatExt;
 use http::StatusCode;
 use http::{self, Method};
 
-use crate::typed_headers::{self,EntityTag,HeaderMapExt};
-
+use crate::common::*;
 use crate::headers;
 use crate::fs::{DavFileSystem,DavMetaData};
 use crate::ls::DavLockSystem;
+use crate::typed_headers::{self,EntityTag,HeaderMapExt};
 use crate::webpath::WebPath;
 
 type Request = http::Request<()>;

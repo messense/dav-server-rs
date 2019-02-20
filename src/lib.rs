@@ -79,10 +79,11 @@ macro_rules! blocking_io {
                 $expression
             })
             .map_err(|_| panic!("the threadpool shut down"))
-        }).then(|r| r.unwrap()).compat())
+        }).compat()).unwrap()
     )
 }
 
+mod common;
 mod errors;
 mod headers;
 //mod handle_copymove;
@@ -275,46 +276,9 @@ pub(crate) fn dav_method(m: &http::Method) -> DavResult<Method> {
     Ok(m)
 }
 
+// helper.
 pub(crate) fn empty_body() -> BoxedByteStream {
     Box::new(futures03::stream::empty::<BytesResult>().compat())
-}
-
-/*
-// map_err helper.
-pub (crate) fn statuserror(res: &mut Response, s: StatusCode) -> DavError {
-    *res.status_mut() = s;
-    DavError::Status(s)
-}
-
-// map_err helper.
-fn daverror<E: Into<DavError>>(res: &mut Response, e: E) -> DavError {
-    let err = e.into();
-    *res.status_mut() = err.statuscode();
-    err
-}
-
-// map_err helper.
-pub (crate) fn fserror(res: &mut Response, e: FsError) -> DavError {
-    let s = fserror_to_status(e);
-    *res.status_mut() = s;
-    DavError::Status(s)
-}
-*/
-
-// helper.
-pub (crate) fn fserror_to_status(e: FsError) -> StatusCode {
-    match e {
-        FsError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
-        FsError::GeneralFailure => StatusCode::INTERNAL_SERVER_ERROR,
-        FsError::Exists => StatusCode::METHOD_NOT_ALLOWED,
-        FsError::NotFound => StatusCode::NOT_FOUND,
-        FsError::Forbidden => StatusCode::FORBIDDEN,
-        FsError::InsufficientStorage => StatusCode::INSUFFICIENT_STORAGE,
-        FsError::LoopDetected => StatusCode::LOOP_DETECTED,
-        FsError::PathTooLong => StatusCode::URI_TOO_LONG,
-        FsError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-        FsError::IsRemote => StatusCode::BAD_GATEWAY,
-    }
 }
 
 /// A set of allowed `Method`s.
