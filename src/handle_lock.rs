@@ -61,6 +61,7 @@ impl crate::DavInner {
             let buffer = MultiBuf::new();
             let mut emitter = xmltree_ext::emitter(buffer.clone())?;
             prop.write_ev(&mut emitter)?;
+            drop(emitter);
 
             *res.body_mut() = single_body(buffer.take()?);
             return Ok(res);
@@ -173,6 +174,7 @@ impl crate::DavInner {
         let mut emitter = xmltree_ext::emitter(buffer.clone())?;
         let prop = build_lock_prop(&lock, true);
         prop.write_ev(&mut emitter)?;
+        drop(emitter);
 
         *res.body_mut() = single_body(buffer.take()?);
         return Ok(res);

@@ -41,66 +41,65 @@ async fn dir_status<'a>(res: &'a mut MultiError, path: &'a WebPath, e: FsError) 
 impl crate::DavInner {
     pub(crate) fn delete_items<'a>(&'a self, mut res: &'a mut MultiError, depth: Depth, meta: Box<DavMetaData + 'a>, path: &'a WebPath) -> impl Future03<Output=DavResult<()>> + Send + 'a {
         async move {
-        if !meta.is_dir() {
-            debug!("delete_items (file) {} {:?}", path, depth);
-            return match blocking_io!(self.fs.remove_file(path)) {
+            if !meta.is_dir() {
+                debug!("delete_items (file) {} {:?}", path, depth);
+                return match blocking_io!(self.fs.remove_file(path)) {
+                    Ok(x) => Ok(x),
+                    Err(e) => Err(await!(add_status(&mut res, path, e))),
+                };
+            }
+            if depth == Depth::Zero {
+                debug!("delete_items (dir) {} {:?}", path, depth);
+                return match blocking_io!(self.fs.remove_dir(path)) {
+                    Ok(x) => Ok(x),
+                    Err(e) => Err(await!(add_status(&mut res, path, e))),
+                };
+            }
+
+            // walk over all entries.
+            let mut entries = match blocking_io!(self.fs.read_dir(path)) {
                 Ok(x) => Ok(x),
                 Err(e) => Err(await!(add_status(&mut res, path, e))),
-            };
-        }
-        if depth == Depth::Zero {
-            debug!("delete_items (dir) {} {:?}", path, depth);
-            return match blocking_io!(self.fs.remove_dir(path)) {
-                Ok(x) => Ok(x),
-                Err(e) => Err(await!(add_status(&mut res, path, e))),
-            };
-        }
-        debug!("delete_items (recurse) {} {:?}", path, depth);
-
-        // walk over all entries.
-        let mut entries = match blocking_io!(self.fs.read_dir(path)) {
-            Ok(x) => Ok(x),
-            Err(e) => Err(await!(add_status(&mut res, path, e))),
-        }?;
-        let mut result = Ok(());
-        while let Some(dirent) = blocking_io!(entries.next()) {
-            // if metadata() fails, skip to next entry.
-            // NOTE: dirent.metadata == symlink_metadata (!)
-            let meta = match blocking_io!(dirent.metadata()) {
-                Ok(m) => m,
-                Err(e) => {
-                    result = Err(await!(add_status(&mut res, path, e)));
-                    continue
-                },
-            };
-
-            let mut npath = path.clone();
-            npath.push_segment(&dirent.name());
-            npath.add_slash_if(meta.is_dir());
-
-            // do the actual work. If this fails with a non-fs related error,
-            // return immediately.
-            let f = FutureObj03::new(Box::pin(self.delete_items(&mut res, depth, meta, &npath)));
-            if let Err(e) = await!(f) {
-                match e {
-                    DavError::Status(_) => {
-                        result = Err(e);
-                          continue;
+            }?;
+            let mut result = Ok(());
+            while let Some(dirent) = blocking_io!(entries.next()) {
+                // if metadata() fails, skip to next entry.
+                // NOTE: dirent.metadata == symlink_metadata (!)
+                let meta = match blocking_io!(dirent.metadata()) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        result = Err(await!(add_status(&mut res, path, e)));
+                        continue
                     },
-                    _ => return Err(e),
+                };
+
+                let mut npath = path.clone();
+                npath.push_segment(&dirent.name());
+                npath.add_slash_if(meta.is_dir());
+
+                // do the actual work. If this fails with a non-fs related error,
+                // return immediately.
+                let f = FutureObj03::new(Box::pin(self.delete_items(&mut res, depth, meta, &npath)));
+                if let Err(e) = await!(f) {
+                    match e {
+                        DavError::Status(_) => {
+                            result = Err(e);
+                              continue;
+                        },
+                        _ => return Err(e),
+                    }
                 }
             }
-        }
 
-        // if we got any error, return with the error,
-        // and do not try to remove the directory.
-        result?;
+            // if we got any error, return with the error,
+            // and do not try to remove the directory.
+            result?;
 
-        match blocking_io!(self.fs.remove_dir(path)) {
-            Ok(x) => Ok(x),
-            Err(e) => Err(await!(dir_status(&mut res, path, e))),
+            match blocking_io!(self.fs.remove_dir(path)) {
+                Ok(x) => Ok(x),
+                Err(e) => Err(await!(dir_status(&mut res, path, e))),
+            }
         }
-    }
     }
 
     pub(crate) async fn handle_delete(self, req: Request<()>)
@@ -156,7 +155,7 @@ impl crate::DavInner {
                 if let Some(ref locksystem) = self.ls {
                     locksystem.delete(&path).ok();
                 }
-                let _ = await!(multierror.add_status(&path, StatusCode::OK));
+                let _ = await!(multierror.add_status(&path, StatusCode::NO_CONTENT));
             }
             Ok(())
         });

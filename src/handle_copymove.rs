@@ -25,7 +25,6 @@ impl crate::DavInner {
 
     pub(crate) fn do_copy<'a>(&'a self, source: &'a WebPath, topdest: &'a WebPath, dest: &'a WebPath, depth: Depth, mut multierror: &'a mut MultiError) -> impl Future03<Output=DavResult<()>> + Send + 'a {
         async move {
-            debug!("do_copy {} {} depth {:?}", source, dest, depth);
 
             // when doing "COPY /a/b /a/b/c make sure we don't recursively
             // copy /a/b/c/ into /a/b/c.
@@ -102,14 +101,23 @@ impl crate::DavInner {
         }
     }
 
-    pub(crate) async fn do_move<'a>(&'a self, source: &'a WebPath, dest: &'a WebPath, existed: bool, mut multierror: &'a mut MultiError) -> DavResult<()> {
-        debug!("do_move {} {}", source, dest);
+    // Right now we handle MOVE with a simple RENAME. RFC4918 #9.9.2 talks
+    // about "partially failed moves", which means that we might have to
+    // try to move directories with increasing granularity to move as much
+    // as possible instead of all-or-nothing.
+    //
+    // Note that this might not be optional, as the RFC says:
+    //
+    //  "Any headers included with MOVE MUST be applied in processing every
+    //   resource to be moved with the exception of the Destination header."
+    //
+    // .. so for perfect compliance we might have to process all resources
+    // one-by-one anyway. But seriously, who cares.
+    //
+    pub(crate) async fn do_move<'a>(&'a self, source: &'a WebPath, dest: &'a WebPath, mut multierror: &'a mut MultiError) -> DavResult<()> {
         if let Err(e) = blocking_io!(self.fs.rename(source, dest)) {
-            // This is a single action ATM, so do not need multi-error.
             await!(add_status(&mut multierror, &source, e))
         } else {
-            let s = if existed { StatusCode::NO_CONTENT } else { StatusCode::CREATED };
-            let _ = await!(add_status(&mut multierror, &source, DavError::Status(s)));
             Ok(())
         }
     }
@@ -230,7 +238,7 @@ impl crate::DavInner {
                 }
             } else {
                 // move and if successful, remove locks at old location.
-                if let Ok(_) = await!(self.do_move(&path, &dest, exists, &mut multierror)) {
+                if let Ok(_) = await!(self.do_move(&path, &dest, &mut multierror)) {
                     if let Some(ref locksystem) = self.ls {
                         locksystem.delete(&path).ok();
                     }

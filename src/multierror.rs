@@ -150,6 +150,7 @@ pub(crate) async fn multi_error<S>(req_path: WebPath, status_stream: S)
         let mut status_stream = futures03::stream::iter(items).chain(status_stream);
         while let Some(res) = await!(status_stream.next()) {
             let (path, status) = res?;
+            let status = if status == StatusCode::NO_CONTENT { StatusCode::OK } else { status };
             write_response(&mut xw, &path, status)?;
             await!(tx.send(buffer.take()))?;
         }

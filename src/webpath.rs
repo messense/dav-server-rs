@@ -97,9 +97,12 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
         Err(ParseError::InvalidPath)?;
     }
 
-    // delete query part (if any)
+    // don't allow fragments. query part gets deleted.
     let mut rawpath = rp;
-    if let Some(pos) = rawpath.iter().position(|&x| x == b'?') {
+    if let Some(pos) = rawpath.iter().position(|&x| x == b'?' || x == b'#') {
+        if rawpath[pos] == b'#' {
+            Err(ParseError::InvalidPath)?;
+        }
         rawpath = &rawpath[..pos];
     }
 
