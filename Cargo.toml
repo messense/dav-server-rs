@@ -11,24 +11,24 @@ path = "src/lib.rs"
 [dependencies]
 bytes = "0.4.11"
 futures = "0.1.25"
-futures03 = { package = "futures-preview", version = "0.3.0-alpha.12", features = ["io-compat"] }
+futures03 = { package = "futures-preview", version = "0.3.0-alpha.13", features = ["io-compat"] }
 htmlescape = "0.3.1"
-http = "0.1.14"
-hyper = "0.12"
+http = "0.1.16"
+hyper = "0.12.24"
 hyperx = "0.14.0"
 lazy_static = "1.2.0"
 log = "0.4.6"
 mime_guess = "1.8.6"
 percent-encoding = "1.0.1"
 regex = "1.1.0"
-serde = "1.0.84"
-serde_derive = "1.0.84"
+serde = "1.0.88"
+serde_derive = "1.0.88"
 sha2 = "0.8.0"
 threadpool = "1.7.1"
-time = "0.1.41"
+time = "0.1.42"
 tokio-threadpool = "0.1.11"
 url = "1.7.2"
-uuid = { version = "0.7.1", features = ["v4"] }
+uuid = { version = "0.7.2", features = ["v4"] }
 xml-rs = "0.8.0"
 xmltree = "0.8.0"
 
@@ -38,6 +38,6 @@ clap = "2.32.0"
 
 # for localfs.rs
 filetime = "0.2.4"
-libc = "0.2.46"
+libc = "0.2.48"
 tokio = "0.1.15"
 
