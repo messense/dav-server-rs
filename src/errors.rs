@@ -78,6 +78,12 @@ impl From<io::Error> for DavError {
     }
 }
 
+impl From<StatusCode> for DavError {
+    fn from(e: StatusCode) -> Self {
+        DavError::Status(e)
+    }
+}
+
 impl From<xml::reader::Error> for DavError {
     fn from(e: xml::reader::Error) -> Self {
         DavError::XmlReaderError(e)

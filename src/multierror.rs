@@ -30,9 +30,10 @@ impl MultiError {
         MultiError(sender)
     }
 
-    pub async fn add_status<'a>(&'a mut self, path: &'a WebPath, status: StatusCode)
+    pub async fn add_status<'a>(&'a mut self, path: &'a WebPath, status: impl Into<DavError> + 'static)
         -> Result<(), futures03::channel::mpsc::SendError>
     {
+        let status = status.into().statuscode();
         await!(self.0.send(Ok((path.clone(), status))))
     }
 }

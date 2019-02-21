@@ -86,7 +86,7 @@ macro_rules! blocking_io {
 mod common;
 mod errors;
 mod headers;
-//mod handle_copymove;
+mod handle_copymove;
 mod handle_delete;
 mod handle_gethead;
 //mod handle_lock;
@@ -413,9 +413,9 @@ impl DavHandler {
 impl DavInner {
 
     // helper.
-    pub(crate) fn has_parent(&self, path: &WebPath) -> bool {
+    pub(crate) async fn has_parent<'a>(&'a self, path: &'a WebPath) -> bool {
         let p = path.parent();
-        self.fs.metadata(&p).map(|m| m.is_dir()).unwrap_or(false)
+        blocking_io!(self.fs.metadata(&p)).map(|m| m.is_dir()).unwrap_or(false)
     }
 
     // helper.
@@ -426,9 +426,9 @@ impl DavInner {
 
     // See if this is a directory and if so, if we have
     // to fixup the path by adding a slash at the end.
-    pub(crate) fn fixpath(&self, req: &Request<()>, res: &mut Response<BoxedByteStream>) -> FsResult<(WebPath, Box<DavMetaData + 'static>)> {
+    pub(crate) async fn fixpath<'a>(&'a self, req: &'a Request<()>, res: &'a mut Response<BoxedByteStream>) -> FsResult<(WebPath, Box<DavMetaData + 'a>)> {
         let mut path = self.path(&req);
-        let meta = self.fs.metadata(&path)?;
+        let meta = blocking_io!(self.fs.metadata(&path))?;
         if meta.is_dir() && !path.is_collection() {
             path.add_slash();
             let newloc = path.as_url_string_with_prefix();
@@ -522,8 +522,8 @@ impl DavInner {
                 //Method::PropFind => self.handle_propfind(req, res),
                 //Method::PropPatch => self.handle_proppatch(req, res),
                 Method::MkCol => await!(self.handle_mkcol(req)),
-                //Method::Copy => self.handle_copymove(method, req, res),
-                //Method::Move => self.handle_copymove(method, req, res),
+                Method::Copy => await!(self.handle_copymove(req, method)),
+                Method::Move => await!(self.handle_copymove(req, method)),
                 Method::Delete => await!(self.handle_delete(req)),
                 //Method::Lock => self.handle_lock(req, res),
                 //Method::Unlock => self.handle_unlock(req, res),
