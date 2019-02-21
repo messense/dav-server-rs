@@ -35,16 +35,19 @@ impl crate::DavInner {
 
             // source must exist.
             let meta = match blocking_io!(self.fs.metadata(source)) {
-                Err(e) => return await!(add_status(&mut multierror, &source, e)),
+                Err(e) => return await!(add_status(&mut multierror, source, e)),
                 Ok(m) => m,
             };
 
             // if it's a file we can overwrite it.
             if !meta.is_dir() {
-                if let Err(e) = blocking_io!(self.fs.copy(source, dest)) {
-                    debug!("do_copy: self.fs.copy error: {:?}", e);
-                    return await!(add_status(&mut multierror, &source, e));
-                }
+                return match blocking_io!(self.fs.copy(source, dest)) {
+                    Ok(_) => Ok(()),
+                    Err(e) => {
+                        debug!("do_copy: self.fs.copy error: {:?}", e);
+                        await!(add_status(&mut multierror, source, e))
+                    }
+                };
             }
 
             // Copying a directory onto an existing directory with Depth 0
@@ -52,8 +55,8 @@ impl crate::DavInner {
             // we do not do yet).
             if let Err(e) = blocking_io!(self.fs.create_dir(dest)) {
                 if depth != Depth::Zero || e != FsError::Exists {
-                    debug!("do_copy: self.fs.create_dir error: {:?}", e);
-                    return await!(add_status(&mut multierror, &source, e));
+                    debug!("do_copy: self.fs.create_dir({}) error: {:?}", dest, e);
+                    return await!(add_status(&mut multierror, dest, e));
                 }
             }
 
@@ -66,7 +69,7 @@ impl crate::DavInner {
                 Ok(entries) => entries,
                 Err(e) => {
                     debug!("do_copy: self.fs.read_dir error: {:?}", e);
-                    return await!(add_status(&mut multierror, &source, e));
+                    return await!(add_status(&mut multierror, source, e));
                 }
             };
 
@@ -231,6 +234,8 @@ impl crate::DavInner {
                     if let Some(ref locksystem) = self.ls {
                         locksystem.delete(&path).ok();
                     }
+                    let s = if exists { StatusCode::NO_CONTENT } else { StatusCode::CREATED };
+                    let _ = await!(multierror.add_status(&path, s));
                 }
             }
             Ok::<_, DavError>(())

@@ -94,7 +94,10 @@ pub(crate) async fn multi_error<S>(req_path: WebPath, status_stream: S)
     // read the first path/status item
     let mut status_stream = Box::pin(status_stream);
     let (path, status) = match await!(status_stream.next()) {
-        None => return Err(DavError::ChanSendError),
+        None => {
+            debug!("multi_error: empty status_stream");
+            return Err(DavError::ChanError)
+        },
         Some(Err(e)) => return Err(e),
         Some(Ok(item)) => item,
     };

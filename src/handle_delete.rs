@@ -141,8 +141,8 @@ impl crate::DavInner {
             }
         }
 
-        let path2 = path.clone();
-        //let fut = async move |tx| {
+        let req_path = path.clone();
+
         let items = makestream::stream03(async move |tx| {
 
             // turn the Sink into something easier to pass around.
@@ -156,11 +156,12 @@ impl crate::DavInner {
                 if let Some(ref locksystem) = self.ls {
                     locksystem.delete(&path).ok();
                 }
+                let _ = await!(multierror.add_status(&path, StatusCode::OK));
             }
             Ok(())
         });
 
-        await!(multi_error(path2, items))
+        await!(multi_error(req_path, items))
     }
 }
 

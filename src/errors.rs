@@ -14,7 +14,7 @@ pub(crate) enum DavError {
     IllegalPath,        // path not valid here
     ForbiddenPath,      // too many dotdots
     UnknownMethod,
-    ChanSendError,
+    ChanError,
     Status(StatusCode),
     StatusClose(StatusCode),
     FsError(FsError),
@@ -98,7 +98,7 @@ impl From<xml::writer::Error> for DavError {
 
 impl From<futures03::channel::mpsc::SendError> for DavError {
     fn from(_e: futures03::channel::mpsc::SendError) -> Self {
-        DavError::ChanSendError
+        DavError::ChanError
     }
 }
 
@@ -151,7 +151,7 @@ impl DavError {
             &DavError::IllegalPath => StatusCode::BAD_GATEWAY,
             &DavError::ForbiddenPath => StatusCode::FORBIDDEN,
             &DavError::UnknownMethod => StatusCode::NOT_IMPLEMENTED,
-            &DavError::ChanSendError => StatusCode::INTERNAL_SERVER_ERROR,
+            &DavError::ChanError => StatusCode::INTERNAL_SERVER_ERROR,
             &DavError::IoError(ref e) => ioerror_to_status(e),
             &DavError::FsError(ref e) => fserror_to_status(e),
             &DavError::Status(e) => e,

@@ -23,7 +23,7 @@ async fn map_result<I, E, F>(f: F, mut tx_err: MpscSender03<Result<I, E>>) -> Re
 {
     match await!(f) {
         Ok(_) |
-        Err(DavError::ChanSendError) => {},
+        Err(DavError::ChanError) => {},
         Err(e) => {
             let _ = await!(tx_err.send(Err(e.into())));
         },
