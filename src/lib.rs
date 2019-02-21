@@ -89,7 +89,7 @@ mod headers;
 mod handle_copymove;
 mod handle_delete;
 mod handle_gethead;
-//mod handle_lock;
+mod handle_lock;
 mod handle_mkcol;
 mod handle_options;
 //mod handle_props;
@@ -122,8 +122,7 @@ use futures::prelude::*;
 use futures::future;
 use futures03::compat::Future01CompatExt;
 use futures03::future::{FutureExt, TryFutureExt};
-use futures03::future::Future as Future03;
-use futures03::stream::TryStreamExt;
+use futures03::stream::{StreamExt,TryStreamExt};
 
 use http::Method as httpMethod;
 use http::{Request, Response, StatusCode};
@@ -281,6 +280,11 @@ pub(crate) fn empty_body() -> BoxedByteStream {
     Box::new(futures03::stream::empty::<BytesResult>().compat())
 }
 
+pub(crate) fn single_body(body: Bytes) -> BoxedByteStream {
+    let body = vec!(Ok::<Bytes, io::Error>(body)).into_iter();
+    Box::new(futures03::stream::iter(body).compat())
+}
+
 /// A set of allowed `Method`s.
 #[derive(Clone, Copy)]
 pub struct AllowedMethods(u32);
@@ -426,27 +430,32 @@ impl DavInner {
 
     // See if this is a directory and if so, if we have
     // to fixup the path by adding a slash at the end.
-    pub(crate) async fn fixpath<'a>(&'a self, req: &'a Request<()>, res: &'a mut Response<BoxedByteStream>) -> FsResult<(WebPath, Box<DavMetaData + 'a>)> {
-        let mut path = self.path(&req);
-        let meta = blocking_io!(self.fs.metadata(&path))?;
+    pub(crate) fn fixpath(&self, res: &mut Response<BoxedByteStream>, path: &mut WebPath, meta: Box<DavMetaData>) -> Option<Box<DavMetaData>>
+    {
         if meta.is_dir() && !path.is_collection() {
             path.add_slash();
             let newloc = path.as_url_string_with_prefix();
             res.headers_mut().typed_insert(headers::ContentLocation(newloc));
         }
-        Ok((path, meta))
+        Some(meta)
     }
 
     // drain request body and return length.
-    pub(crate) fn drain_request<ReqBody, ReqError>(&self, body: ReqBody)
-        -> impl Future03<Output=DavResult<usize>>
+    pub(crate) async fn read_request<ReqBody, ReqError>(&self, body: ReqBody, max_size: usize) -> DavResult<Vec<u8>>
     where 
         ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
         ReqError: StdError + Send + Sync + 'static,
     {
-        body.map_err(|_| DavError::IoError(io::Error::new(io::ErrorKind::UnexpectedEof, "UnexpectedEof")))
-            .fold(0, |acc, x| Ok::<_, DavError>(acc + x.len()))
-            .compat()
+        let mut body = futures03::compat::Compat01As03::new(body);
+        let mut data = Vec::new();
+        while let Some(res) = await!(body.next()) {
+            let chunk = res.map_err(|_| DavError::IoError(io::Error::new(io::ErrorKind::UnexpectedEof, "UnexpectedEof")))?;
+            if data.len() + chunk.len() > max_size {
+                return Err(StatusCode::PAYLOAD_TOO_LARGE.into());
+            }
+            data.extend_from_slice(&chunk);
+        }
+        Ok(data)
     }
 
     // internal dispatcher.
@@ -499,35 +508,45 @@ impl DavInner {
                 (Request::from_parts(parts, ()), body)
             };
 
-            // some handlers expect a body, but most do not, so just drain
-            // the body here first. If there was a body, reject request
-            // with Unsupported Media Type.
+            // PUT is the only handler that reads the body itself. All the
+            // other handlers either expected no body, or a pre-read Vec<u8>.
+            let (body_strm, body_data) = if method == Method::Put {
+                (Some(body), Vec::new())
+            } else {
+                (None, await!(self.read_request(body, 65536))?)
+            };
+
+            // Not all methods accept a body.
             match method {
-                Method::Put => return await!(self.handle_put(req, body)),
+                Method::Put |
                 Method::Patch |
                 Method::PropFind |
                 Method::PropPatch |
                 Method::Lock => {},
                 _ => {
-                    if await!(self.drain_request(body))? > 0 {
-                        return Err(DavError::Status(StatusCode::UNSUPPORTED_MEDIA_TYPE));
+                    if body_data.len() > 0 {
+                        return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into());
                     }
                 }
             }
 
             debug!("== START REQUEST {:?} {}", method, path);
+
             let res = match method {
-                Method::Head | Method::Get => await!(self.handle_get(req)),
                 Method::Options => await!(self.handle_options(req)),
-                //Method::PropFind => self.handle_propfind(req, res),
-                //Method::PropPatch => self.handle_proppatch(req, res),
+                //Method::PropFind => await!(self.handle_propfind(req, body_data)),
+                //Method::PropPatch => await!(self.handle_proppatch(req, body_data)),
                 Method::MkCol => await!(self.handle_mkcol(req)),
-                Method::Copy => await!(self.handle_copymove(req, method)),
-                Method::Move => await!(self.handle_copymove(req, method)),
                 Method::Delete => await!(self.handle_delete(req)),
-                //Method::Lock => self.handle_lock(req, res),
-                //Method::Unlock => self.handle_unlock(req, res),
-                _ => await!(self.handle_options(req)),
+                Method::Lock => await!(self.handle_lock(req, body_data)),
+                Method::Unlock => await!(self.handle_unlock(req)),
+                Method::Head |
+                Method::Get => await!(self.handle_get(req)),
+                Method::Put |
+                Method::Patch => await!(self.handle_put(req, body_strm.unwrap())),
+                Method::Copy |
+                Method::Move => await!(self.handle_copymove(req, method)),
+                _ => Ok(Response::builder().status(StatusCode::METHOD_NOT_ALLOWED).body(empty_body()).unwrap()),
             };
             res
         };

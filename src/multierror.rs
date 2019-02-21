@@ -40,14 +40,14 @@ impl MultiError {
 
 // A buffer that implements "Write".
 #[derive(Clone)]
-struct MultiBuf(Rc<RefCell<Vec<u8>>>);
+pub(crate) struct MultiBuf(Rc<RefCell<Vec<u8>>>);
 
 impl MultiBuf {
-    fn new() -> MultiBuf {
+    pub fn new() -> MultiBuf {
         MultiBuf(Rc::new(RefCell::new(Vec::new())))
     }
 
-    fn take(&self) -> Result<Bytes, DavError> {
+    pub fn take(&self) -> Result<Bytes, DavError> {
         Ok(self.0.replace(Vec::new()).into())
     }
 }
