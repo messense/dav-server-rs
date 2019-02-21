@@ -1,14 +1,15 @@
 use http::{Request, Response};
 
-use crate::{dav_method,empty_body,BoxedByteStream,Method,DavResult};
 use crate::common::*;
 use crate::headers;
 use crate::typed_headers::{self, HeaderMapExt};
+use crate::{dav_method, empty_body, BoxedByteStream, DavResult, Method};
 
 impl crate::DavInner {
-
-    pub(crate) fn handle_options(self, req: Request<()>)
-        -> impl Future03<Output=DavResult<Response<BoxedByteStream>>>
+    pub(crate) fn handle_options(
+        self,
+        req: Request<()>,
+    ) -> impl Future03<Output = DavResult<Response<BoxedByteStream>>>
     {
         async move {
             let mut res = Response::new(empty_body());
@@ -29,10 +30,10 @@ impl crate::DavInner {
             let method = dav_method(req.method()).unwrap_or(Method::Options);
             let islock = |m| m == Method::Lock || m == Method::Unlock;
             let mm = |v: &mut Vec<String>, m: &str, y: Method| {
-                if (y == Method::Options ||
-                    (y != method || islock(y) != islock(method))) &&
+                if (y == Method::Options || (y != method || islock(y) != islock(method))) &&
                     (!islock(y) || self.ls.is_some()) &&
-                    self.allow.map(|x| x.allowed(y)).unwrap_or(true) {
+                    self.allow.map(|x| x.allowed(y)).unwrap_or(true)
+                {
                     v.push(m.to_string());
                 }
             };
@@ -74,4 +75,3 @@ impl crate::DavInner {
         }
     }
 }
-

@@ -5,16 +5,16 @@
 
 use http::{Request, Response, StatusCode};
 
-use crate::{BoxedByteStream,DavResult};
 use crate::common::*;
 use crate::conditional::if_match_get_tokens;
 use crate::errors::*;
 use crate::fs::*;
 use crate::headers::Depth;
 use crate::makestream;
-use crate::multierror::{MultiError, multi_error};
+use crate::multierror::{multi_error, MultiError};
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::WebPath;
+use crate::{BoxedByteStream, DavResult};
 
 // map_err helper.
 async fn add_status<'a>(m_err: &'a mut MultiError, path: &'a WebPath, e: FsError) -> DavError {
@@ -39,7 +39,14 @@ async fn dir_status<'a>(res: &'a mut MultiError, path: &'a WebPath, e: FsError) 
 }
 
 impl crate::DavInner {
-    pub(crate) fn delete_items<'a>(&'a self, mut res: &'a mut MultiError, depth: Depth, meta: Box<DavMetaData + 'a>, path: &'a WebPath) -> impl Future03<Output=DavResult<()>> + Send + 'a {
+    pub(crate) fn delete_items<'a>(
+        &'a self,
+        mut res: &'a mut MultiError,
+        depth: Depth,
+        meta: Box<DavMetaData + 'a>,
+        path: &'a WebPath,
+    ) -> impl Future03<Output = DavResult<()>> + Send + 'a
+    {
         async move {
             if !meta.is_dir() {
                 debug!("delete_items (file) {} {:?}", path, depth);
@@ -69,7 +76,7 @@ impl crate::DavInner {
                     Ok(m) => m,
                     Err(e) => {
                         result = Err(await!(add_status(&mut res, path, e)));
-                        continue
+                        continue;
                     },
                 };
 
@@ -84,7 +91,7 @@ impl crate::DavInner {
                     match e {
                         DavError::Status(_) => {
                             result = Err(e);
-                              continue;
+                            continue;
                         },
                         _ => return Err(e),
                     }
@@ -102,9 +109,7 @@ impl crate::DavInner {
         }
     }
 
-    pub(crate) async fn handle_delete(self, req: Request<()>)
-        -> Result<Response<BoxedByteStream>, DavError>
-    {
+    pub(crate) async fn handle_delete(self, req: Request<()>) -> Result<Response<BoxedByteStream>, DavError> {
         // RFC4918 9.6.1 DELETE for Collections.
         // Note that allowing Depth: 0 is NOT RFC compliant.
         let depth = match req.headers().typed_get::<Depth>() {
@@ -143,7 +148,6 @@ impl crate::DavInner {
         let req_path = path.clone();
 
         let items = makestream::stream03(async move |tx| {
-
             // turn the Sink into something easier to pass around.
             let mut multierror = MultiError::new(tx);
 
@@ -163,4 +167,3 @@ impl crate::DavInner {
         await!(multi_error(req_path, items))
     }
 }
-

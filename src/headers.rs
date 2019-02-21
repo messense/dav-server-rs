@@ -1,4 +1,3 @@
-
 use std::fmt::{self, Write};
 use std::str::FromStr;
 
@@ -16,10 +15,10 @@ header! { (XLitmus, "X-Litmus") => [String] }
 header! { (ContentLocation, "Content-Location") => [String] }
 
 lazy_static! {
-   static ref RE_URL : Regex = Regex::new(r"https?://[^/]*([^#?]+).*$").unwrap();
+    static ref RE_URL: Regex = Regex::new(r"https?://[^/]*([^#?]+).*$").unwrap();
 }
 
-#[derive(Debug,Copy,Clone,PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Depth {
     Zero,
     One,
@@ -53,13 +52,13 @@ impl Header for Depth {
     }
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DavTimeout {
     Seconds(u32),
     Infinite,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct Timeout(pub Vec<DavTimeout>);
 
 impl Header for Timeout {
@@ -107,7 +106,7 @@ impl Header for Timeout {
     }
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Destination(pub String);
 
 impl Header for Destination {
@@ -129,7 +128,7 @@ impl Header for Destination {
                     if let Some(path) = caps.get(1) {
                         return Ok(Destination(path.as_str().to_string()));
                     }
-                }
+                },
                 _ => {},
             }
         }
@@ -141,7 +140,7 @@ impl Header for Destination {
     }
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Overwrite(pub bool);
 
 impl Header for Overwrite {
@@ -169,7 +168,7 @@ impl Header for Overwrite {
     }
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum IfRange {
     EntityTag(typed_headers::EntityTag),
     Date(typed_headers::HttpDate),
@@ -205,16 +204,16 @@ impl Header for IfRange {
     }
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ETagList {
     Tags(Vec<typed_headers::EntityTag>),
     Star,
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IfMatch(pub ETagList);
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IfNoneMatch(pub ETagList);
 
 fn parse_etag_list<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<ETagList> {
@@ -237,8 +236,7 @@ fn parse_etag_list<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<ETag
 fn fmt_etaglist(m: &ETagList, f: &mut typed_headers::Formatter) -> fmt::Result {
     let value = match m {
         &ETagList::Star => "*".to_string(),
-        &ETagList::Tags(ref t) =>
-                t.iter().map(|t| t.tag()).collect::<Vec<&str>>().join(", ")
+        &ETagList::Tags(ref t) => t.iter().map(|t| t.tag()).collect::<Vec<&str>>().join(", "),
     };
     f.fmt_line(&value)
 }
@@ -271,7 +269,7 @@ impl Header for IfNoneMatch {
     }
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum XUpdateRange {
     FromTo(u64, u64),
     AllFrom(u64),
@@ -301,17 +299,27 @@ impl Header for XUpdateRange {
         }
         if nums[0] != "" && nums[1] != "" {
             return Ok(XUpdateRange::FromTo(
-                (nums[0]).parse::<u64>().map_err(|_|typed_headers::Error::Header)?,
-                (nums[1]).parse::<u64>().map_err(|_|typed_headers::Error::Header)?,
+                (nums[0])
+                    .parse::<u64>()
+                    .map_err(|_| typed_headers::Error::Header)?,
+                (nums[1])
+                    .parse::<u64>()
+                    .map_err(|_| typed_headers::Error::Header)?,
             ));
         }
         if nums[0] != "" {
-            return Ok(XUpdateRange::AllFrom((nums[0]).parse::<u64>()
-                                        .map_err(|_|typed_headers::Error::Header)?));
+            return Ok(XUpdateRange::AllFrom(
+                (nums[0])
+                    .parse::<u64>()
+                    .map_err(|_| typed_headers::Error::Header)?,
+            ));
         }
         if nums[1] != "" {
-            return Ok(XUpdateRange::Last((nums[1]).parse::<u64>()
-                                        .map_err(|_|typed_headers::Error::Header)?));
+            return Ok(XUpdateRange::Last(
+                (nums[1])
+                    .parse::<u64>()
+                    .map_err(|_| typed_headers::Error::Header)?,
+            ));
         }
         return Err(typed_headers::Error::Header);
     }
@@ -327,7 +335,7 @@ impl Header for XUpdateRange {
     }
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ContentRange(pub u64, pub u64);
 
 impl Header for ContentRange {
@@ -349,8 +357,12 @@ impl Header for ContentRange {
             Err(typed_headers::Error::Header)?;
         }
         return Ok(ContentRange(
-            (nums[0]).parse::<u64>().map_err(|_|typed_headers::Error::Header)?,
-            (nums[1]).parse::<u64>().map_err(|_|typed_headers::Error::Header)?,
+            (nums[0])
+                .parse::<u64>()
+                .map_err(|_| typed_headers::Error::Header)?,
+            (nums[1])
+                .parse::<u64>()
+                .map_err(|_| typed_headers::Error::Header)?,
         ));
     }
 
@@ -360,43 +372,43 @@ impl Header for ContentRange {
 }
 
 // The "If" header contains IfLists, of which the results are ORed.
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct If(pub Vec<IfList>);
 
 // An IfList contains Conditions, of which the results are ANDed.
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IfList {
-    pub resource_tag:   Option<url::Url>,
-    pub conditions:     Vec<IfCondition>,
+    pub resource_tag: Option<url::Url>,
+    pub conditions:   Vec<IfCondition>,
 }
 
 // helpers.
 impl IfList {
     fn new() -> IfList {
-        IfList{
+        IfList {
             resource_tag: None,
-            conditions: Vec::new(),
+            conditions:   Vec::new(),
         }
     }
     fn add(&mut self, not: bool, item: IfItem) {
-        self.conditions.push({IfCondition{not, item}});
+        self.conditions.push({ IfCondition { not, item } });
     }
 }
 
 // Single Condition is [NOT] State-Token | EntityTag
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IfCondition {
-    pub not:    bool,
-    pub item:   IfItem,
+    pub not:  bool,
+    pub item: IfItem,
 }
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum IfItem {
     StateToken(String),
     ETag(EntityTag),
 }
 
 // Below stuff is for the parser state.
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum IfToken {
     ListOpen,
     ListClose,
@@ -407,7 +419,7 @@ enum IfToken {
     End,
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum IfState {
     Start,
     RTag,
@@ -417,10 +429,14 @@ enum IfState {
 }
 
 // helpers.
-fn is_whitespace(c: u8) -> bool { b" \t\r\n".iter().any(|&x| x == c) }
-fn is_special(c: u8) -> bool { b"<>()[]".iter().any(|&x| x == c) }
+fn is_whitespace(c: u8) -> bool {
+    b" \t\r\n".iter().any(|&x| x == c)
+}
+fn is_special(c: u8) -> bool {
+    b"<>()[]".iter().any(|&x| x == c)
+}
 
-fn trim_left<'a>(mut out: &'a[u8]) -> &'a[u8] {
+fn trim_left<'a>(mut out: &'a [u8]) -> &'a [u8] {
     while !out.is_empty() && is_whitespace(out[0]) {
         out = &out[1..];
     }
@@ -440,7 +456,7 @@ fn scan_until(buf: &[u8], c: u8) -> typed_headers::Result<(&[u8], &[u8])> {
         }
         i += 1
     }
-    Ok((&buf[1..i], &buf[i+1..]))
+    Ok((&buf[1..i], &buf[i + 1..]))
 }
 
 // scan one word.
@@ -457,7 +473,7 @@ fn scan_word(buf: &[u8]) -> typed_headers::Result<(&[u8], &[u8])> {
 }
 
 // get next token.
-fn get_token<'a>(buf: &'a[u8]) -> typed_headers::Result<(IfToken, &'a[u8])> {
+fn get_token<'a>(buf: &'a [u8]) -> typed_headers::Result<(IfToken, &'a [u8])> {
     let buf = trim_left(buf);
     if buf.is_empty() {
         return Ok((IfToken::End, buf));
@@ -470,7 +486,7 @@ fn get_token<'a>(buf: &'a[u8]) -> typed_headers::Result<(IfToken, &'a[u8])> {
             let (tok, rest) = scan_until(buf, b'>')?;
             let s = std::string::String::from_utf8(tok.to_vec())?;
             Ok((IfToken::Pointy(s), rest))
-        }
+        },
         b'[' => {
             let (tok, rest) = scan_until(buf, b']')?;
             let s = std::str::from_utf8(tok)?;
@@ -484,7 +500,7 @@ fn get_token<'a>(buf: &'a[u8]) -> typed_headers::Result<(IfToken, &'a[u8])> {
                 let s = std::string::String::from_utf8(tok.to_vec())?;
                 Ok((IfToken::Word(s), rest))
             }
-        }
+        },
     }
 }
 
@@ -494,7 +510,6 @@ impl Header for If {
     }
 
     fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<If> {
-
         // one big state machine.
         let mut if_lists = If(Vec::new());
         let mut cur_list = IfList::new();
@@ -529,15 +544,17 @@ impl Header for If {
                         _ => IfState::Bad,
                     }
                 },
-                IfState::List |
-                IfState::Not => {
+                IfState::List | IfState::Not => {
                     let not = state == IfState::Not;
                     match tok {
                         IfToken::Not => {
-                            if not { IfState::Bad } else { IfState::Not }
+                            if not {
+                                IfState::Bad
+                            } else {
+                                IfState::Not
+                            }
                         },
-                        IfToken::Pointy(stok) |
-                        IfToken::Word(stok) => {
+                        IfToken::Pointy(stok) | IfToken::Word(stok) => {
                             // as we don't have an URI parser, just
                             // check if there's at least one ':' in there.
                             if !stok.contains(":") {
@@ -546,7 +563,7 @@ impl Header for If {
                                 cur_list.add(not, IfItem::StateToken(stok));
                                 IfState::List
                             }
-                        }
+                        },
                         IfToken::ETag(etag) => {
                             cur_list.add(not, IfItem::ETag(etag));
                             IfState::List
@@ -589,4 +606,3 @@ mod tests {
         assert!(hdr.is_ok());
     }
 }
-

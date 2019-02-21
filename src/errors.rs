@@ -1,18 +1,18 @@
 use std::error::Error;
 use std::io::{self, ErrorKind};
 
-use xml;
 use http::StatusCode;
+use xml;
 
 use crate::fs::FsError;
 
 #[derive(Debug)]
 pub(crate) enum DavError {
-    XmlReadError,       // error reading/parsing xml
-    XmlParseError,      // error interpreting xml
-    InvalidPath,        // error parsing path
-    IllegalPath,        // path not valid here
-    ForbiddenPath,      // too many dotdots
+    XmlReadError,  // error reading/parsing xml
+    XmlParseError, // error interpreting xml
+    InvalidPath,   // error parsing path
+    IllegalPath,   // path not valid here
+    ForbiddenPath, // too many dotdots
     UnknownMethod,
     ChanError,
     Status(StatusCode),
@@ -61,7 +61,7 @@ impl From<DavError> for io::Error {
         match e {
             DavError::IoError(e) => e,
             DavError::FsError(e) => e.into(),
-            _ => io::Error::new(io::ErrorKind::Other, e)
+            _ => io::Error::new(io::ErrorKind::Other, e),
         }
     }
 }
@@ -168,4 +168,3 @@ impl DavError {
         }
     }
 }
-

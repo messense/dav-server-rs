@@ -1,8 +1,7 @@
-
-use std::collections::HashMap;
-use std::hash::Hash;
-use std::fmt::Debug;
 use std::borrow::Borrow;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::hash::Hash;
 
 use crate::FsError;
 use crate::FsResult;
@@ -10,20 +9,20 @@ use crate::FsResult;
 #[derive(Debug)]
 /// A tree contains a bunch of nodes.
 pub struct Tree<K: Eq + Hash, D> {
-    nodes:      HashMap<u64, Node<K, D>>,
-    node_id:    u64,
+    nodes:   HashMap<u64, Node<K, D>>,
+    node_id: u64,
 }
 
 /// id of the root node of the tree.
-pub const ROOT_ID : u64 = 1;
+pub const ROOT_ID: u64 = 1;
 
 #[derive(Debug)]
 /// Node itself. "data" contains user-modifiable data.
 pub struct Node<K: Eq + Hash, D> {
-    pub data:   D,
-    id:         u64,
-    parent_id:  u64,
-    children:   HashMap<K, u64>
+    pub data:  D,
+    id:        u64,
+    parent_id: u64,
+    children:  HashMap<K, u64>,
 }
 
 #[derive(Debug)]
@@ -31,12 +30,11 @@ pub struct Node<K: Eq + Hash, D> {
 pub struct Children<K>(std::vec::IntoIter<(K, u64)>);
 
 impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
-
     /// Get new tree and initialize the root with 'data'.
     pub fn new(data: D) -> Tree<K, D> {
-        let mut t = Tree{
-            nodes:      HashMap::new(),
-            node_id:    ROOT_ID,
+        let mut t = Tree {
+            nodes:   HashMap::new(),
+            node_id: ROOT_ID,
         };
         t.new_node(99999999, data);
         t
@@ -45,11 +43,11 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
     fn new_node(&mut self, parent: u64, data: D) -> u64 {
         let id = self.node_id;
         self.node_id += 1;
-        let node = Node{
-            id:         id,
-            parent_id:  parent,
-            data:       data,
-            children:   HashMap::new(),
+        let node = Node {
+            id:        id,
+            parent_id: parent,
+            data:      data,
+            children:  HashMap::new(),
         };
         self.nodes.insert(id, node);
         id
@@ -92,8 +90,9 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
 
     /// Get a child node by key K.
     pub fn get_child<Q: ?Sized>(&self, parent: u64, key: &Q) -> FsResult<u64>
-        where K: Borrow<Q>,
-              Q: Hash + Eq
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
     {
         let pnode = self.nodes.get(&parent).ok_or(FsError::NotFound)?;
         let id = pnode.children.get(key).ok_or(FsError::NotFound)?;
@@ -111,13 +110,13 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
     }
 
     /// Get reference to a node.
-    pub fn get_node(&self, id: u64) -> FsResult<&D>  {
+    pub fn get_node(&self, id: u64) -> FsResult<&D> {
         let n = self.nodes.get(&id).ok_or(FsError::NotFound)?;
         Ok(&n.data)
     }
 
     /// Get mutable reference to a node.
-    pub fn get_node_mut(&mut self, id: u64) -> FsResult<&mut D>  {
+    pub fn get_node_mut(&mut self, id: u64) -> FsResult<&mut D> {
         let n = self.nodes.get_mut(&id).ok_or(FsError::NotFound)?;
         Ok(&mut n.data)
     }
@@ -160,7 +159,7 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
             n.children.iter().map(|(_, &v)| v).collect::<Vec<u64>>()
         };
         for c in children.into_iter() {
-           self.delete_subtree(c)?;
+            self.delete_subtree(c)?;
         }
         self.delete_node_from_parent(id)
     }
@@ -198,4 +197,3 @@ impl<K> Iterator for Children<K> {
         self.0.next()
     }
 }
-

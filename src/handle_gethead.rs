@@ -7,28 +7,28 @@ use std::sync::Mutex;
 //use futures03::sink::SinkExt;
 
 use htmlescape;
-use http::{Request, Response, status::StatusCode};
+use http::{status::StatusCode, Request, Response};
 use time;
 
-use crate::{empty_body,systemtime_to_httpdate,systemtime_to_timespec};
-use crate::BoxedByteStream;
 use crate::common::*;
 use crate::conditional;
 use crate::errors::*;
 use crate::fs::*;
 use crate::headers;
 use crate::makestream;
-use crate::typed_headers::{self,ByteRangeSpec,HeaderMapExt};
+use crate::typed_headers::{self, ByteRangeSpec, HeaderMapExt};
+use crate::BoxedByteStream;
+use crate::{empty_body, systemtime_to_httpdate, systemtime_to_timespec};
 
 impl crate::DavInner {
-
-    pub(crate) fn handle_get(self, req: Request<()>)
-        -> impl Future03<Output=Result<Response<BoxedByteStream>, DavError>>
+    pub(crate) fn handle_get(
+        self,
+        req: Request<()>,
+    ) -> impl Future03<Output = Result<Response<BoxedByteStream>, DavError>>
     {
         let path = self.path(&req);
 
         async move {
-
             // check if it's a directory.
             let head = req.method() == &http::Method::HEAD;
             let meta = blocking_io!(self.fs.metadata(&path))?;
@@ -64,13 +64,16 @@ impl crate::DavInner {
                             if ranges.len() == 1 {
                                 match &ranges[0] {
                                     &ByteRangeSpec::FromTo(s, e) => {
-                                        start = s; count = e - s + 1;
+                                        start = s;
+                                        count = e - s + 1;
                                     },
                                     &ByteRangeSpec::AllFrom(s) => {
-                                        start = s; count = len - s;
+                                        start = s;
+                                        count = len - s;
                                     },
                                     &ByteRangeSpec::Last(n) => {
-                                        start = len - n; count = n;
+                                        start = len - n;
+                                        count = n;
                                     },
                                 }
                                 if start >= len {
@@ -91,13 +94,19 @@ impl crate::DavInner {
 
             // set Last-Modified and ETag headers.
             if let Ok(modified) = meta.modified() {
-                res.headers_mut().typed_insert(typed_headers::LastModified(
-                        systemtime_to_httpdate(modified)));
+                res.headers_mut()
+                    .typed_insert(typed_headers::LastModified(systemtime_to_httpdate(modified)));
             }
             res.headers_mut().typed_insert(typed_headers::ETag(file_etag));
 
             // handle the if-headers.
-            if let Some(s) = await!(conditional::if_match(&req, Some(&meta), &self.fs, &self.ls, &path)) {
+            if let Some(s) = await!(conditional::if_match(
+                &req,
+                Some(&meta),
+                &self.fs,
+                &self.ls,
+                &path
+            )) {
                 return Err(DavError::Status(s));
             }
 
@@ -118,9 +127,12 @@ impl crate::DavInner {
             }
 
             // set content-length and start.
-            res.headers_mut().insert("Content-Type", path.get_mime_type_str().parse().unwrap());
-            res.headers_mut().typed_insert(typed_headers::ContentLength(count));
-            res.headers_mut().typed_insert(typed_headers::AcceptRanges(vec![typed_headers::RangeUnit::Bytes]));
+            res.headers_mut()
+                .insert("Content-Type", path.get_mime_type_str().parse().unwrap());
+            res.headers_mut()
+                .typed_insert(typed_headers::ContentLength(count));
+            res.headers_mut()
+                .typed_insert(typed_headers::AcceptRanges(vec![typed_headers::RangeUnit::Bytes]));
 
             debug!("head is {}", head);
             if head {
@@ -129,7 +141,6 @@ impl crate::DavInner {
 
             // now just loop and send data.
             *res.body_mut() = Box::new(makestream::stream01(async move |mut tx| {
-
                 let mut buffer = [0; 8192];
                 let zero = [0; 4096];
 
@@ -154,18 +165,21 @@ impl crate::DavInner {
                     await!(tx.send(Ok(data.into())))?;
                 }
                 Ok::<(), DavError>(())
-	        }));
+            }));
 
             Ok(res)
         }
     }
 
-    pub(crate) fn handle_dirlist(self, req: Request<()>, head: bool) -> impl Future03<Output=Result<Response<BoxedByteStream>, DavError>> {
-
+    pub(crate) fn handle_dirlist(
+        self,
+        req: Request<()>,
+        head: bool,
+    ) -> impl Future03<Output = Result<Response<BoxedByteStream>, DavError>>
+    {
         let path = self.path(&req);
 
         async move {
-
             let mut res = Response::new(empty_body());
 
             // This is a directory. If the path doesn't end in "/", send a redir.
@@ -174,7 +188,8 @@ impl crate::DavInner {
             if !path.is_collection() {
                 let mut path = path.clone();
                 path.add_slash();
-                res.headers_mut().insert("Location", path.as_utf8_string_with_prefix().parse().unwrap());
+                res.headers_mut()
+                    .insert("Location", path.as_utf8_string_with_prefix().parse().unwrap());
                 res.headers_mut().typed_insert(typed_headers::ContentLength(0));
                 *res.status_mut() = StatusCode::FOUND;
                 return Ok(res);
@@ -184,7 +199,8 @@ impl crate::DavInner {
             let entries = blocking_io!(self.fs.read_dir(&path))?;
 
             // start output
-            res.headers_mut().insert("Content-Type", "text/html; charset=utf-8".parse().unwrap());
+            res.headers_mut()
+                .insert("Content-Type", "text/html; charset=utf-8".parse().unwrap());
             *res.status_mut() = StatusCode::OK;
             if head {
                 return Ok(res);
@@ -192,12 +208,11 @@ impl crate::DavInner {
 
             // now just loop and send data.
             *res.body_mut() = Box::new(makestream::stream01(async move |mut tx| {
-
                 // transform all entries into a dirent struct.
                 struct Dirent {
-                    path:       String,
-                    name:       String,
-                    meta:       Box<DavMetaData>,
+                    path: String,
+                    name: String,
+                    meta: Box<DavMetaData>,
                 }
 
                 // We need a way to move "entries" into the blocking_io! block
@@ -215,22 +230,18 @@ impl crate::DavInner {
                         let mut npath = path.clone();
                         npath.push_segment(&name);
                         let meta = match dirent.is_symlink() {
-                            Ok(v) if v == true => {
-                                self.fs.metadata(&npath)
-                            },
-                            _ => {
-                                dirent.metadata()
-                            },
+                            Ok(v) if v == true => self.fs.metadata(&npath),
+                            _ => dirent.metadata(),
                         };
                         if let Ok(meta) = meta {
                             if meta.is_dir() {
                                 name.push(b'/');
                                 npath.add_slash();
                             }
-                            dirents.push(Dirent{
-                                path:   npath.as_url_string_with_prefix(),
-                                name:   String::from_utf8_lossy(&name).to_string(),
-                                meta:   meta,
+                            dirents.push(Dirent {
+                                path: npath.as_url_string_with_prefix(),
+                                name: String::from_utf8_lossy(&name).to_string(),
+                                meta: meta,
                             });
                         }
                     }
@@ -282,9 +293,15 @@ impl crate::DavInner {
                     let modified = match dirent.meta.modified() {
                         Ok(t) => {
                             let tm = time::at(systemtime_to_timespec(t));
-                                format!("{:04}-{:02}-{:02} {:02}:{:02}",
-                                    tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min)
-                            },
+                            format!(
+                                "{:04}-{:02}-{:02} {:02}:{:02}",
+                                tm.tm_year + 1900,
+                                tm.tm_mon + 1,
+                                tm.tm_mday,
+                                tm.tm_hour,
+                                tm.tm_min
+                            )
+                        },
                         Err(_) => "".to_string(),
                     };
                     let size = match dirent.meta.is_file() {
@@ -309,4 +326,3 @@ impl crate::DavInner {
         }
     }
 }
-

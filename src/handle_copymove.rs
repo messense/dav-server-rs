@@ -1,19 +1,23 @@
+use http::{Request, Response, StatusCode};
 
-use http::{Request,Response,StatusCode};
-
-use crate::{BoxedByteStream,Method,DavResult};
 use crate::common::*;
 use crate::conditional::*;
 use crate::errors::*;
 use crate::fs::*;
-use crate::headers::{self,Depth};
+use crate::headers::{self, Depth};
 use crate::makestream;
-use crate::multierror::{MultiError, multi_error};
+use crate::multierror::{multi_error, MultiError};
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::WebPath;
+use crate::{BoxedByteStream, DavResult, Method};
 
 // map_err helper.
-async fn add_status<'a>(m_err: &'a mut MultiError, path: &'a WebPath, e: impl Into<DavError> + 'static) -> DavResult<()> {
+async fn add_status<'a>(
+    m_err: &'a mut MultiError,
+    path: &'a WebPath,
+    e: impl Into<DavError> + 'static,
+) -> DavResult<()>
+{
     let daverror = e.into();
     if let Err(x) = await!(m_err.add_status(path, daverror.statuscode())) {
         return Err(x.into());
@@ -22,14 +26,20 @@ async fn add_status<'a>(m_err: &'a mut MultiError, path: &'a WebPath, e: impl In
 }
 
 impl crate::DavInner {
-
-    pub(crate) fn do_copy<'a>(&'a self, source: &'a WebPath, topdest: &'a WebPath, dest: &'a WebPath, depth: Depth, mut multierror: &'a mut MultiError) -> impl Future03<Output=DavResult<()>> + Send + 'a {
+    pub(crate) fn do_copy<'a>(
+        &'a self,
+        source: &'a WebPath,
+        topdest: &'a WebPath,
+        dest: &'a WebPath,
+        depth: Depth,
+        mut multierror: &'a mut MultiError,
+    ) -> impl Future03<Output = DavResult<()>> + Send + 'a
+    {
         async move {
-
             // when doing "COPY /a/b /a/b/c make sure we don't recursively
             // copy /a/b/c/ into /a/b/c.
             if source == topdest {
-                return Ok(())
+                return Ok(());
             }
 
             // source must exist.
@@ -45,7 +55,7 @@ impl crate::DavInner {
                     Err(e) => {
                         debug!("do_copy: self.fs.copy error: {:?}", e);
                         await!(add_status(&mut multierror, source, e))
-                    }
+                    },
                 };
             }
 
@@ -69,7 +79,7 @@ impl crate::DavInner {
                 Err(e) => {
                     debug!("do_copy: self.fs.read_dir error: {:?}", e);
                     return await!(add_status(&mut multierror, source, e));
-                }
+                },
             };
 
             // If we encounter errors, just print them, and keep going.
@@ -91,7 +101,8 @@ impl crate::DavInner {
                     nsrc.add_slash();
                     ndest.add_slash();
                 }
-                let recurse = FutureObj03::new(Box::new(self.do_copy(&nsrc, topdest, &ndest, depth, multierror)));
+                let recurse =
+                    FutureObj03::new(Box::new(self.do_copy(&nsrc, topdest, &ndest, depth, multierror)));
                 if let Err(e) = await!(recurse) {
                     retval = Err(e);
                 }
@@ -114,7 +125,13 @@ impl crate::DavInner {
     // .. so for perfect compliance we might have to process all resources
     // one-by-one anyway. But seriously, who cares.
     //
-    pub(crate) async fn do_move<'a>(&'a self, source: &'a WebPath, dest: &'a WebPath, mut multierror: &'a mut MultiError) -> DavResult<()> {
+    pub(crate) async fn do_move<'a>(
+        &'a self,
+        source: &'a WebPath,
+        dest: &'a WebPath,
+        mut multierror: &'a mut MultiError,
+    ) -> DavResult<()>
+    {
         if let Err(e) = blocking_io!(self.fs.rename(source, dest)) {
             await!(add_status(&mut multierror, &source, e))
         } else {
@@ -122,11 +139,17 @@ impl crate::DavInner {
         }
     }
 
-    pub(crate) async fn handle_copymove(self, req: Request<()>, method: Method) -> DavResult<Response<BoxedByteStream>>
+    pub(crate) async fn handle_copymove(
+        self,
+        req: Request<()>,
+        method: Method,
+    ) -> DavResult<Response<BoxedByteStream>>
     {
-
         // get and check headers.
-        let overwrite = req.headers().typed_get::<headers::Overwrite>().map_or(true, |o| o.0);
+        let overwrite = req
+            .headers()
+            .typed_get::<headers::Overwrite>()
+            .map_or(true, |o| o.0);
         let depth = match req.headers().typed_get::<Depth>() {
             Some(Depth::Infinity) | None => Depth::Infinity,
             Some(Depth::Zero) if method == Method::Copy => Depth::Zero,
@@ -215,14 +238,15 @@ impl crate::DavInner {
         let req_path = path.clone();
 
         let items = makestream::stream03(async move |tx| {
-
             let mut multierror = MultiError::new(tx);
 
             // see if we need to delete the destination first.
             if overwrite && exists && depth != Depth::Zero && !dest_is_file {
                 debug!("handle_copymove: deleting destination {}", dest);
-                if let Err(_) = await!(self.delete_items(&mut multierror, Depth::Infinity, dmeta.unwrap(), &dest)) {
-                    return Ok(())
+                if let Err(_) =
+                    await!(self.delete_items(&mut multierror, Depth::Infinity, dmeta.unwrap(), &dest))
+                {
+                    return Ok(());
                 }
                 // should really do this per item, in case the delete partially fails. See TODO.md
                 if let Some(ref locksystem) = self.ls {
@@ -233,7 +257,11 @@ impl crate::DavInner {
             // COPY or MOVE.
             if method == Method::Copy {
                 if let Ok(_) = await!(self.do_copy(&path, &dest, &dest, depth, &mut multierror)) {
-                    let s = if exists { StatusCode::NO_CONTENT } else { StatusCode::CREATED };
+                    let s = if exists {
+                        StatusCode::NO_CONTENT
+                    } else {
+                        StatusCode::CREATED
+                    };
                     let _ = await!(multierror.add_status(&path, s));
                 }
             } else {
@@ -242,7 +270,11 @@ impl crate::DavInner {
                     if let Some(ref locksystem) = self.ls {
                         locksystem.delete(&path).ok();
                     }
-                    let s = if exists { StatusCode::NO_CONTENT } else { StatusCode::CREATED };
+                    let s = if exists {
+                        StatusCode::NO_CONTENT
+                    } else {
+                        StatusCode::CREATED
+                    };
                     let _ = await!(multierror.add_status(&path, s));
                 }
             }
@@ -252,4 +284,3 @@ impl crate::DavInner {
         await!(multi_error(req_path, items))
     }
 }
-

@@ -14,33 +14,24 @@ extern crate clap;
 
 use bytes::Bytes;
 use env_logger;
-use futures::{
-    future::Future,
-    stream::Stream,
-};
+use futures::{future::Future, stream::Stream};
 use hyper;
 
 use webdav_handler::{
-    DavConfig,
-    DavHandler,
     localfs,
     ls::DavLockSystem,
-    memfs,
-    memls,
-    typed_headers::{
-        Authorization,
-        Basic,
-        HeaderMapExt,
-    },
+    memfs, memls,
+    typed_headers::{Authorization, Basic, HeaderMapExt},
+    DavConfig, DavHandler,
 };
 
 #[derive(Clone)]
 struct Server {
-    dh:     DavHandler,
-    auth:   bool,
+    dh:   DavHandler,
+    auth: bool,
 }
 
-type BoxedFuture = Box<Future<Item=hyper::Response<hyper::Body>, Error=std::io::Error> + Send>;
+type BoxedFuture = Box<Future<Item = hyper::Response<hyper::Body>, Error = std::io::Error> + Send>;
 
 impl Server {
     pub fn new(directory: String, memls: bool, auth: bool) -> Self {
@@ -52,17 +43,14 @@ impl Server {
             let fs = memfs::MemFs::new();
             DavHandler::new(None, fs, memls)
         };
-        Server{ dh, auth }
+        Server { dh, auth }
     }
 
     fn handle(&self, req: hyper::Request<hyper::Body>) -> BoxedFuture {
-
         let user = if self.auth {
             // we want the client to authenticate.
             match req.headers().typed_get::<Authorization<Basic>>() {
-                Some(Authorization(basic)) => {
-                    Some(basic.username.to_string())
-                },
+                Some(Authorization(basic)) => Some(basic.username.to_string()),
                 None => {
                     // return a 401 reply.
                     let body = futures::stream::once(Ok(Bytes::from("please auth")));
@@ -81,12 +69,12 @@ impl Server {
         };
 
         use log::debug;
-        let start = || { debug!("start request-hook") };
-        let stop = || { debug!("stop request-hook") };
+        let start = || debug!("start request-hook");
+        let stop = || debug!("stop request-hook");
 
         let config = DavConfig {
-            principal:  user,
-            reqhooks:   Some((Box::new(start), Box::new(stop))),
+            principal: user,
+            reqhooks: Some((Box::new(start), Box::new(stop))),
             ..DavConfig::default()
         };
 
@@ -95,12 +83,11 @@ impl Server {
         let (parts, body) = req.into_parts();
         let body = body.map(|item| Bytes::from(item));
         let req = http::Request::from_parts(parts, body);
-        let fut = self.dh.handle_with(config, req)
-            .and_then(|resp| {
-                let (parts, body) = resp.into_parts();
-                let body = hyper::Body::wrap_stream(body);
-                Ok(hyper::Response::from_parts(parts, body))
-            });
+        let fut = self.dh.handle_with(config, req).and_then(|resp| {
+            let (parts, body) = resp.into_parts();
+            let body = hyper::Body::wrap_stream(body);
+            Ok(hyper::Response::from_parts(parts, body))
+        });
         Box::new(fut)
     }
 }
@@ -115,7 +102,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         (@arg MEMFS: -m --memfs "serve from ephemeral memory filesystem (default)")
         (@arg MEMLS: -l --memls "use ephemeral memory locksystem (default with --memfs)")
         (@arg AUTH: -a --auth "require basic authentication")
-    ).get_matches();
+    )
+    .get_matches();
 
     let (dir, name) = match matches.value_of("DIR") {
         Some(dir) => (dir, dir),
@@ -127,9 +115,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let dav_server = Server::new(dir.to_string(), memls, auth);
     let make_service = move || {
         let dav_server = dav_server.clone();
-        hyper::service::service_fn(move |req| {
-            dav_server.handle(req)
-        })
+        hyper::service::service_fn(move |req| dav_server.handle(req))
     };
 
     let port = matches.value_of("PORT").unwrap_or("4918");
@@ -144,4 +130,3 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
-

@@ -3,7 +3,7 @@
 use std::error::Error;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
-use std::path::{Path,PathBuf};
+use std::path::{Path, PathBuf};
 
 use mime_guess;
 use percent_encoding as pct;
@@ -14,8 +14,8 @@ use crate::DavError;
 /// Path information relative to a prefix.
 #[derive(Clone)]
 pub struct WebPath {
-    pub(crate) path:    Vec<u8>,
-    pub(crate) prefix:  Vec<u8>,
+    pub(crate) path:   Vec<u8>,
+    pub(crate) prefix: Vec<u8>,
 }
 
 define_encode_set! {
@@ -49,7 +49,9 @@ impl Error for ParseError {
     fn description(&self) -> &str {
         "WebPath parse error"
     }
-    fn cause(&self) -> Option<&Error> { None }
+    fn cause(&self) -> Option<&Error> {
+        None
+    }
 }
 
 impl std::fmt::Display for ParseError {
@@ -91,7 +93,6 @@ fn encode_path(src: &[u8]) -> Vec<u8> {
 // - decode percent encoded bytes, fail on invalid encodings.
 // - do not allow NUL or '/' in segments.
 fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
-
     // must consist of printable ASCII
     if rp.iter().any(|&x| x < 32 || x > 126) {
         Err(ParseError::InvalidPath)?;
@@ -117,7 +118,7 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
         _ => false,
     };
     let segments = rawpath.split(|c| *c == b'/');
-    let mut v : Vec<&[u8]>  = Vec::new();
+    let mut v: Vec<&[u8]> = Vec::new();
     for segment in segments {
         match segment {
             b"." | b"" => {},
@@ -125,7 +126,8 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
                 if v.len() < 2 {
                     return Err(ParseError::ForbiddenPath);
                 }
-                v.pop(); v.pop();
+                v.pop();
+                v.pop();
             },
             s => {
                 if let Err(e) = valid_segment(s) {
@@ -133,7 +135,7 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
                 }
                 v.push(b"/");
                 v.push(s);
-            }
+            },
         }
     }
     if isdir || v.is_empty() {
@@ -147,11 +149,11 @@ impl PartialEq for WebPath {
     fn eq(&self, rhs: &WebPath) -> bool {
         let mut a = self.path.as_slice();
         if a.len() > 1 && a.ends_with(b"/") {
-            a = &a[..a.len()-1];
+            a = &a[..a.len() - 1];
         }
         let mut b = rhs.path.as_slice();
         if b.len() > 1 && b.ends_with(b"/") {
-            b = &b[..b.len()-1];
+            b = &b[..b.len() - 1];
         }
         self.prefix == rhs.prefix && a == b
     }
@@ -168,12 +170,11 @@ impl WebPath {
         }
         let pflen = prefix.len();
         if prefix.ends_with(b"/") {
-            prefix = &prefix[..pflen-1];
-        } else if path.len() != pflen &&
-                  (path.len() < pflen || path[pflen] != b'/') {
+            prefix = &prefix[..pflen - 1];
+        } else if path.len() != pflen && (path.len() < pflen || path[pflen] != b'/') {
             return Err(ParseError::IllegalPath);
         }
-        Ok(WebPath{
+        Ok(WebPath {
             path:   path[prefix.len()..].to_vec(),
             prefix: prefix.to_vec(),
         })
@@ -183,17 +184,13 @@ impl WebPath {
     pub fn from_uri(uri: &http::uri::Uri, prefix: &str) -> Result<Self, ParseError> {
         match uri.path() {
             "*" => {
-                Ok(WebPath{
+                Ok(WebPath {
                     prefix: b"".to_vec(),
-                    path: b"*".to_vec(),
+                    path:   b"*".to_vec(),
                 })
             },
-            path if path.starts_with("/") => {
-                WebPath::from_str(path, prefix)
-            },
-            _ => {
-                Err(ParseError::InvalidPath)
-            }
+            path if path.starts_with("/") => WebPath::from_str(path, prefix),
+            _ => Err(ParseError::InvalidPath),
         }
     }
 
@@ -253,7 +250,7 @@ impl WebPath {
     pub fn as_pathbuf(&self) -> PathBuf {
         let mut b = self.path.as_slice();
         if b.len() > 1 && b.ends_with(b"/") {
-            b = &b[..b.len()-1];
+            b = &b[..b.len() - 1];
         }
         let os_string = OsStr::from_bytes(b).to_owned();
         PathBuf::from(os_string)
@@ -274,7 +271,7 @@ impl WebPath {
             &self.path
         };
         if path.ends_with(b"/") {
-            path = &path[..path.len()-1];
+            path = &path[..path.len() - 1];
         }
         let os_string = OsStr::from_bytes(path).to_owned();
         PathBuf::from(os_string)
@@ -283,7 +280,7 @@ impl WebPath {
     /// is this a collection i.e. does the original URL path end in "/".
     pub fn is_collection(&self) -> bool {
         let l = self.path.len();
-        l > 0 && self.path[l-1] == b'/'
+        l > 0 && self.path[l - 1] == b'/'
     }
 
     /// return the URL prefix.
@@ -295,7 +292,7 @@ impl WebPath {
     #[allow(unused)]
     pub(crate) fn remove_slash(&mut self) {
         let mut l = self.path.len();
-        while l > 1 && self.path[l-1] == b'/' {
+        while l > 1 && self.path[l - 1] == b'/' {
             l -= 1;
         }
         self.path.truncate(l);
@@ -317,22 +314,30 @@ impl WebPath {
 
     // get parent.
     pub(crate) fn parent(&self) -> WebPath {
-        let mut segs = self.path.split(|&c| c == b'/').filter(|e| e.len() > 0).collect::<Vec<&[u8]>>();
+        let mut segs = self
+            .path
+            .split(|&c| c == b'/')
+            .filter(|e| e.len() > 0)
+            .collect::<Vec<&[u8]>>();
         segs.pop();
         if segs.len() > 0 {
             segs.push(b"");
         }
         segs.insert(0, b"");
-        WebPath{
+        WebPath {
             prefix: self.prefix.clone(),
-            path: segs.join(&b'/').to_vec(),
+            path:   segs.join(&b'/').to_vec(),
         }
     }
 
     pub(crate) fn file_name(&self) -> &[u8] {
-        let segs = self.path.split(|&c| c == b'/').filter(|e| e.len() > 0).collect::<Vec<&[u8]>>();
+        let segs = self
+            .path
+            .split(|&c| c == b'/')
+            .filter(|e| e.len() > 0)
+            .collect::<Vec<&[u8]>>();
         if segs.len() > 0 {
-            segs[segs.len()-1]
+            segs[segs.len() - 1]
         } else {
             b""
         }
@@ -358,4 +363,3 @@ impl WebPath {
         "application/octet-stream"
     }
 }
-

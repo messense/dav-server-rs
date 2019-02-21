@@ -1,4 +1,3 @@
-
 use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
@@ -9,29 +8,32 @@ use futures03::stream::Stream as Stream03;
 use futures03::stream::StreamExt;
 
 use bytes::Bytes;
-use http::{Response,StatusCode};
+use http::{Response, StatusCode};
 use xml;
-use xml::EmitterConfig;
 use xml::common::XmlVersion;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
+use xml::EmitterConfig;
 
-use crate::{BoxedByteStream,DavError,empty_body};
 use crate::makestream;
 use crate::webpath::WebPath;
+use crate::{empty_body, BoxedByteStream, DavError};
 
 #[derive(Clone)]
 pub(crate) struct MultiError(futures03::channel::mpsc::Sender<Result<(WebPath, StatusCode), DavError>>);
 
 impl MultiError {
-    pub fn new(sender: futures03::channel::mpsc::Sender<Result<(WebPath, StatusCode), DavError>>)
-        -> MultiError
-    {
+    pub fn new(
+        sender: futures03::channel::mpsc::Sender<Result<(WebPath, StatusCode), DavError>>,
+    ) -> MultiError {
         MultiError(sender)
     }
 
-    pub async fn add_status<'a>(&'a mut self, path: &'a WebPath, status: impl Into<DavError> + 'static)
-        -> Result<(), futures03::channel::mpsc::SendError>
+    pub async fn add_status<'a>(
+        &'a mut self,
+        path: &'a WebPath,
+        status: impl Into<DavError> + 'static,
+    ) -> Result<(), futures03::channel::mpsc::SendError>
     {
         let status = status.into().statuscode();
         await!(self.0.send(Ok((path.clone(), status))))
@@ -68,9 +70,10 @@ impl Write for MultiBuf {
 
 type XmlWriter = EventWriter<MultiBuf>;
 
-fn write_elem<'b, S>(xw: &mut XmlWriter, name: S, text: &str) -> Result<(), DavError> where S: Into<xml::name::Name<'b>> {
+fn write_elem<'b, S>(xw: &mut XmlWriter, name: S, text: &str) -> Result<(), DavError>
+where S: Into<xml::name::Name<'b>> {
     let n = name.into();
-	xw.write(XmlWEvent::start_element(n))?;
+    xw.write(XmlWEvent::start_element(n))?;
     if text.len() > 0 {
         xw.write(XmlWEvent::characters(text))?;
     }
@@ -87,16 +90,19 @@ fn write_response(mut w: &mut XmlWriter, path: &WebPath, sc: StatusCode) -> Resu
     Ok(())
 }
 
-pub(crate) async fn multi_error<S>(req_path: WebPath, status_stream: S)
-    -> Result<Response<BoxedByteStream>, DavError>
-    where S: Stream03<Item=Result<(WebPath, StatusCode), DavError>> + Send + 'static
+pub(crate) async fn multi_error<S>(
+    req_path: WebPath,
+    status_stream: S,
+) -> Result<Response<BoxedByteStream>, DavError>
+where
+    S: Stream03<Item = Result<(WebPath, StatusCode), DavError>> + Send + 'static,
 {
     // read the first path/status item
     let mut status_stream = Box::pin(status_stream);
     let (path, status) = match await!(status_stream.next()) {
         None => {
             debug!("multi_error: empty status_stream");
-            return Err(DavError::ChanError)
+            return Err(DavError::ChanError);
         },
         Some(Err(e)) => return Err(e),
         Some(Ok(item)) => item,
@@ -110,9 +116,7 @@ pub(crate) async fn multi_error<S>(req_path: WebPath, status_stream: S)
         match await!(status_stream.next()) {
             None => {
                 // No, this was the first and only item.
-                let resp = Response::builder()
-                    .status(status)
-                    .body(empty_body()).unwrap();
+                let resp = Response::builder().status(status).body(empty_body()).unwrap();
                 return Ok(resp);
             },
             Some(Err(e)) => return Err(e),
@@ -128,7 +132,6 @@ pub(crate) async fn multi_error<S>(req_path: WebPath, status_stream: S)
 
     // Transform path/status items to XML.
     let body = makestream::stream01(async move |mut tx| {
-
         // Write initial header.
         let buffer = MultiBuf::new();
         let mut xw = EventWriter::new_with_config(
@@ -136,11 +139,11 @@ pub(crate) async fn multi_error<S>(req_path: WebPath, status_stream: S)
             EmitterConfig {
                 perform_indent: true,
                 ..EmitterConfig::default()
-            }
+            },
         );
         xw.write(XmlWEvent::StartDocument {
-            version: XmlVersion::Version10,
-            encoding: Some("utf-8"),
+            version:    XmlVersion::Version10,
+            encoding:   Some("utf-8"),
             standalone: None,
         })?;
         xw.write(XmlWEvent::start_element("D:multistatus").ns("D", "DAV:"))?;
@@ -150,7 +153,11 @@ pub(crate) async fn multi_error<S>(req_path: WebPath, status_stream: S)
         let mut status_stream = futures03::stream::iter(items).chain(status_stream);
         while let Some(res) = await!(status_stream.next()) {
             let (path, status) = res?;
-            let status = if status == StatusCode::NO_CONTENT { StatusCode::OK } else { status };
+            let status = if status == StatusCode::NO_CONTENT {
+                StatusCode::OK
+            } else {
+                status
+            };
             write_response(&mut xw, &path, status)?;
             await!(tx.send(buffer.take()))?;
         }
@@ -171,4 +178,3 @@ pub(crate) async fn multi_error<S>(req_path: WebPath, status_stream: S)
         .unwrap();
     Ok(resp)
 }
-

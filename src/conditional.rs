@@ -4,35 +4,35 @@ use http::StatusCode;
 use http::{self, Method};
 
 use crate::common::*;
+use crate::fs::{DavFileSystem, DavMetaData};
 use crate::headers;
-use crate::fs::{DavFileSystem,DavMetaData};
 use crate::ls::DavLockSystem;
-use crate::typed_headers::{self,EntityTag,HeaderMapExt};
+use crate::typed_headers::{self, EntityTag, HeaderMapExt};
 use crate::webpath::WebPath;
 
 type Request = http::Request<()>;
 
-pub(crate) fn ifrange_match(hdr: &headers::IfRange, tag: &typed_headers::EntityTag, date: SystemTime) -> bool {
-	match hdr {
-        &headers::IfRange::Date(ref d) => {
-            typed_headers::HttpDate::from(date) < *d
-        },
-        &headers::IfRange::EntityTag(ref t) => {
-            t == tag
-        },
+pub(crate) fn ifrange_match(
+    hdr: &headers::IfRange,
+    tag: &typed_headers::EntityTag,
+    date: SystemTime,
+) -> bool
+{
+    match hdr {
+        &headers::IfRange::Date(ref d) => typed_headers::HttpDate::from(date) < *d,
+        &headers::IfRange::EntityTag(ref t) => t == tag,
     }
 }
 
 pub(crate) fn etaglist_match(tags: &headers::ETagList, tag: &typed_headers::EntityTag) -> bool {
     match tags {
         &headers::ETagList::Star => true,
-        &headers::ETagList::Tags(ref t) => t.iter().any(|x| x == tag)
+        &headers::ETagList::Tags(ref t) => t.iter().any(|x| x == tag),
     }
 }
 
 // Handle the if-headers: RFC 7232, HTTP/1.1 Conditional Requests.
 pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> Option<StatusCode> {
-
     let modified = meta.and_then(|m| m.modified().ok());
 
     if let Some(r) = req.headers().typed_get::<headers::IfMatch>() {
@@ -49,7 +49,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
                     debug!("precondition fail: If-Unmodified-Since {:?}", r.0);
                     return Some(StatusCode::PRECONDITION_FAILED);
                 }
-            }
+            },
         }
     }
 
@@ -84,9 +84,14 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
 // caller should set the http status to 412 PreconditionFailed if
 // the return value from this function is false.
 //
-pub(crate) async fn dav_if_match<'a>(req: &'a Request, fs: &'a Box<DavFileSystem + 'static>, ls: &'a Option<Box<DavLockSystem + 'static>>, path: &'a WebPath) -> (bool, Vec<String>) {
-
-    let mut tokens : Vec<String> = Vec::new();
+pub(crate) async fn dav_if_match<'a>(
+    req: &'a Request,
+    fs: &'a Box<DavFileSystem + 'static>,
+    ls: &'a Option<Box<DavLockSystem + 'static>>,
+    path: &'a WebPath,
+) -> (bool, Vec<String>)
+{
+    let mut tokens: Vec<String> = Vec::new();
     let mut any_list_ok = false;
 
     let r = match req.headers().typed_get::<headers::If>() {
@@ -95,11 +100,12 @@ pub(crate) async fn dav_if_match<'a>(req: &'a Request, fs: &'a Box<DavFileSystem
     };
 
     for iflist in r.0.iter() {
-
         // save and return all statetokens that we encountered.
-        let toks = iflist.conditions.iter().filter_map(|c| match &c.item {
-            &headers::IfItem::StateToken(ref t) => Some(t.to_owned()),
-            _ => None,
+        let toks = iflist.conditions.iter().filter_map(|c| {
+            match &c.item {
+                &headers::IfItem::StateToken(ref t) => Some(t.to_owned()),
+                _ => None,
+            }
         });
         tokens.extend(toks);
 
@@ -109,13 +115,13 @@ pub(crate) async fn dav_if_match<'a>(req: &'a Request, fs: &'a Box<DavFileSystem
         }
 
         // find the resource that this list is about.
-        let mut pa : Option<WebPath> = None;
+        let mut pa: Option<WebPath> = None;
         let (p, valid) = match iflist.resource_tag {
             Some(ref url) => {
                 match WebPath::from_url(url, std::str::from_utf8(&path.prefix).unwrap()) {
                     Ok(p) => {
                         // anchor webpath in pa.
-                        let p : &WebPath = pa.get_or_insert(p);
+                        let p: &WebPath = pa.get_or_insert(p);
                         (p, true)
                     },
                     Err(_) => (path, false),
@@ -152,10 +158,10 @@ pub(crate) async fn dav_if_match<'a>(req: &'a Request, fs: &'a Box<DavFileSystem
                             Err(_) => {
                                 // metadata error, fail.
                                 false
-                            }
+                            },
                         }
                     }
-                }
+                },
             };
             if cond_ok == cond.not {
                 list_ok = false;
@@ -174,7 +180,14 @@ pub(crate) async fn dav_if_match<'a>(req: &'a Request, fs: &'a Box<DavFileSystem
 }
 
 // Handle both the HTTP conditional If: headers, and the webdav If: header.
-pub(crate) async fn if_match<'a>(req: &'a Request, meta: Option<&'a Box<DavMetaData + 'static>>, fs: &'a Box<DavFileSystem + 'static>, ls: &'a Option<Box<DavLockSystem + 'static>>, path: &'a WebPath) -> Option<StatusCode> {
+pub(crate) async fn if_match<'a>(
+    req: &'a Request,
+    meta: Option<&'a Box<DavMetaData + 'static>>,
+    fs: &'a Box<DavFileSystem + 'static>,
+    ls: &'a Option<Box<DavLockSystem + 'static>>,
+    path: &'a WebPath,
+) -> Option<StatusCode>
+{
     match await!(dav_if_match(req, fs, ls, path)) {
         (true, _) => {},
         (false, _) => return Some(StatusCode::PRECONDITION_FAILED),
@@ -183,7 +196,14 @@ pub(crate) async fn if_match<'a>(req: &'a Request, meta: Option<&'a Box<DavMetaD
 }
 
 // Like if_match, but also returns all "associated state-tokens"
-pub(crate) async fn if_match_get_tokens<'a>(req: &'a Request, meta: Option<&'a Box<DavMetaData + 'static>>, fs: &'a Box<DavFileSystem + 'static>, ls: &'a Option<Box<DavLockSystem + 'static>>, path: &'a WebPath) -> Result<Vec<String>, StatusCode> {
+pub(crate) async fn if_match_get_tokens<'a>(
+    req: &'a Request,
+    meta: Option<&'a Box<DavMetaData + 'static>>,
+    fs: &'a Box<DavFileSystem + 'static>,
+    ls: &'a Option<Box<DavLockSystem + 'static>>,
+    path: &'a WebPath,
+) -> Result<Vec<String>, StatusCode>
+{
     if let Some(code) = http_if_match(req, meta) {
         return Err(code);
     }
@@ -192,4 +212,3 @@ pub(crate) async fn if_match_get_tokens<'a>(req: &'a Request, meta: Option<&'a B
         (false, _) => Err(StatusCode::PRECONDITION_FAILED),
     }
 }
-

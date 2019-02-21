@@ -1,25 +1,30 @@
-
 use http::{Request, Response, StatusCode};
 
-use crate::{BoxedByteStream,DavError, DavResult, empty_body};
 use crate::common::*;
 use crate::conditional::*;
 use crate::fs::*;
 use crate::headers;
 use crate::typed_headers::HeaderMapExt;
+use crate::{empty_body, BoxedByteStream, DavError, DavResult};
 
 impl crate::DavInner {
-
-    pub(crate) fn handle_mkcol(self, req: Request<()>)
-    -> impl Future03<Output=DavResult<Response<BoxedByteStream>>>
+    pub(crate) fn handle_mkcol(
+        self,
+        req: Request<()>,
+    ) -> impl Future03<Output = DavResult<Response<BoxedByteStream>>>
     {
         async move {
-
             let mut path = self.path(&req);
             let meta = self.fs.metadata(&path);
 
             // check the If and If-* headers.
-            let res = await!(if_match_get_tokens(&req, meta.as_ref().ok(), &self.fs, &self.ls, &path));
+            let res = await!(if_match_get_tokens(
+                &req,
+                meta.as_ref().ok(),
+                &self.fs,
+                &self.ls,
+                &path
+            ));
             let tokens = match res {
                 Ok(t) => t,
                 Err(s) => return Err(DavError::Status(s)),
@@ -44,14 +49,14 @@ impl crate::DavInner {
                 Ok(()) => {
                     if path.is_collection() {
                         path.add_slash();
-                        res.headers_mut().typed_insert(headers::ContentLocation(path.as_url_string_with_prefix()));
+                        res.headers_mut()
+                            .typed_insert(headers::ContentLocation(path.as_url_string_with_prefix()));
                     }
                     *res.status_mut() = StatusCode::CREATED;
-                }
+                },
             }
 
             Ok(res)
         }
     }
 }
-

@@ -5,21 +5,21 @@
 //!
 //! This is enough for OSX/Windows to work without actually having
 //! a working locksystem.
-use std::time::{SystemTime,Duration};
+use std::time::{Duration, SystemTime};
 
 use uuid::Uuid;
 use xmltree::Element;
 
-use crate::webpath::WebPath;
 use crate::ls::*;
+use crate::webpath::WebPath;
 
 #[derive(Debug, Clone)]
-pub struct FakeLs{}
+pub struct FakeLs {}
 
 impl FakeLs {
     /// Create a new "fakels" locksystem.
     pub fn new() -> Box<FakeLs> {
-        Box::new(FakeLs{})
+        Box::new(FakeLs {})
     }
 }
 
@@ -32,13 +32,21 @@ fn tm_limit(d: Option<Duration>) -> Duration {
             } else {
                 d
             }
-        }
+        },
     }
 }
 
 impl DavLockSystem for FakeLs {
-
-    fn lock(&self, path: &WebPath, principal: Option<&str>, owner: Option<&Element>, timeout: Option<Duration>, shared: bool, deep: bool) -> Result<DavLock, DavLock> {
+    fn lock(
+        &self,
+        path: &WebPath,
+        principal: Option<&str>,
+        owner: Option<&Element>,
+        timeout: Option<Duration>,
+        shared: bool,
+        deep: bool,
+    ) -> Result<DavLock, DavLock>
+    {
         let timeout = tm_limit(timeout);
         let timeout_at = SystemTime::now() + timeout;
 
@@ -46,7 +54,7 @@ impl DavLockSystem for FakeLs {
         let s = if shared { 'S' } else { 'E' };
         let token = format!("opaquetoken:{}/{}/{}", Uuid::new_v4().to_hyphenated(), d, s);
 
-        let lock = DavLock{
+        let lock = DavLock {
             token:      token,
             path:       path.clone(),
             principal:  principal.map(|s| s.to_string()),
@@ -65,7 +73,6 @@ impl DavLockSystem for FakeLs {
     }
 
     fn refresh(&self, path: &WebPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()> {
-
         debug!("refresh lock {}", token);
         let v: Vec<&str> = token.split('/').collect();
         let deep = v.len() > 1 && v[1] == "I";
@@ -74,7 +81,7 @@ impl DavLockSystem for FakeLs {
         let timeout = tm_limit(timeout);
         let timeout_at = SystemTime::now() + timeout;
 
-        let lock = DavLock{
+        let lock = DavLock {
             token:      token.to_string(),
             path:       path.clone(),
             principal:  None,
@@ -87,7 +94,15 @@ impl DavLockSystem for FakeLs {
         Ok(lock)
     }
 
-    fn check(&self, _path: &WebPath, _principal: Option<&str>, _ignore_principal: bool, _deep: bool, _submitted_tokens: Vec<&str>) -> Result<(), DavLock> {
+    fn check(
+        &self,
+        _path: &WebPath,
+        _principal: Option<&str>,
+        _ignore_principal: bool,
+        _deep: bool,
+        _submitted_tokens: Vec<&str>,
+    ) -> Result<(), DavLock>
+    {
         Ok(())
     }
 
@@ -99,4 +114,3 @@ impl DavLockSystem for FakeLs {
         Ok(())
     }
 }
-
