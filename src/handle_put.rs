@@ -6,13 +6,9 @@ use std::io::prelude::*;
 use http::StatusCode as SC;
 use http::{self, Request, Response};
 
-use futures::prelude::*;
-use futures03::compat::{Future01CompatExt, Stream01CompatExt};
-use futures03::future::Future as Future03;
-use futures03::stream::StreamExt;
-
 use crate::{BoxedByteStream, DavError, DavResult};
 use crate::{empty_body,systemtime_to_httpdate};
+use crate::common::*;
 use crate::conditional::if_match_get_tokens;
 use crate::fs::*;
 use crate::headers;
@@ -20,7 +16,14 @@ use crate::typed_headers::{self, HeaderMapExt};
 
 const SABRE: &'static str = "application/x-sabredav-partialupdate";
 
-// This is a lovely hack.
+// This is a nice hack. If the type 'E' is actually an io::Error or a Box<io::Error>,
+// convert it back into a real io::Error. If it is a DavError or a Box<DavError>,
+// use its Into<io::Error> impl. Otherwise just wrap the error in io::Error::new.
+//
+// If we had specialization this would look a lot prettier.
+//
+// Also, this is senseless. It's not as if we _do_ anything with the
+// io::Error, other than noticing "oops an error occured".
 fn to_ioerror<E>(err: E) -> io::Error
     where E: StdError + Sync + Send + 'static
 {
@@ -31,6 +34,15 @@ fn to_ioerror<E>(err: E) -> io::Error
             Ok(e) => *e,
             Err(e) => match e.downcast::<Box<io::Error>>() {
                 Ok(e) => *(*e),
+                Err(_) => io::ErrorKind::Other.into(),
+            },
+        }
+    } else if e.is::<DavError>() || e.is::<Box<DavError>>() {
+        let err = Box::new(err) as Box<dyn Any>;
+        match err.downcast::<DavError>() {
+            Ok(e) => (*e).into(),
+            Err(e) => match e.downcast::<Box<DavError>>() {
+                Ok(e) => (*(*e)).into(),
                 Err(_) => io::ErrorKind::Other.into(),
             },
         }
