@@ -1,8 +1,10 @@
-
 use std::error::Error;
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind};
+
 use xml;
 use http::StatusCode;
+
+use crate::fs::FsError;
 
 #[derive(Debug)]
 pub(crate) enum DavError {
@@ -12,8 +14,11 @@ pub(crate) enum DavError {
     IllegalPath,        // path not valid here
     ForbiddenPath,      // too many dotdots
     UnknownMethod,
+    ChanError,
     Status(StatusCode),
-    IoError(std::io::Error),
+    StatusClose(StatusCode),
+    FsError(FsError),
+    IoError(io::Error),
     XmlReaderError(xml::reader::Error),
     XmlWriterError(xml::writer::Error),
 }
@@ -25,6 +30,7 @@ impl Error for DavError {
 
     fn cause(&self) -> Option<&Error> {
         match self {
+            &DavError::FsError(ref e) => Some(e),
             &DavError::IoError(ref e) => Some(e),
             &DavError::XmlReaderError(ref e) => Some(e),
             &DavError::XmlWriterError(ref e) => Some(e),
@@ -44,9 +50,37 @@ impl std::fmt::Display for DavError {
     }
 }
 
-impl From<std::io::Error> for DavError {
-    fn from(e: std::io::Error) -> Self {
+impl From<FsError> for DavError {
+    fn from(e: FsError) -> Self {
+        DavError::FsError(e)
+    }
+}
+
+impl From<DavError> for io::Error {
+    fn from(e: DavError) -> Self {
+        match e {
+            DavError::IoError(e) => e,
+            DavError::FsError(e) => e.into(),
+            _ => io::Error::new(io::ErrorKind::Other, e)
+        }
+    }
+}
+
+impl From<FsError> for io::Error {
+    fn from(e: FsError) -> Self {
+        fserror_to_ioerror(e)
+    }
+}
+
+impl From<io::Error> for DavError {
+    fn from(e: io::Error) -> Self {
         DavError::IoError(e)
+    }
+}
+
+impl From<StatusCode> for DavError {
+    fn from(e: StatusCode) -> Self {
+        DavError::Status(e)
     }
 }
 
@@ -62,7 +96,28 @@ impl From<xml::writer::Error> for DavError {
     }
 }
 
-fn ioerror_to_status(ioerror: &std::io::Error) -> StatusCode {
+impl From<futures03::channel::mpsc::SendError> for DavError {
+    fn from(_e: futures03::channel::mpsc::SendError) -> Self {
+        DavError::ChanError
+    }
+}
+
+fn fserror_to_ioerror(e: FsError) -> io::Error {
+    match e {
+        FsError::NotImplemented => io::Error::new(io::ErrorKind::Other, "NotImplemented"),
+        FsError::GeneralFailure => io::Error::new(io::ErrorKind::Other, "GeneralFailure"),
+        FsError::Exists => io::Error::new(io::ErrorKind::AlreadyExists, "Exists"),
+        FsError::NotFound => io::Error::new(io::ErrorKind::NotFound, "Notfound"),
+        FsError::Forbidden => io::Error::new(io::ErrorKind::PermissionDenied, "Forbidden"),
+        FsError::InsufficientStorage => io::Error::new(io::ErrorKind::Other, "InsufficientStorage"),
+        FsError::LoopDetected => io::Error::new(io::ErrorKind::Other, "LoopDetected"),
+        FsError::PathTooLong => io::Error::new(io::ErrorKind::Other, "PathTooLong"),
+        FsError::TooLarge => io::Error::new(io::ErrorKind::Other, "TooLarge"),
+        FsError::IsRemote => io::Error::new(io::ErrorKind::Other, "IsRemote"),
+    }
+}
+
+fn ioerror_to_status(ioerror: &io::Error) -> StatusCode {
     match ioerror.kind() {
         ErrorKind::NotFound => StatusCode::NOT_FOUND,
         ErrorKind::PermissionDenied => StatusCode::FORBIDDEN,
@@ -72,8 +127,23 @@ fn ioerror_to_status(ioerror: &std::io::Error) -> StatusCode {
     }
 }
 
+fn fserror_to_status(e: &FsError) -> StatusCode {
+    match e {
+        FsError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
+        FsError::GeneralFailure => StatusCode::INTERNAL_SERVER_ERROR,
+        FsError::Exists => StatusCode::METHOD_NOT_ALLOWED,
+        FsError::NotFound => StatusCode::NOT_FOUND,
+        FsError::Forbidden => StatusCode::FORBIDDEN,
+        FsError::InsufficientStorage => StatusCode::INSUFFICIENT_STORAGE,
+        FsError::LoopDetected => StatusCode::LOOP_DETECTED,
+        FsError::PathTooLong => StatusCode::URI_TOO_LONG,
+        FsError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+        FsError::IsRemote => StatusCode::BAD_GATEWAY,
+    }
+}
+
 impl DavError {
-     pub(crate) fn statuscode(&self) -> StatusCode {
+    pub(crate) fn statuscode(&self) -> StatusCode {
         match self {
             &DavError::XmlReadError => StatusCode::BAD_REQUEST,
             &DavError::XmlParseError => StatusCode::BAD_REQUEST,
@@ -81,10 +151,20 @@ impl DavError {
             &DavError::IllegalPath => StatusCode::BAD_GATEWAY,
             &DavError::ForbiddenPath => StatusCode::FORBIDDEN,
             &DavError::UnknownMethod => StatusCode::NOT_IMPLEMENTED,
+            &DavError::ChanError => StatusCode::INTERNAL_SERVER_ERROR,
             &DavError::IoError(ref e) => ioerror_to_status(e),
+            &DavError::FsError(ref e) => fserror_to_status(e),
             &DavError::Status(e) => e,
+            &DavError::StatusClose(e) => e,
             &DavError::XmlReaderError(ref _e) => StatusCode::BAD_REQUEST,
             &DavError::XmlWriterError(ref _e) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    pub(crate) fn must_close(&self) -> bool {
+        match self {
+            &DavError::Status(_) => false,
+            _ => true,
         }
     }
 }

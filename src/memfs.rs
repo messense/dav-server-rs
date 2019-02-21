@@ -217,16 +217,20 @@ impl DavFileSystem for MemFs {
         true
     }
 
-    fn patch_props(&self, path: &WebPath, set: Vec<DavProp>, remove: Vec<DavProp>) -> FsResult<Vec<(StatusCode, DavProp)>> {
+    fn patch_props(&self, path: &WebPath, set: &mut Vec<DavProp>, remove: &mut Vec<DavProp>) -> FsResult<Vec<(StatusCode, DavProp)>> {
         let tree = &mut *self.tree.lock().unwrap();
         let node_id = tree.lookup(path.as_bytes())?;
         let node = tree.get_node_mut(node_id)?;
         let props = node.get_props_mut();
+
         let mut res = Vec::new();
+
+        let remove = remove.drain(..).collect::<Vec<_>>();
         for p in remove.into_iter() {
             props.remove(&propkey(&p.namespace, &p.name));
             res.push((StatusCode::OK, p));
         }
+        let set = set.drain(..).collect::<Vec<_>>();
         for p in set.into_iter() {
             res.push((StatusCode::OK, cloneprop(&p)));
             props.insert(propkey(&p.namespace, &p.name), p);

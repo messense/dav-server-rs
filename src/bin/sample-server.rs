@@ -24,6 +24,7 @@ use webdav_handler::{
     DavConfig,
     DavHandler,
     localfs,
+    ls::DavLockSystem,
     memfs,
     memls,
     typed_headers::{
@@ -42,14 +43,14 @@ struct Server {
 type BoxedFuture = Box<Future<Item=hyper::Response<hyper::Body>, Error=std::io::Error> + Send>;
 
 impl Server {
-    pub fn new(directory: String, auth: bool) -> Self {
+    pub fn new(directory: String, memls: bool, auth: bool) -> Self {
+        let memls: Option<Box<DavLockSystem>> = if memls { Some(memls::MemLs::new()) } else { None };
         let dh = if directory != "" {
             let fs = localfs::LocalFs::new(directory, true);
-            DavHandler::new(None, fs, None)
+            DavHandler::new(None, fs, memls)
         } else {
             let fs = memfs::MemFs::new();
-            let ls = memls::MemLs::new();
-            DavHandler::new(None, fs, Some(ls))
+            DavHandler::new(None, fs, memls)
         };
         Server{ dh, auth }
     }
@@ -112,6 +113,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         (@arg PORT: -p --port +takes_value "port to listen on (4918)")
         (@arg DIR: -d --dir +takes_value "local directory to serve")
         (@arg MEMFS: -m --memfs "serve from ephemeral memory filesystem (default)")
+        (@arg MEMLS: -l --memls "use ephemeral memory locksystem (default with --memfs)")
         (@arg AUTH: -a --auth "require basic authentication")
     ).get_matches();
 
@@ -120,8 +122,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         None => ("", "memory filesystem"),
     };
     let auth = matches.is_present("AUTH");
+    let memls = matches.is_present("MEMFS") || matches.is_present("MEMLS");
 
-    let dav_server = Server::new(dir.to_string(), auth);
+    let dav_server = Server::new(dir.to_string(), memls, auth);
     let make_service = move || {
         let dav_server = dav_server.clone();
         hyper::service::service_fn(move |req| {

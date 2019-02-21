@@ -12,7 +12,7 @@ the `http` crate. It has an interface similar to the Go x/net/webdav package:
 With some glue code, this handler can be used from HTTP server
 libraries/frameworks such as hyper or actix-web.
 
-Currently passes the "basic", "copymove", "props", "locks" and "http"
+Currently passes the "http", "basic", "copymove", "locks", and "props"
 checks of the Webdav Litmus Test testsuite. That's all of the base
 RFC4918 webdav specification.
 
@@ -27,6 +27,11 @@ Also included are two locksystems:
 
 - memls: ephemeral in-memory locksystem.
 - fakels: fake locksystem. just enough LOCK/UNLOCK support for OSX/Windows.
+
+# building
+
+This crate uses futures@0.3 and async/await internally, so you have to
+build it with a nightly toolchain.
 
 # testing
 
@@ -49,7 +54,7 @@ You do not have to install the litmus binary, it's possible to run the tests
 straight from the unpacked & compiled litmus directory:
 
 ```
-$ TESTS="basic copymove props locks http" HTDOCS=htdocs TESTROOT=. \
+$ TESTS="http basic copymove locks props" HTDOCS=htdocs TESTROOT=. \
 	./litmus http://localhost:4918/ someuser somepass
 
 -> running `basic':
