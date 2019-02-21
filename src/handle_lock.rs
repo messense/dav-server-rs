@@ -35,7 +35,7 @@ impl crate::DavInner {
         // path and meta
         let mut path = self.path(&req);
         let meta = match blocking_io!(self.fs.metadata(&path)) {
-            Ok(meta) => self.fixpath(&mut res, &mut path, meta),
+            Ok(meta) => Some(self.fixpath(&mut res, &mut path, meta)),
             Err(_) => None,
         };
 

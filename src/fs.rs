@@ -145,7 +145,7 @@ pub trait DavFileSystem : Debug + Sync + Send + BoxCloneFs {
     ///
     /// Has a default "notimplemented" implementation.
     #[allow(unused_variables)]
-    fn patch_props(&self, path: &WebPath, set: Vec<DavProp>, remove: Vec<DavProp>) -> FsResult<Vec<(StatusCode, DavProp)>> {
+    fn patch_props(&self, path: &WebPath, set: &mut Vec<DavProp>, remove: &mut Vec<DavProp>) -> FsResult<Vec<(StatusCode, DavProp)>> {
         notimplemented!("patch_props")
     }
 

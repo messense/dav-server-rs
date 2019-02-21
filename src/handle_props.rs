@@ -1,37 +1,31 @@
 
-use std::io::{Cursor,Read,Write};
-use std::io::BufWriter;
+use std::io::{self, Cursor};
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+use http::{Request, Response};
 use http::StatusCode as SC;
 
+use crate::xmltree_ext::*;
 use xml::EmitterConfig;
 use xml::common::XmlVersion;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
-
 use xmltree::Element;
 
-use crate::sync_adapter::{Request,Response};
-use crate::xmltree_ext::*;
-
-use crate::typed_headers::HeaderMapExt;
-use crate::fserror;
-use crate::headers;
-use crate::webpath::*;
-use crate::fs::*;
-use crate::ls::*;
-
-use crate::handle_lock::{list_lockdiscovery,list_supportedlock};
-
+use crate::{BoxedByteStream,DavInner,DavResult,empty_body,single_body};
+use crate::common::*;
 use crate::conditional::if_match_get_tokens;
-use crate::errors::DavError;
-use crate::fserror_to_status;
-
-use crate::{DavInner,DavResult};
+use crate::errors::*;
+use crate::fs::*;
+use crate::handle_lock::{list_lockdiscovery,list_supportedlock};
+use crate::headers;
+use crate::ls::*;
+use crate::makestream;
+use crate::multierror::MultiBuf;
 use crate::{systemtime_to_httpdate,systemtime_to_rfc3339};
-use crate::{daverror,statuserror};
+use crate::typed_headers::HeaderMapExt;
+use crate::webpath::*;
 
 const NS_APACHE_URI: &'static str = "http://apache.org/dav/props/";
 const NS_DAV_URI: &'static str = "DAV:";
@@ -57,15 +51,18 @@ lazy_static! {
     static ref PROPNAME : Vec<Element> = init_staticprop(PROPNAME_STR);
 }
 
-type Emitter = EventWriter<BufWriter<Response>>;
+type Emitter = EventWriter<MultiBuf>;
+type Sender = futures03::channel::mpsc::Sender<Result<bytes::Bytes, io::Error>>;
 
-struct PropWriter<'a> {
+struct PropWriter {
     emitter:    Emitter,
-    name:       &'a str,
+    buffer:     MultiBuf,
+    tx:         Option<Sender>,
+    name:       String,
     props:      Vec<Element>,
-    fs:         &'a Box<DavFileSystem>,
-    ls:         Option<&'a Box<DavLockSystem>>,
-    useragent:  &'a str,
+    fs:         Box<DavFileSystem>,
+    ls:         Option<Box<DavLockSystem>>,
+    useragent:  String,
     q_cache:    QuotaCache,
 }
 
@@ -94,33 +91,36 @@ fn init_staticprop(p: &[&str]) -> Vec<Element> {
 
 impl DavInner {
 
-    pub(crate) fn handle_propfind(&self, mut req: Request, mut res: Response) -> DavResult<()> {
+    pub(crate) async fn handle_propfind(self, req: Request<()>, xmldata: Vec<u8>)
+        -> DavResult<Response<BoxedByteStream>>
+    {
 
         // No checks on If: and If-* headers here, because I do not see
         // the point and there's nothing in RFC4918 that indicates we should.
 
-        // read request.
-        let mut xmldata = Vec::with_capacity(4096);
-        req.read_to_end(&mut xmldata)?;
+        let mut res = Response::new(empty_body());
 
         let cc = "no-store, no-cache, must-revalidate".parse().unwrap();
         let pg = "no-cache".parse().unwrap();
         res.headers_mut().insert("Cache-Control", cc);
         res.headers_mut().insert("Pragma", pg);
 
-        let depth = match req.headers.typed_get::<headers::Depth>() {
+        let depth = match req.headers().typed_get::<headers::Depth>() {
             Some(headers::Depth::Infinity) | None => {
-                if let None = req.headers.typed_get::<headers::XLitmus>() {
+                if let None = req.headers().typed_get::<headers::XLitmus>() {
                     *res.status_mut() = SC::FORBIDDEN;
-                    write!(res.start(), "PROPFIND requests with a Depth of \"infinity\" are not allowed\r\n")?;
-                    return Err(DavError::Status(SC::FORBIDDEN));
+                    *res.body_mut() = single_body("PROPFIND requests with a Depth of \"infinity\" are not allowed\r\n");
+                    return Ok(res);
                 }
                 headers::Depth::Infinity
             },
             Some(d) => d.clone(),
         };
 
-        let (path, meta) = self.fixpath(&req, &mut res).map_err(|e| fserror(&mut res, e))?;
+        // path and meta
+        let mut path = self.path(&req);
+        let meta = blocking_io!(self.fs.metadata(&path))?;
+        let meta = self.fixpath(&mut res, &mut path, meta);
 
         let mut root = None;
         if xmldata.len() > 0 {
@@ -130,11 +130,11 @@ impl DavInner {
                        t.namespace == Some("DAV:".to_owned()) {
                            Some(t)
                     } else {
-                        return Err(daverror(&mut res, DavError::XmlParseError));
+                        return Err(DavError::XmlParseError.into());
                     }
                 },
                 // Err(e) => return Err(daverror(&mut res, e)),
-                Err(_) => return Err(daverror(&mut res, DavError::XmlParseError)),
+                Err(_) => return Err(DavError::XmlParseError.into()),
             };
         }
 
@@ -150,51 +150,65 @@ impl DavInner {
                             "propname" => ("propname", Vec::new()),
                             "prop" => ("prop", elem.children),
                             "allprop" => ("allprop", includes),
-                            _ => return Err(daverror(&mut res, DavError::XmlParseError)),
+                            _ => return Err(DavError::XmlParseError.into()),
                         }
                     },
-                    None => return Err(daverror(&mut res, DavError::XmlParseError)),
+                    None => return Err(DavError::XmlParseError.into()),
                 }
             }
         };
 
         debug!("propfind: type request: {}", name);
 
-        let mut pw = PropWriter::new(&req, res, name, props, &self.fs, self.ls.as_ref())?;
-        pw.write_props(&path, meta.as_ref())?;
+        let mut pw = PropWriter::new(&req, &mut res, name, props, &self.fs, self.ls.as_ref())?;
 
-        if meta.is_dir() && depth != headers::Depth::Zero {
-            self.propfind_directory(&path, depth, &mut pw)?;
-        }
-        pw.close()?;
+        *res.body_mut() = Box::new(makestream::stream01(async move |tx| {
+            pw.set_tx(tx);
+            pw.write_props(&path, meta.as_ref())?;
+            await!(pw.flush())?;
 
-        Ok(())
+            if meta.is_dir() && depth != headers::Depth::Zero {
+                let _ = await!(self.propfind_directory(&path, depth, &mut pw));
+            }
+            await!(pw.close())?;
+
+            Ok(())
+        }));
+
+        Ok(res)
     }
 
-    fn propfind_directory(&self, path: &WebPath, depth: headers::Depth, propwriter: &mut PropWriter) -> DavResult<()> {
-        let entries = match self.fs.read_dir(path) {
-            Ok(entries) => entries,
-            Err(e) => { error!("read_dir error {:?}", e); return Ok(()); },
-        };
-        for dirent in entries {
-            let mut npath = path.clone();
-            npath.push_segment(&dirent.name());
-            let meta = match self.fs.metadata(&npath) {
-                Ok(meta) => meta,
+    fn propfind_directory<'a>(&'a self, path: &'a WebPath, depth: headers::Depth, propwriter: &'a mut PropWriter) -> impl Future03<Output=DavResult<()>> + Send + 'a {
+        async move {
+            let entries = match blocking_io!(self.fs.read_dir(path)) {
+                Ok(entries) => entries,
                 Err(e) => {
-                    debug!("metadata error on {}. Skipping {:?}", npath, e);
-                    continue;
-                }
+                    // if we cannot read_dir, just skip it.
+                    error!("read_dir error {:?}", e);
+                    return Ok(())
+                },
             };
-            if meta.is_dir() {
-                npath.add_slash();
+            for dirent in entries {
+                let mut npath = path.clone();
+                npath.push_segment(&dirent.name());
+                let meta = match blocking_io!(self.fs.metadata(&npath)) {
+                    Ok(meta) => meta,
+                    Err(e) => {
+                        debug!("metadata error on {}. Skipping {:?}", npath, e);
+                        continue;
+                    }
+                };
+                if meta.is_dir() {
+                    npath.add_slash();
+                }
+                propwriter.write_props(&npath, meta.as_ref())?;
+                await!(propwriter.flush())?;
+                if depth == headers::Depth::Infinity && meta.is_dir() {
+                    await!(FutureObj03::new(Box::pin(self.propfind_directory(&npath, depth, propwriter))))?;
+                }
             }
-            propwriter.write_props(&npath, meta.as_ref())?;
-            if depth == headers::Depth::Infinity && meta.is_dir() {
-                self.propfind_directory(&npath, depth, propwriter)?;
-            }
+            Ok(())
         }
-        Ok(())
     }
 
     // set/change a live property. returns StatusCode::CONTINUE if
@@ -289,22 +303,21 @@ impl DavInner {
         }
     }
 
-    pub(crate) fn handle_proppatch(&self, mut req: Request, mut res: Response) -> Result<(), DavError> {
+    pub(crate) async fn handle_proppatch(self, req: Request<()>, xmldata: Vec<u8>)
+        -> DavResult<Response<BoxedByteStream>>
+    {
 
-        // read request.
-        let mut xmldata = Vec::with_capacity(4096);
-        req.read_to_end(&mut xmldata)?;
+        let mut res = Response::new(empty_body());
 
         // file must exist.
-        let (path, meta) = match self.fixpath(&req, &mut res) {
-            Ok((path, meta)) => (path, meta),
-            Err(e) => return Err(fserror(&mut res, e)),
-        };
+        let mut path = self.path(&req);
+        let meta = blocking_io!(self.fs.metadata(&path))?;
+        let meta = self.fixpath(&mut res, &mut path, meta);
 
         // check the If and If-* headers.
-        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path) {
+        let tokens = match await!(if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path)) {
             Ok(t) => t,
-            Err(s) => return Err(statuserror(&mut res, s)),
+            Err(s) => return Err(s.into()),
         };
 
         // if locked check if we hold that lock.
@@ -312,7 +325,7 @@ impl DavInner {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             let principal = self.principal.as_ref().map(|s| s.as_str());
             if let Err(_l) = locksystem.check(&path, principal, false, false, t) {
-                return Err(statuserror(&mut res, SC::LOCKED));
+                return Err(SC::LOCKED.into());
             }
         }
 
@@ -320,16 +333,15 @@ impl DavInner {
                std::string::String::from_utf8_lossy(&xmldata));
 
         // parse xml
-        let tree = Element::parse2(Cursor::new(xmldata))
-                .map_err(|e| daverror(&mut res, e))?;
+        let tree = Element::parse2(Cursor::new(xmldata))?;
         if tree.name != "propertyupdate" {
-            return Err(daverror(&mut res, DavError::XmlParseError));
+            return Err(DavError::XmlParseError);
         }
 
         let mut set = Vec::new();
         let mut rem = Vec::new();
         let mut ret = Vec::new();
-        let can_deadprop = self.fs.have_props(&path);
+        let can_deadprop = blocking_io!(self.fs.have_props(&path));
 
         // walk over the element tree and feed "set" and "remove" items to
         // the liveprop_set/liveprop_remove functions. If skipped by those,
@@ -372,8 +384,7 @@ impl DavInner {
             // moment. if it does, we should roll back the earlier
             // made changes to live props, but come on, we're not
             // builing a transaction engine here.
-            let deadret = self.fs.patch_props(&path, set, rem)
-                .map_err(|e| DavError::Status(fserror_to_status(e)))?;
+            let deadret = blocking_io!(self.fs.patch_props(&path, &mut set, &mut rem))?;
             ret.extend(deadret.into_iter());
         }
 
@@ -388,25 +399,29 @@ impl DavInner {
         }
 
         // And reply.
-        let mut pw = PropWriter::new(&req, res, "propertyupdate", Vec::new(), &self.fs, None)?;
-        pw.write_propresponse(&path, hm)?;
-        pw.close()?;
+        let mut pw = PropWriter::new(&req, &mut res, "propertyupdate", Vec::new(), &self.fs, None)?;
+        *res.body_mut() = Box::new(makestream::stream01(async move |tx| {
+            pw.set_tx(tx);
+            pw.write_propresponse(&path, hm)?;
+            await!(pw.close())
+        }));
 
-        Ok(())
+        Ok(res)
     }
 }
 
-impl<'a> PropWriter<'a> {
+impl PropWriter {
 
-    pub fn new(req: &'a Request, mut res: Response, name: &'a str, mut props: Vec<Element>, fs: &'a Box<DavFileSystem>, ls: Option<&'a Box<DavLockSystem>>) -> DavResult<PropWriter<'a>> {
+    pub fn new(req: &Request<()>, res: &mut Response<BoxedByteStream>, name: &str, mut props: Vec<Element>, fs: &Box<DavFileSystem>, ls: Option<&Box<DavLockSystem>>) -> DavResult<PropWriter> {
 
         let contenttype = "application/xml; charset=utf-8".parse().unwrap();
         res.headers_mut().insert("content-type", contenttype);
         *res.status_mut() = SC::MULTI_STATUS;
-        let res = res.start();
+
+        let mb = MultiBuf::new();
 
         let mut emitter = EventWriter::new_with_config(
-                              BufWriter::new(res),
+                              mb.clone(),
                               EmitterConfig {
                                   normalize_empty_elements: false,
                                   perform_indent: false,
@@ -441,23 +456,29 @@ impl<'a> PropWriter<'a> {
             props.append(&mut v);
         }
 
-        let ua = match req.headers.get("user-agent") {
+        let ua = match req.headers().get("user-agent") {
             Some(s) => s.to_str().unwrap_or(""),
             None => "",
         };
 
         Ok(PropWriter {
             emitter:    emitter,
-            name:       name,
+            buffer:     mb,
+            tx:         None,
+            name:       name.to_string(),
             props:      props,
-            fs:         fs,
-            ls:         ls,
-            useragent:  ua,
+            fs:         fs.clone(),
+            ls:         ls.map(|ls| ls.clone()),
+            useragent:  ua.to_string(),
             q_cache:    Default::default(),
         })
     }
 
-    fn build_elem<'b, T>(&self, content: bool, e: &Element, text: T) -> (SC, Element)
+    pub fn set_tx(&mut self, tx: Sender) {
+        self.tx = Some(tx)
+    }
+
+    fn build_elem<'a, T>(&self, content: bool, e: &Element, text: T) -> (SC, Element)
             where T: Into<Cow<'a, str>> {
         let mut e = e.clone();
         if content {
@@ -563,10 +584,10 @@ impl<'a> PropWriter<'a> {
                     return (SC::OK, elem);
                 },
                 "supportedlock" => {
-                    return (SC::OK, list_supportedlock(self.ls));
+                    return (SC::OK, list_supportedlock(self.ls.as_ref()));
                 },
                 "lockdiscovery" => {
-                    return (SC::OK, list_lockdiscovery(self.ls, path));
+                    return (SC::OK, list_lockdiscovery(self.ls.as_ref(), path));
                 },
                 "quota-available-bytes" => {
                     if let Ok((_, Some(avail))) = self.get_quota(&mut qc, path, meta) {
@@ -660,7 +681,7 @@ impl<'a> PropWriter<'a> {
         (SC::NOT_FOUND, prop.clone())
     }
 
-    fn write_props(&mut self, path: &WebPath, meta: &DavMetaData) -> Result<(), DavError> {
+    pub fn write_props(&mut self, path: &WebPath, meta: &DavMetaData) -> Result<(), DavError> {
 
         // A HashMap<StatusCode, Vec<Element>> for the result.
         let mut props = HashMap::new();
@@ -693,7 +714,7 @@ impl<'a> PropWriter<'a> {
         self.write_propresponse(path, props)
     }
 
-    fn write_propresponse(&mut self, path: &WebPath, props: HashMap<SC, Vec<Element>>) -> Result<(), DavError> {
+    pub fn write_propresponse(&mut self, path: &WebPath, props: HashMap<SC, Vec<Element>>) -> Result<(), DavError> {
 
         self.emitter.write(XmlWEvent::start_element("D:response"))?;
         let p = path.as_url_string_with_prefix();
@@ -718,12 +739,17 @@ impl<'a> PropWriter<'a> {
         Ok(())
     }
 
-    pub(crate) fn close(mut self) -> Result<(), DavError> {
-        self.emitter.write(XmlWEvent::end_element())?;
-        self.emitter.into_inner().flush()?;
-        Ok(())
+    pub fn flush(&mut self) -> impl Future03<Output=DavResult<()>> + '_
+    {
+        let b = self.buffer.take().map_err(|e| e.into());
+        self.tx.as_mut().unwrap().send(b).map_err(|e| e.into())
     }
 
+    pub fn close(&mut self) -> impl Future03<Output=DavResult<()>> + '_
+    {
+        let _ = self.emitter.write(XmlWEvent::end_element());
+        self.flush()
+    }
 }
 
 fn element_to_davprop_full(elem: &Element) -> DavProp {

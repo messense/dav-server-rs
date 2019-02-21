@@ -92,7 +92,7 @@ mod handle_gethead;
 mod handle_lock;
 mod handle_mkcol;
 mod handle_options;
-//mod handle_props;
+mod handle_props;
 mod handle_put;
 mod makestream;
 mod multierror;
@@ -280,8 +280,8 @@ pub(crate) fn empty_body() -> BoxedByteStream {
     Box::new(futures03::stream::empty::<BytesResult>().compat())
 }
 
-pub(crate) fn single_body(body: Bytes) -> BoxedByteStream {
-    let body = vec!(Ok::<Bytes, io::Error>(body)).into_iter();
+pub(crate) fn single_body(body: impl Into<Bytes>) -> BoxedByteStream {
+    let body = vec!(Ok::<Bytes, io::Error>(body.into())).into_iter();
     Box::new(futures03::stream::iter(body).compat())
 }
 
@@ -430,14 +430,14 @@ impl DavInner {
 
     // See if this is a directory and if so, if we have
     // to fixup the path by adding a slash at the end.
-    pub(crate) fn fixpath(&self, res: &mut Response<BoxedByteStream>, path: &mut WebPath, meta: Box<DavMetaData>) -> Option<Box<DavMetaData>>
+    pub(crate) fn fixpath(&self, res: &mut Response<BoxedByteStream>, path: &mut WebPath, meta: Box<DavMetaData>) -> Box<DavMetaData>
     {
         if meta.is_dir() && !path.is_collection() {
             path.add_slash();
             let newloc = path.as_url_string_with_prefix();
             res.headers_mut().typed_insert(headers::ContentLocation(newloc));
         }
-        Some(meta)
+        meta
     }
 
     // drain request body and return length.
@@ -534,8 +534,8 @@ impl DavInner {
 
             let res = match method {
                 Method::Options => await!(self.handle_options(req)),
-                //Method::PropFind => await!(self.handle_propfind(req, body_data)),
-                //Method::PropPatch => await!(self.handle_proppatch(req, body_data)),
+                Method::PropFind => await!(self.handle_propfind(req, body_data)),
+                Method::PropPatch => await!(self.handle_proppatch(req, body_data)),
                 Method::MkCol => await!(self.handle_mkcol(req)),
                 Method::Delete => await!(self.handle_delete(req)),
                 Method::Lock => await!(self.handle_lock(req, body_data)),
@@ -546,7 +546,6 @@ impl DavInner {
                 Method::Patch => await!(self.handle_put(req, body_strm.unwrap())),
                 Method::Copy |
                 Method::Move => await!(self.handle_copymove(req, method)),
-                _ => Ok(Response::builder().status(StatusCode::METHOD_NOT_ALLOWED).body(empty_body()).unwrap()),
             };
             res
         };
