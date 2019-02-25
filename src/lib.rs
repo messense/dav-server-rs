@@ -181,11 +181,6 @@ pub struct DavConfig {
     /// Principal is webdav speak for "user", used to give locks an owner (if a locksystem is
     /// active).
     pub principal: Option<String>,
-    /// Closures to be called in the worker thread at the start and the end of the request.
-    pub reqhooks: Option<(
-        Box<Fn() + Send + Sync + 'static>,
-        Box<Fn() + Send + Sync + 'static>,
-    )>,
 }
 
 // The actual inner struct.
@@ -195,10 +190,6 @@ pub(crate) struct DavInner {
     pub ls:        Option<Box<DavLockSystem>>,
     pub allow:     Option<AllowedMethods>,
     pub principal: Option<String>,
-    pub reqhooks: Option<(
-        Box<Fn() + Send + Sync + 'static>,
-        Box<Fn() + Send + Sync + 'static>,
-    )>,
 }
 
 impl From<DavConfig> for DavInner {
@@ -209,7 +200,6 @@ impl From<DavConfig> for DavInner {
             ls:        cfg.ls,
             allow:     cfg.allow,
             principal: cfg.principal,
-            reqhooks:  cfg.reqhooks,
         }
     }
 }
@@ -226,7 +216,6 @@ impl From<&DavConfig> for DavInner {
             ls:        cfg.ls.clone(),
             allow:     cfg.allow,
             principal: cfg.principal.clone(),
-            reqhooks:  None,
         }
     }
 }
@@ -239,7 +228,6 @@ impl Clone for DavInner {
             ls:        self.ls.clone(),
             allow:     self.allow.clone(),
             principal: self.principal.clone(),
-            reqhooks:  None,
         }
     }
 }
@@ -347,16 +335,6 @@ fn notfound() -> impl Future<Item = http::Response<BoxedByteStream>, Error = io:
     return Box::new(futures::future::ok(response));
 }
 
-// helper to call a closure on drop.
-struct Dropper(Option<Box<dyn Fn() + Send + Sync>>);
-impl Drop for Dropper {
-    fn drop(&mut self) {
-        if let Some(f) = &self.0 {
-            f()
-        }
-    }
-}
-
 impl DavHandler {
     /// Create a new `DavHandler`.
     /// - `prefix`: URL prefix to be stripped off.
@@ -369,7 +347,6 @@ impl DavHandler {
             ls:        ls,
             allow:     None,
             principal: None,
-            reqhooks:  None,
         };
         DavHandler {
             config: Arc::new(config),
@@ -379,8 +356,7 @@ impl DavHandler {
     /// Create a new `DavHandler` with a more detailed configuration.
     ///
     /// For example, pass in a specific `AllowedMethods` set.
-    pub fn new_with(mut config: DavConfig) -> DavHandler {
-        config.reqhooks = None;
+    pub fn new_with(config: DavConfig) -> DavHandler {
         DavHandler {
             config: Arc::new(config),
         }
@@ -429,7 +405,6 @@ impl DavHandler {
             ls:        config.ls.or(orig.ls.clone()),
             allow:     config.allow.or(orig.allow.clone()),
             principal: config.principal.or(orig.principal.clone()),
-            reqhooks:  config.reqhooks,
         };
         if newconf.fs.is_none() {
             return future::Either::A(notfound());
@@ -497,7 +472,7 @@ impl DavInner {
 
     // internal dispatcher.
     fn handle<ReqBody, ReqError>(
-        mut self,
+        self,
         req: Request<ReqBody>,
     ) -> impl Future<Item = Response<BoxedByteStream>, Error = io::Error>
     where
@@ -505,14 +480,6 @@ impl DavInner {
         ReqError: StdError + Send + Sync + 'static,
     {
         let fut = async move {
-            // run hooks at start and end of request.
-            let mut dropper = Dropper(None);
-            let mut x = None;
-            std::mem::swap(&mut self.reqhooks, &mut x);
-            if let Some((starthook, stophook)) = x {
-                dropper.0.get_or_insert(stophook);
-                starthook();
-            }
 
             // debug when running the webdav litmus tests.
             if log_enabled!(log::Level::Debug) {

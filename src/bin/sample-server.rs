@@ -68,13 +68,8 @@ impl Server {
             None
         };
 
-        use log::debug;
-        let start = || debug!("start request-hook");
-        let stop = || debug!("stop request-hook");
-
         let config = DavConfig {
             principal: user,
-            reqhooks: Some((Box::new(start), Box::new(stop))),
             ..DavConfig::default()
         };
 
