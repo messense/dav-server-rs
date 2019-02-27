@@ -5,25 +5,41 @@
 //! probably the easiest, to just create a new instance in your
 //! handler function every time.
 use std::io::ErrorKind;
-use std::io::Result as IoResult;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::DirBuilderExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-use libc;
 
 #[cfg(target_os = "linux")]
 use std::os::linux::fs::MetadataExt;
 
+use futures as futures01;
+use futures03::{FutureExt,Stream,StreamExt};
+use futures03::compat::{Future01CompatExt,Stream01CompatExt};
+
+use libc;
 use sha2::{self, Digest};
 
-use crate::fs::DavReadDir;
 use crate::fs::*;
 use crate::webpath::WebPath;
+
+macro_rules! blocking {
+    ($expression:expr) => ({
+        let fut03 = async move {
+            await!(futures01::future::poll_fn(|| {
+                tokio_threadpool::blocking(|| $expression)
+            }).compat())
+        };
+        Box::pin(fut03.then(|res| match res {
+            Ok(x) => futures03::future::ready(x),
+            Err(_) => panic!("the thread pool has shut down"),
+        }))
+    });
+}
 
 #[derive(Debug, Clone)]
 pub struct LocalFs {
@@ -39,14 +55,12 @@ struct LocalFsFile(std::fs::File);
 
 #[derive(Debug)]
 struct LocalFsReadDir {
-    path:     WebPath,
     iterator: std::fs::ReadDir,
 }
 
 #[derive(Debug)]
 struct LocalFsDirEntry {
     entry: std::fs::DirEntry,
-    name:  Vec<u8>,
 }
 
 impl LocalFs {
@@ -67,147 +81,225 @@ impl LocalFs {
 }
 
 impl DavFileSystem for LocalFs {
-    fn metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>> {
-        match std::fs::metadata(self.fspath(path)) {
-            Ok(meta) => Ok(Box::new(LocalFsMetaData(meta))),
-            Err(e) => Err(e.into()),
-        }
+    fn metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
+        blocking!({
+            match std::fs::metadata(self.fspath(path)) {
+                Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<DavMetaData>),
+                Err(e) => Err(e.into()),
+            }
+        })
     }
 
-    fn symlink_metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>> {
-        match std::fs::symlink_metadata(self.fspath(path)) {
-            Ok(meta) => Ok(Box::new(LocalFsMetaData(meta))),
-            Err(e) => Err(e.into()),
-        }
+    fn symlink_metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
+        blocking!({
+            match std::fs::symlink_metadata(self.fspath(path)) {
+                Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<DavMetaData>),
+                Err(e) => Err(e.into()),
+            }
+        })
     }
 
-    fn read_dir(&self, path: &WebPath) -> FsResult<Box<DavReadDir>> {
+    fn read_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>> {
         debug!("FS: read_dir {:?}", self.fspath(path));
-        match std::fs::read_dir(self.fspath(path)) {
-            Ok(iterator) => {
-                Ok(Box::new(LocalFsReadDir {
-                    path:     path.to_owned(),
-                    iterator: iterator,
-                }))
-            },
-            Err(e) => Err(e.into()),
-        }
+        blocking!({
+            match std::fs::read_dir(self.fspath(path)) {
+                Ok(iterator) => {
+                    let stream01 = LocalFsReadDir{ iterator: iterator };
+                    let stream03 = stream01
+                        .compat()
+                        .take_while(|res| futures03::future::ready(res.is_ok()))
+                        .map(|res| res.unwrap());
+                    Ok(Box::pin(stream03) as Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>)
+                },
+                Err(e) => Err(e.into()),
+            }
+        })
     }
 
-    fn open(&self, path: &WebPath, options: OpenOptions) -> FsResult<Box<DavFile>> {
+    fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<DavFile>> {
         debug!("FS: open {:?}", self.fspath(path));
-        let res = std::fs::OpenOptions::new()
-            .read(options.read)
-            .write(options.write)
-            .append(options.append)
-            .truncate(options.truncate)
-            .create(options.create)
-            .create_new(options.create_new)
-            .mode(if self.public { 0o644 } else { 0o600 })
-            .open(self.fspath(path));
-        match res {
-            Ok(file) => Ok(Box::new(LocalFsFile(file))),
-            Err(e) => Err(e.into()),
-        }
+        blocking!({
+            let res = std::fs::OpenOptions::new()
+                .read(options.read)
+                .write(options.write)
+                .append(options.append)
+                .truncate(options.truncate)
+                .create(options.create)
+                .create_new(options.create_new)
+                .mode(if self.public { 0o644 } else { 0o600 })
+                .open(self.fspath(path));
+            match res {
+                Ok(file) => Ok(Box::new(LocalFsFile(file)) as Box<DavFile>),
+                Err(e) => Err(e.into()),
+            }
+        })
     }
 
-    fn create_dir(&self, path: &WebPath) -> FsResult<()> {
+    fn create_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
         debug!("FS: create_dir {:?}", self.fspath(path));
-        std::fs::DirBuilder::new()
-            .mode(if self.public { 0o755 } else { 0o700 })
-            .create(self.fspath(path))
-            .map_err(|e| e.into())
+        blocking!({
+            std::fs::DirBuilder::new()
+                .mode(if self.public { 0o755 } else { 0o700 })
+                .create(self.fspath(path))
+                .map_err(|e| e.into())
+        })
     }
 
-    fn remove_dir(&self, path: &WebPath) -> FsResult<()> {
+    fn remove_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
         debug!("FS: remove_dir {:?}", self.fspath(path));
-        std::fs::remove_dir(self.fspath(path)).map_err(|e| e.into())
+        blocking!({
+            std::fs::remove_dir(self.fspath(path)).map_err(|e| e.into())
+        })
     }
 
-    fn remove_file(&self, path: &WebPath) -> FsResult<()> {
+    fn remove_file<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
         debug!("FS: remove_file {:?}", self.fspath(path));
-        std::fs::remove_file(self.fspath(path)).map_err(|e| e.into())
+        blocking!({
+            std::fs::remove_file(self.fspath(path)).map_err(|e| e.into())
+        })
     }
 
-    fn rename(&self, from: &WebPath, to: &WebPath) -> FsResult<()> {
+    fn rename<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
         debug!("FS: rename {:?} {:?}", self.fspath(from), self.fspath(to));
-        std::fs::rename(self.fspath(from), self.fspath(to)).map_err(|e| e.into())
+        blocking!({
+            std::fs::rename(self.fspath(from), self.fspath(to)).map_err(|e| e.into())
+        })
     }
 
-    fn copy(&self, from: &WebPath, to: &WebPath) -> FsResult<()> {
+    fn copy<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
         debug!("FS: copy {:?} {:?}", self.fspath(from), self.fspath(to));
-        if let Err(e) = std::fs::copy(self.fspath(from), self.fspath(to)) {
-            debug!("copy failed: {:?}", e);
-            return Err(e.into());
-        }
-        Ok(())
+        blocking!({
+            if let Err(e) = std::fs::copy(self.fspath(from), self.fspath(to)) {
+                debug!("copy failed: {:?}", e);
+                return Err(e.into());
+            }
+            Ok(())
+        })
     }
 }
 
-impl Iterator for LocalFsReadDir {
+/*
+impl Stream for LocalFsReadDir {
     type Item = Box<DavDirEntry>;
 
-    fn next(&mut self) -> Option<Box<DavDirEntry>> {
-        let entry = match self.iterator.next() {
-            Some(Ok(e)) => e,
-            Some(Err(_)) => return None,
-            None => return None,
-        };
-        Some(Box::new(LocalFsDirEntry {
-            name:  entry.file_name().as_bytes().to_vec(),
-            entry: entry,
-        }))
+    fn poll_next(self: Pin<&mut Self>, waker: &Waker) -> futures03::task::Poll<Option<Self::Item>> {
+        let fut = futures01::future::poll_fn(|| {
+            let b = tokio_threadpool::blocking(|| {
+                match self.iterator.next() {
+                    Some(Err(e)) => Err(e),
+                    Some(Ok(entry)) => Ok(Some(Box::new(LocalFsDirEntry { entry: entry }) as Self::Item)),
+                    None => Ok(None)
+                }
+            });
+            match b {
+                Ok(futures01::Async::Ready(Ok(item))) => Ok(futures::Async::Ready(item)),
+                Ok(futures01::Async::NotReady) => Ok(futures::Async::NotReady),
+                Ok(futures01::Async::Ready(Err(item))) => Err(item),
+                Err(_) => panic!("the thread pool has shut down"),
+            }
+        }).compat();
+        // XXX the below doesn't work. Why?
+        fut.poll(waker)
+    }
+}
+*/
+
+impl futures01::Stream for LocalFsReadDir {
+    type Item = Box<DavDirEntry>;
+    type Error = FsError;
+
+    fn poll(&mut self) -> futures01::Poll<Option<Self::Item>, Self::Error> {
+        let b = tokio_threadpool::blocking(|| {
+            match self.iterator.next() {
+                Some(Err(e)) => Err(e),
+                Some(Ok(entry)) => Ok(Some(Box::new(LocalFsDirEntry { entry: entry }) as Self::Item)),
+                None => Ok(None)
+            }
+        });
+        match b {
+            Ok(futures01::Async::Ready(Ok(item))) => Ok(futures01::Async::Ready(item)),
+            Ok(futures01::Async::NotReady) => Ok(futures01::Async::NotReady),
+            Ok(futures01::Async::Ready(Err(e))) => Err(e.into()),
+            Err(_) => panic!("the thread pool has shut down"),
+        }
     }
 }
 
 impl DavDirEntry for LocalFsDirEntry {
-    fn metadata(&self) -> FsResult<Box<DavMetaData>> {
-        match self.entry.metadata() {
-            Ok(meta) => Ok(Box::new(LocalFsMetaData(meta))),
-            Err(e) => Err(e.into()),
-        }
+    fn metadata<'a>(&'a self) -> FsFuture<Box<DavMetaData>> {
+        blocking!({
+            match self.entry.metadata() {
+                Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<DavMetaData>),
+                Err(e) => Err(e.into()),
+            }
+        })
     }
 
     fn name(&self) -> Vec<u8> {
-        self.name.clone()
+        self.entry.file_name().as_bytes().to_vec()
     }
 
-    fn is_dir(&self) -> FsResult<bool> {
-        Ok(self.entry.file_type()?.is_dir())
+    fn is_dir<'a>(&'a self) -> FsFuture<bool> {
+        blocking!({
+            Ok(self.entry.file_type()?.is_dir())
+        }
     }
-    fn is_file(&self) -> FsResult<bool> {
-        Ok(self.entry.file_type()?.is_file())
+    fn is_file<'a>(&'a self) -> FsFuture<bool> {
+        blocking!({
+            Ok(self.entry.file_type()?.is_file())
+        }
     }
-    fn is_symlink(&self) -> FsResult<bool> {
-        Ok(self.entry.file_type()?.is_symlink())
+    fn is_symlink<'a>(&'a self) -> FsFuture<bool> {
+        blocking!({
+            Ok(self.entry.file_type()?.is_symlink())
+        }
     }
 }
 
 impl DavFile for LocalFsFile {
-    fn metadata(&self) -> FsResult<Box<DavMetaData>> {
-        let meta = self.0.metadata()?;
-        Ok(Box::new(LocalFsMetaData(meta)))
+    fn metadata<'a>(&'a self) -> FsFuture<Box<DavMetaData>> {
+        blocking!({
+            let meta = self.0.metadata()?;
+            Ok(Box::new(LocalFsMetaData(meta)) as Box<DavMetaData>)
+        })
     }
-}
 
-impl Read for LocalFsFile {
-    fn read(&mut self, mut buf: &mut [u8]) -> IoResult<usize> {
-        self.0.read(&mut buf)
+    fn write_bytes<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<usize> {
+        blocking!({
+            let n = self.0.write(buf)?;
+            Ok(n)
+        })
     }
-}
 
-impl Write for LocalFsFile {
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        self.0.write(buf)
+    fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<()> {
+        blocking!({
+            let len = buf.len();
+            let mut pos = 0;
+            while pos < len {
+                let n = self.0.write(&buf[pos..])?;
+                pos += n;
+            }
+            Ok(())
+        })
     }
-    fn flush(&mut self) -> IoResult<()> {
-        self.0.flush()
-    }
-}
 
-impl Seek for LocalFsFile {
-    fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
-        self.0.seek(pos)
+    fn read_bytes<'a>(&'a mut self, mut buf: &'a mut [u8]) -> FsFuture<usize> {
+        blocking!({
+            let n = self.0.read(&mut buf)?;
+            Ok(n as usize)
+        })
+    }
+
+    fn seek<'a>(&'a mut self, pos: SeekFrom) -> FsFuture<u64> {
+        blocking!({
+            Ok(self.0.seek(pos)?)
+        })
+    }
+
+    fn flush<'a>(&'a mut self) -> FsFuture<()> {
+        (blocking!({
+            Ok(self.0.flush()?)
+        })
     }
 }
 

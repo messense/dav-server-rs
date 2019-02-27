@@ -50,29 +50,29 @@ impl crate::DavInner {
         async move {
             if !meta.is_dir() {
                 debug!("delete_items (file) {} {:?}", path, depth);
-                return match blocking_io!(self.fs.remove_file(path)) {
+                return match await!(self.fs.remove_file(path)) {
                     Ok(x) => Ok(x),
                     Err(e) => Err(await!(add_status(&mut res, path, e))),
                 };
             }
             if depth == Depth::Zero {
                 debug!("delete_items (dir) {} {:?}", path, depth);
-                return match blocking_io!(self.fs.remove_dir(path)) {
+                return match await!(self.fs.remove_dir(path)) {
                     Ok(x) => Ok(x),
                     Err(e) => Err(await!(add_status(&mut res, path, e))),
                 };
             }
 
             // walk over all entries.
-            let mut entries = match blocking_io!(self.fs.read_dir(path)) {
+            let mut entries = match await!(self.fs.read_dir(path)) {
                 Ok(x) => Ok(x),
                 Err(e) => Err(await!(add_status(&mut res, path, e))),
             }?;
             let mut result = Ok(());
-            while let Some(dirent) = blocking_io!(entries.next()) {
+            while let Some(dirent) = await!(entries.next()) {
                 // if metadata() fails, skip to next entry.
                 // NOTE: dirent.metadata == symlink_metadata (!)
-                let meta = match blocking_io!(dirent.metadata()) {
+                let meta = match await!(dirent.metadata()) {
                     Ok(m) => m,
                     Err(e) => {
                         result = Err(await!(add_status(&mut res, path, e)));
@@ -102,7 +102,7 @@ impl crate::DavInner {
             // and do not try to remove the directory.
             result?;
 
-            match blocking_io!(self.fs.remove_dir(path)) {
+            match await!(self.fs.remove_dir(path)) {
                 Ok(x) => Ok(x),
                 Err(e) => Err(await!(dir_status(&mut res, path, e))),
             }
@@ -119,9 +119,9 @@ impl crate::DavInner {
         };
 
         let mut path = self.path(&req);
-        let meta = blocking_io!(self.fs.symlink_metadata(&path))?;
+        let meta = await!(self.fs.symlink_metadata(&path))?;
         if meta.is_symlink() {
-            if let Ok(m2) = blocking_io!(self.fs.metadata(&path)) {
+            if let Ok(m2) = await!(self.fs.metadata(&path)) {
                 path.add_slash_if(m2.is_dir());
             }
         }

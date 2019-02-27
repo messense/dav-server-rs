@@ -8,12 +8,14 @@
 //! it to the DavHandler. Cloning is ofcourse not expensive, the
 //! MemFs handle is refcounted, obviously.
 use std::collections::HashMap;
-use std::io::Result as IoResult;
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{self, SeekFrom};
 use std::io::{Error, ErrorKind};
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
+use futures03 as futures;
+use futures03::{Future,Stream,future};
 use http::StatusCode;
 
 use crate::fs::*;
@@ -46,11 +48,6 @@ struct MemFsFileNode {
     mtime:  SystemTime,
     crtime: SystemTime,
     data:   Vec<u8>,
-}
-
-#[derive(Debug)]
-struct MemFsReadDir {
-    iterator: std::vec::IntoIter<MemFsDirEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -122,149 +119,171 @@ impl Clone for MemFs {
 }
 
 impl DavFileSystem for MemFs {
-    fn metadata(&self, path: &WebPath) -> FsResult<Box<DavMetaData>> {
-        let tree = &*self.tree.lock().unwrap();
-        let node_id = tree.lookup(path.as_bytes())?;
-        Ok(Box::new(tree.get_node(node_id)?.as_dirent(path.as_bytes())))
+    fn metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
+        Box::pin(async move {
+            let tree = &*self.tree.lock().unwrap();
+            let node_id = tree.lookup(path.as_bytes())?;
+            let meta = tree.get_node(node_id)?.as_dirent(path.as_bytes());
+            Ok(Box::new(meta) as Box<DavMetaData>)
+        })
     }
 
-    fn read_dir(&self, path: &WebPath) -> FsResult<Box<DavReadDir>> {
-        let tree = &*self.tree.lock().unwrap();
-        let node_id = tree.lookup(path.as_bytes())?;
-        if !tree.get_node(node_id)?.is_dir() {
-            return Err(FsError::Forbidden);
-        }
-        let mut v: Vec<MemFsDirEntry> = Vec::new();
-        for (name, dnode_id) in tree.get_children(node_id)? {
-            if let Ok(node) = tree.get_node(dnode_id) {
-                v.push(node.as_dirent(&name));
+    fn read_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>> {
+        Box::pin(async move {
+            let tree = &*self.tree.lock().unwrap();
+            let node_id = tree.lookup(path.as_bytes())?;
+            if !tree.get_node(node_id)?.is_dir() {
+                return Err(FsError::Forbidden);
             }
-        }
-        Ok(Box::new(MemFsReadDir {
-            iterator: v.into_iter(),
-        }))
+            let mut v: Vec<Box<DavDirEntry>> = Vec::new();
+            for (name, dnode_id) in tree.get_children(node_id)? {
+                if let Ok(node) = tree.get_node(dnode_id) {
+                    v.push(Box::new(node.as_dirent(&name)));
+                }
+            }
+            let strm = futures::stream::iter(v.into_iter());
+            Ok(Box::pin(strm) as Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>)
+        })
     }
 
-    fn open(&self, path: &WebPath, options: OpenOptions) -> FsResult<Box<DavFile>> {
-        let tree = &mut *self.tree.lock().unwrap();
-        self.do_open(tree, path.as_bytes(), options)
+    fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<DavFile>> {
+        Box::pin(async move {
+            let tree = &mut *self.tree.lock().unwrap();
+            self.do_open(tree, path.as_bytes(), options)
+        })
     }
 
-    fn create_dir(&self, path: &WebPath) -> FsResult<()> {
-        debug!("FS: create_dir {:?}", path);
-        let tree = &mut *self.tree.lock().unwrap();
-        let path = path.as_bytes();
-        let parent_id = tree.lookup_parent(path)?;
-        tree.add_child(parent_id, file_name(path), MemFsNode::new_dir(), false)?;
-        tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
-        Ok(())
+    fn create_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
+        Box::pin(async move {
+            debug!("FS: create_dir {:?}", path);
+            let tree = &mut *self.tree.lock().unwrap();
+            let path = path.as_bytes();
+            let parent_id = tree.lookup_parent(path)?;
+            tree.add_child(parent_id, file_name(path), MemFsNode::new_dir(), false)?;
+            tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
+            Ok(())
+        })
     }
 
-    fn remove_file(&self, path: &WebPath) -> FsResult<()> {
-        let tree = &mut *self.tree.lock().unwrap();
-        let parent_id = tree.lookup_parent(path.as_bytes())?;
-        let node_id = tree.lookup(path.as_bytes())?;
-        tree.delete_node(node_id)?;
-        tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
-        Ok(())
+    fn remove_file<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
+        Box::pin(async move {
+            let tree = &mut *self.tree.lock().unwrap();
+            let parent_id = tree.lookup_parent(path.as_bytes())?;
+            let node_id = tree.lookup(path.as_bytes())?;
+            tree.delete_node(node_id)?;
+            tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
+            Ok(())
+        })
     }
 
-    fn remove_dir(&self, path: &WebPath) -> FsResult<()> {
-        let tree = &mut *self.tree.lock().unwrap();
-        let parent_id = tree.lookup_parent(path.as_bytes())?;
-        let node_id = tree.lookup(path.as_bytes())?;
-        tree.delete_node(node_id)?;
-        tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
-        Ok(())
+    fn remove_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
+        Box::pin(async move {
+            let tree = &mut *self.tree.lock().unwrap();
+            let parent_id = tree.lookup_parent(path.as_bytes())?;
+            let node_id = tree.lookup(path.as_bytes())?;
+            tree.delete_node(node_id)?;
+            tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
+            Ok(())
+        })
     }
 
-    fn rename(&self, from: &WebPath, to: &WebPath) -> FsResult<()> {
-        let tree = &mut *self.tree.lock().unwrap();
-        let node_id = tree.lookup(from.as_bytes())?;
-        let parent_id = tree.lookup_parent(from.as_bytes())?;
-        let dst_id = tree.lookup_parent(to.as_bytes())?;
-        tree.move_node(node_id, dst_id, file_name(to.as_bytes()), true)?;
-        tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
-        tree.get_node_mut(dst_id)?.update_mtime(SystemTime::now());
-        Ok(())
+    fn rename<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
+        Box::pin(async move {
+            let tree = &mut *self.tree.lock().unwrap();
+            let node_id = tree.lookup(from.as_bytes())?;
+            let parent_id = tree.lookup_parent(from.as_bytes())?;
+            let dst_id = tree.lookup_parent(to.as_bytes())?;
+            tree.move_node(node_id, dst_id, file_name(to.as_bytes()), true)?;
+            tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
+            tree.get_node_mut(dst_id)?.update_mtime(SystemTime::now());
+            Ok(())
+        })
     }
 
-    fn copy(&self, from: &WebPath, to: &WebPath) -> FsResult<()> {
-        let tree = &mut *self.tree.lock().unwrap();
+    fn copy<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
+        Box::pin(async move {
+            let tree = &mut *self.tree.lock().unwrap();
 
-        // source must exist.
-        let snode_id = tree.lookup(from.as_bytes())?;
+            // source must exist.
+            let snode_id = tree.lookup(from.as_bytes())?;
 
-        // make sure destination exists, create if needed.
-        {
-            let mut oo = OpenOptions::write();
-            oo.create = true;
-            self.do_open(tree, to.as_bytes(), oo)?;
-        }
-        let dnode_id = tree.lookup(to.as_bytes())?;
+            // make sure destination exists, create if needed.
+            {
+                let mut oo = OpenOptions::write();
+                oo.create = true;
+                self.do_open(tree, to.as_bytes(), oo)?;
+            }
+            let dnode_id = tree.lookup(to.as_bytes())?;
 
-        // copy.
-        let mut data = (*tree.get_node_mut(snode_id)?).clone();
-        match data {
-            MemFsNode::Dir(ref mut d) => d.crtime = SystemTime::now(),
-            MemFsNode::File(ref mut f) => f.crtime = SystemTime::now(),
-        }
-        *tree.get_node_mut(dnode_id)? = data;
+            // copy.
+            let mut data = (*tree.get_node_mut(snode_id)?).clone();
+            match data {
+                MemFsNode::Dir(ref mut d) => d.crtime = SystemTime::now(),
+                MemFsNode::File(ref mut f) => f.crtime = SystemTime::now(),
+            }
+            *tree.get_node_mut(dnode_id)? = data;
 
-        Ok(())
+            Ok(())
+        })
     }
 
-    fn have_props(&self, _path: &WebPath) -> bool {
-        true
+    fn have_props<'a>(&'a self, _path: &'a WebPath) -> Pin<Box<Future<Output=bool> + Send + 'a>> {
+        Box::pin(futures03::future::ready(true))
     }
 
-    fn patch_props(
-        &self,
-        path: &WebPath,
-        set: &mut Vec<DavProp>,
-        remove: &mut Vec<DavProp>,
-    ) -> FsResult<Vec<(StatusCode, DavProp)>>
+    fn patch_props<'a>(
+        &'a self,
+        path: &'a WebPath,
+        mut set: Vec<DavProp>,
+        mut remove: Vec<DavProp>,
+    ) -> FsFuture<Vec<(StatusCode, DavProp)>>
     {
-        let tree = &mut *self.tree.lock().unwrap();
-        let node_id = tree.lookup(path.as_bytes())?;
-        let node = tree.get_node_mut(node_id)?;
-        let props = node.get_props_mut();
+        Box::pin(async move {
+            let tree = &mut *self.tree.lock().unwrap();
+            let node_id = tree.lookup(path.as_bytes())?;
+            let node = tree.get_node_mut(node_id)?;
+            let props = node.get_props_mut();
 
-        let mut res = Vec::new();
+            let mut res = Vec::new();
 
-        let remove = remove.drain(..).collect::<Vec<_>>();
-        for p in remove.into_iter() {
-            props.remove(&propkey(&p.namespace, &p.name));
-            res.push((StatusCode::OK, p));
-        }
-        let set = set.drain(..).collect::<Vec<_>>();
-        for p in set.into_iter() {
-            res.push((StatusCode::OK, cloneprop(&p)));
-            props.insert(propkey(&p.namespace, &p.name), p);
-        }
-        Ok(res)
+            let remove = remove.drain(..).collect::<Vec<_>>();
+            for p in remove.into_iter() {
+                props.remove(&propkey(&p.namespace, &p.name));
+                res.push((StatusCode::OK, p));
+            }
+            let set = set.drain(..).collect::<Vec<_>>();
+            for p in set.into_iter() {
+                res.push((StatusCode::OK, cloneprop(&p)));
+                props.insert(propkey(&p.namespace, &p.name), p);
+            }
+            Ok(res)
+        })
     }
 
-    fn get_props(&self, path: &WebPath, do_content: bool) -> FsResult<Vec<DavProp>> {
-        let tree = &mut *self.tree.lock().unwrap();
-        let node_id = tree.lookup(path.as_bytes())?;
-        let node = tree.get_node(node_id)?;
-        let mut res = Vec::new();
-        for (_, p) in node.get_props() {
-            res.push(if do_content { p.clone() } else { cloneprop(p) });
-        }
-        Ok(res)
+    fn get_props<'a>(&'a self, path: &'a WebPath, do_content: bool) -> FsFuture<Vec<DavProp>> {
+        Box::pin(async move {
+            let tree = &mut *self.tree.lock().unwrap();
+            let node_id = tree.lookup(path.as_bytes())?;
+            let node = tree.get_node(node_id)?;
+            let mut res = Vec::new();
+            for (_, p) in node.get_props() {
+                res.push(if do_content { p.clone() } else { cloneprop(p) });
+            }
+            Ok(res)
+        })
     }
 
-    fn get_prop(&self, path: &WebPath, prop: DavProp) -> FsResult<Vec<u8>> {
-        let tree = &mut *self.tree.lock().unwrap();
-        let node_id = tree.lookup(path.as_bytes())?;
-        let node = tree.get_node(node_id)?;
-        let p = node
-            .get_props()
-            .get(&propkey(&prop.namespace, &prop.name))
-            .ok_or(FsError::NotFound)?;
-        Ok(p.xml.clone().ok_or(FsError::NotFound)?)
+    fn get_prop<'a>(&'a self, path: &'a WebPath, prop: DavProp) -> FsFuture<Vec<u8>> {
+        Box::pin(async move {
+            let tree = &mut *self.tree.lock().unwrap();
+            let node_id = tree.lookup(path.as_bytes())?;
+            let node = tree.get_node(node_id)?;
+            let p = node
+                .get_props()
+                .get(&propkey(&prop.namespace, &prop.name))
+                .ok_or(FsError::NotFound)?;
+            Ok(p.xml.clone().ok_or(FsError::NotFound)?)
+        })
     }
 }
 
@@ -283,24 +302,98 @@ fn cloneprop(p: &DavProp) -> DavProp {
     }
 }
 
-impl Iterator for MemFsReadDir {
-    type Item = Box<DavDirEntry>;
-
-    fn next(&mut self) -> Option<Box<DavDirEntry>> {
-        match self.iterator.next() {
-            Some(entry) => Some(Box::new(entry)),
-            None => None,
-        }
-    }
-}
-
 impl DavDirEntry for MemFsDirEntry {
-    fn metadata(&self) -> FsResult<Box<DavMetaData>> {
-        Ok(Box::new((*self).clone()))
+    fn metadata<'a>(&'a self) -> FsFuture<Box<DavMetaData>> {
+        let meta = (*self).clone();
+        Box::pin(future::ok(Box::new(meta) as Box<DavMetaData>))
     }
 
     fn name(&self) -> Vec<u8> {
         self.name.clone()
+    }
+}
+
+impl DavFile for MemFsFile {
+    fn metadata<'a>(&'a self) -> FsFuture<Box<DavMetaData>> {
+        Box::pin(async move {
+            let tree = &*self.tree.lock().unwrap();
+            let node = tree.get_node(self.node_id)?;
+            let meta = node.as_dirent(b"");
+            Ok(Box::new(meta) as Box<DavMetaData>)
+        })
+    }
+
+    fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize> {
+        Box::pin(async move {
+            let tree = &*self.tree.lock().unwrap();
+            let node = tree.get_node(self.node_id).map_err(fserror_to_ioerror)?;
+            let file = node.as_file().map_err(fserror_to_ioerror)?;
+            let curlen = file.data.len();
+            let mut start = self.pos;
+            let mut end = self.pos + buf.len();
+            if start > curlen {
+                start = curlen
+            }
+            if end > curlen {
+                end = curlen
+            }
+            let cnt = end - start;
+            buf[..cnt].copy_from_slice(&file.data[start..end]);
+            Ok(cnt)
+        })
+    }
+
+    fn write_bytes<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<usize> {
+        Box::pin(async move {
+            let tree = &mut *self.tree.lock().unwrap();
+            let node = tree.get_node_mut(self.node_id).map_err(fserror_to_ioerror)?;
+            let file = node.as_file_mut().map_err(fserror_to_ioerror)?;
+            let start = if self.append { file.data.len() } else { self.pos };
+            let end = start + buf.len();
+            if end > file.data.len() {
+                file.data.resize(end, 0);
+            }
+            file.data[start..end].copy_from_slice(buf);
+            Ok(end - start)
+        })
+    }
+
+    fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<()> {
+        Box::pin(async move {
+            await!(self.write_bytes(buf))?;
+            Ok(())
+        })
+    }
+
+    fn flush<'a>(&'a mut self) -> FsFuture<()> {
+        Box::pin(future::ok(()))
+    }
+
+    fn seek<'a>(&'a mut self, pos: SeekFrom) -> FsFuture<u64> {
+        Box::pin(async move {
+            let (start, offset): (u64, i64) = match pos {
+                SeekFrom::Start(npos) => {
+                    self.pos = npos as usize;
+                    return Ok(npos);
+                },
+                SeekFrom::Current(npos) => (self.pos as u64, npos),
+                SeekFrom::End(npos) => {
+                    let tree = &*self.tree.lock().unwrap();
+                    let node = tree.get_node(self.node_id)?;
+                    let curlen = node.as_file()?.data.len() as u64;
+                    (curlen, npos)
+                },
+            };
+            if offset < 0 {
+                if -offset as u64 > start {
+                    return Err(Error::new(ErrorKind::InvalidInput, "invalid seek").into());
+                }
+                self.pos = (start - (-offset as u64)) as usize;
+            } else {
+                self.pos = (start + offset as u64) as usize;
+            }
+            Ok(self.pos as u64)
+        })
     }
 }
 
@@ -319,80 +412,6 @@ impl DavMetaData for MemFsDirEntry {
 
     fn is_dir(&self) -> bool {
         self.is_dir
-    }
-}
-
-impl DavFile for MemFsFile {
-    fn metadata(&self) -> FsResult<Box<DavMetaData>> {
-        let tree = &*self.tree.lock().unwrap();
-        let node = tree.get_node(self.node_id)?;
-        Ok(Box::new(node.as_dirent(b"")))
-    }
-}
-
-impl Read for MemFsFile {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
-        let tree = &*self.tree.lock().unwrap();
-        let node = tree.get_node(self.node_id).map_err(fserror_to_ioerror)?;
-        let file = node.as_file().map_err(fserror_to_ioerror)?;
-        let curlen = file.data.len();
-        let mut start = self.pos;
-        let mut end = self.pos + buf.len();
-        if start > curlen {
-            start = curlen
-        }
-        if end > curlen {
-            end = curlen
-        }
-        let cnt = end - start;
-        buf[..cnt].copy_from_slice(&file.data[start..end]);
-        Ok(cnt)
-    }
-}
-
-impl Write for MemFsFile {
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        let tree = &mut *self.tree.lock().unwrap();
-        let node = tree.get_node_mut(self.node_id).map_err(fserror_to_ioerror)?;
-        let file = node.as_file_mut().map_err(fserror_to_ioerror)?;
-        let start = if self.append { file.data.len() } else { self.pos };
-        let end = start + buf.len();
-        if end > file.data.len() {
-            file.data.resize(end, 0);
-        }
-        file.data[start..end].copy_from_slice(buf);
-        Ok(end - start)
-    }
-
-    fn flush(&mut self) -> IoResult<()> {
-        Ok(())
-    }
-}
-
-impl Seek for MemFsFile {
-    fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
-        let (start, offset): (u64, i64) = match pos {
-            SeekFrom::Start(npos) => {
-                self.pos = npos as usize;
-                return Ok(npos);
-            },
-            SeekFrom::Current(npos) => (self.pos as u64, npos),
-            SeekFrom::End(npos) => {
-                let tree = &*self.tree.lock().unwrap();
-                let node = tree.get_node(self.node_id).map_err(fserror_to_ioerror)?;
-                let curlen = node.as_file().map_err(fserror_to_ioerror)?.data.len() as u64;
-                (curlen, npos)
-            },
-        };
-        if offset < 0 {
-            if -offset as u64 > start {
-                return Err(Error::new(ErrorKind::InvalidInput, "invalid seek"));
-            }
-            self.pos = (start - (-offset as u64)) as usize;
-        } else {
-            self.pos = (start + offset as u64) as usize;
-        }
-        Ok(self.pos as u64)
     }
 }
 

@@ -6,7 +6,6 @@ use http::StatusCode as SC;
 use http::{Request, Response};
 use xmltree::{self, Element};
 
-use crate::common::*;
 use crate::conditional::{dav_if_match, if_match};
 use crate::errors::*;
 use crate::fs::{FsError, OpenOptions};
@@ -35,7 +34,7 @@ impl crate::DavInner {
 
         // path and meta
         let mut path = self.path(&req);
-        let meta = match blocking_io!(self.fs.metadata(&path)) {
+        let meta = match await!(self.fs.metadata(&path)) {
             Ok(meta) => Some(self.fixpath(&mut res, &mut path, meta)),
             Err(_) => None,
         };
@@ -148,7 +147,7 @@ impl crate::DavInner {
 
         // try to create file if it doesn't exist.
         if let None = meta {
-            match blocking_io!(self.fs.open(&path, oo)) {
+            match await!(self.fs.open(&path, oo)) {
                 Ok(_) => {},
                 Err(FsError::NotFound) | Err(FsError::Exists) => {
                     let s = if !oo.create || oo.create_new {
@@ -202,7 +201,7 @@ impl crate::DavInner {
         let mut res = Response::new(empty_body());
 
         let mut path = self.path(&req);
-        if let Ok(meta) = blocking_io!(self.fs.metadata(&path)) {
+        if let Ok(meta) = await!(self.fs.metadata(&path)) {
             self.fixpath(&mut res, &mut path, meta);
         }
 

@@ -1,11 +1,3 @@
-use std::io::prelude::*;
-use std::sync::Mutex;
-
-//use futures::prelude::*;
-//use futures03::compat::Future01CompatExt;
-//use futures03::future::Future as Future03;
-//use futures03::sink::SinkExt;
-
 use htmlescape;
 use http::{status::StatusCode, Request, Response};
 use time;
@@ -31,14 +23,14 @@ impl crate::DavInner {
         async move {
             // check if it's a directory.
             let head = req.method() == &http::Method::HEAD;
-            let meta = blocking_io!(self.fs.metadata(&path))?;
+            let meta = await!(self.fs.metadata(&path))?;
             if meta.is_dir() {
                 return await!(self.handle_dirlist(req, head));
             }
 
             // double check, is it a regular file.
-            let mut file = blocking_io!(self.fs.open(&path, OpenOptions::read()))?;
-            let meta = blocking_io!(file.metadata())?;
+            let mut file = await!(self.fs.open(&path, OpenOptions::read()))?;
+            let meta = await!(file.metadata())?;
             if !meta.is_file() {
                 return Err(DavError::Status(StatusCode::METHOD_NOT_ALLOWED));
             }
@@ -112,7 +104,7 @@ impl crate::DavInner {
 
             if do_range {
                 // seek to beginning of requested data.
-                if let Err(_) = file.seek(std::io::SeekFrom::Start(start)) {
+                if let Err(_) = await!(file.seek(std::io::SeekFrom::Start(start))) {
                     *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
                     return Ok(res);
                 }
@@ -148,7 +140,7 @@ impl crate::DavInner {
 
                 while count > 0 {
                     let data;
-                    let mut n = blocking_io!(file.read(&mut buffer[..]))?;
+                    let mut n = await!(file.read_bytes(&mut buffer[..]))?;
                     if n > count as usize {
                         n = count as usize;
                     }
@@ -196,7 +188,7 @@ impl crate::DavInner {
             }
 
             // read directory or bail.
-            let entries = blocking_io!(self.fs.read_dir(&path))?;
+            let mut entries = await!(self.fs.read_dir(&path))?;
 
             // start output
             res.headers_mut()
@@ -215,38 +207,30 @@ impl crate::DavInner {
                     meta: Box<DavMetaData>,
                 }
 
-                // We need a way to move "entries" into the blocking_io! block
-                // below, this is one way.
-                let entries = Mutex::new(Some(entries));
-
-                let mut dirents = blocking_io!({
-                    let entries = entries.lock().unwrap().take().unwrap();
-                    let mut dirents: Vec<Dirent> = Vec::new();
-                    for dirent in entries {
-                        let mut name = dirent.name();
-                        if name.starts_with(b".") {
-                            continue;
-                        }
-                        let mut npath = path.clone();
-                        npath.push_segment(&name);
-                        let meta = match dirent.is_symlink() {
-                            Ok(v) if v == true => self.fs.metadata(&npath),
-                            _ => dirent.metadata(),
-                        };
-                        if let Ok(meta) = meta {
-                            if meta.is_dir() {
-                                name.push(b'/');
-                                npath.add_slash();
-                            }
-                            dirents.push(Dirent {
-                                path: npath.as_url_string_with_prefix(),
-                                name: String::from_utf8_lossy(&name).to_string(),
-                                meta: meta,
-                            });
-                        }
+                let mut dirents: Vec<Dirent> = Vec::new();
+                while let Some(dirent) = await!(entries.next()) {
+                    let mut name = dirent.name();
+                    if name.starts_with(b".") {
+                        continue;
                     }
-                    Result::<_, FsError>::Ok(dirents)
-                })?;
+                    let mut npath = path.clone();
+                    npath.push_segment(&name);
+                    let meta = match await!(dirent.is_symlink()) {
+                        Ok(v) if v == true => await!(self.fs.metadata(&npath)),
+                        _ => await!(dirent.metadata()),
+                    };
+                    if let Ok(meta) = meta {
+                        if meta.is_dir() {
+                            name.push(b'/');
+                            npath.add_slash();
+                        }
+                        dirents.push(Dirent {
+                            path: npath.as_url_string_with_prefix(),
+                            name: String::from_utf8_lossy(&name).to_string(),
+                            meta: meta,
+                        });
+                    }
+                }
 
                 // now we can sort the dirent struct.
                 dirents.sort_by(|a, b| {

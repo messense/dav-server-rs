@@ -123,7 +123,6 @@ use bytes::{self, Bytes};
 
 use futures::future;
 use futures::prelude::*;
-use futures03::compat::Future01CompatExt;
 use futures03::future::{FutureExt, TryFutureExt};
 use futures03::stream::{StreamExt, TryStreamExt};
 
@@ -418,7 +417,7 @@ impl DavInner {
     // helper.
     pub(crate) async fn has_parent<'a>(&'a self, path: &'a WebPath) -> bool {
         let p = path.parent();
-        blocking_io!(self.fs.metadata(&p))
+        await!(self.fs.metadata(&p))
             .map(|m| m.is_dir())
             .unwrap_or(false)
     }

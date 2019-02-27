@@ -1,7 +1,6 @@
 use std::any::Any;
 use std::error::Error as StdError;
 use std::io;
-use std::io::prelude::*;
 
 use http::StatusCode as SC;
 use http::{self, Request, Response};
@@ -79,7 +78,7 @@ impl crate::DavInner {
                 have_count = true;
             }
             let path = self.path(&req);
-            let meta = blocking_io!(self.fs.metadata(&path));
+            let meta = await!(self.fs.metadata(&path));
 
             // close connection on error.
             let mut res = Response::new(empty_body());
@@ -177,7 +176,7 @@ impl crate::DavInner {
                 oo.create_new = true;
             }
 
-            let mut file = match blocking_io!(self.fs.open(&path, oo)) {
+            let mut file = match await!(self.fs.open(&path, oo)) {
                 Ok(f) => f,
                 Err(FsError::NotFound) | Err(FsError::Exists) => {
                     let s = if !oo.create || oo.create_new {
@@ -192,7 +191,7 @@ impl crate::DavInner {
 
             if do_range {
                 // seek to beginning of requested data.
-                if let Err(_) = file.seek(std::io::SeekFrom::Start(start)) {
+                if let Err(_) = await!(file.seek(std::io::SeekFrom::Start(start))) {
                     return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
                 }
             }
@@ -229,9 +228,9 @@ impl crate::DavInner {
                 if n == 0 {
                     break;
                 }
-                blocking_io!(file.write_all(&buffer))?;
+                await!(file.write_all(&buffer))?;
             }
-            blocking_io!(file.flush())?;
+            await!(file.flush())?;
             if bad {
                 return Err(DavError::StatusClose(SC::BAD_REQUEST));
             }
@@ -248,7 +247,7 @@ impl crate::DavInner {
             // no errors, connection may be kept open.
             res.headers_mut().remove(http::header::CONNECTION);
 
-            if let Ok(m) = blocking_io!(file.metadata()) {
+            if let Ok(m) = await!(file.metadata()) {
                 let file_etag = typed_headers::EntityTag::new(false, m.etag());
                 res.headers_mut().typed_insert(typed_headers::ETag(file_etag));
 

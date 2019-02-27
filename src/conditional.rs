@@ -150,7 +150,7 @@ pub(crate) async fn dav_if_match<'a>(
                         // invalid location, so always false.
                         false
                     } else {
-                        match blocking_io!(fs.metadata(p)) {
+                        match await!(fs.metadata(p)) {
                             Ok(meta) => {
                                 // exists and has metadata, now match.
                                 tag == &EntityTag::new(false, meta.etag())

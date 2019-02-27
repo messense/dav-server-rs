@@ -43,14 +43,14 @@ impl crate::DavInner {
             }
 
             // source must exist.
-            let meta = match blocking_io!(self.fs.metadata(source)) {
+            let meta = match await!(self.fs.metadata(source)) {
                 Err(e) => return await!(add_status(&mut multierror, source, e)),
                 Ok(m) => m,
             };
 
             // if it's a file we can overwrite it.
             if !meta.is_dir() {
-                return match blocking_io!(self.fs.copy(source, dest)) {
+                return match await!(self.fs.copy(source, dest)) {
                     Ok(_) => Ok(()),
                     Err(e) => {
                         debug!("do_copy: self.fs.copy error: {:?}", e);
@@ -62,7 +62,7 @@ impl crate::DavInner {
             // Copying a directory onto an existing directory with Depth 0
             // is not an error. It means "only copy properties" (which
             // we do not do yet).
-            if let Err(e) = blocking_io!(self.fs.create_dir(dest)) {
+            if let Err(e) = await!(self.fs.create_dir(dest)) {
                 if depth != Depth::Zero || e != FsError::Exists {
                     debug!("do_copy: self.fs.create_dir({}) error: {:?}", dest, e);
                     return await!(add_status(&mut multierror, dest, e));
@@ -74,20 +74,21 @@ impl crate::DavInner {
                 return Ok(());
             }
 
-            let mut entries = match blocking_io!(self.fs.read_dir(source)) {
+            let mut entries = match await!(self.fs.read_dir(source)) {
                 Ok(entries) => entries,
                 Err(e) => {
                     debug!("do_copy: self.fs.read_dir error: {:?}", e);
                     return await!(add_status(&mut multierror, source, e));
                 },
             };
+            //let entries: Box<Stream03<Item=FsResult<Box<DavDirEntry>>> + StreamExt> = entries;
 
             // If we encounter errors, just print them, and keep going.
             // Last seen error is returned from function.
             let mut retval = Ok::<_, DavError>(());
-            while let Some(dirent) = blocking_io!(entries.next()) {
+            while let Some(dirent) = await!(entries.next()) {
                 // NOTE: dirent.metadata() behaves like symlink_metadata()
-                let meta = match blocking_io!(dirent.metadata()) {
+                let meta = match await!(dirent.metadata()) {
                     Ok(meta) => meta,
                     Err(e) => return await!(add_status(&mut multierror, source, e)),
                 };
@@ -132,7 +133,7 @@ impl crate::DavInner {
         mut multierror: &'a mut MultiError,
     ) -> DavResult<()>
     {
-        if let Err(e) = blocking_io!(self.fs.rename(source, dest)) {
+        if let Err(e) = await!(self.fs.rename(source, dest)) {
             await!(add_status(&mut multierror, &source, e))
         } else {
             Ok(())
@@ -166,14 +167,14 @@ impl crate::DavInner {
         // is a symlink, we want to move the symlink, not what it points to.
         let mut path = self.path(&req);
         let meta = if method == Method::Move {
-            let meta = blocking_io!(self.fs.symlink_metadata(&path))?;
+            let meta = await!(self.fs.symlink_metadata(&path))?;
             if meta.is_symlink() {
-                let m2 = blocking_io!(self.fs.metadata(&path))?;
+                let m2 = await!(self.fs.metadata(&path))?;
                 path.add_slash_if(m2.is_dir());
             }
             meta
         } else {
-            blocking_io!(self.fs.metadata(&path))?
+            await!(self.fs.metadata(&path))?
         };
         path.add_slash_if(meta.is_dir());
 
@@ -184,11 +185,11 @@ impl crate::DavInner {
 
         // for the destination, also check if it's a symlink. If we are going
         // to remove it first, we want to remove the link, not what it points to.
-        let (dest_is_file, dmeta) = match blocking_io!(self.fs.symlink_metadata(&dest)) {
+        let (dest_is_file, dmeta) = match await!(self.fs.symlink_metadata(&dest)) {
             Ok(meta) => {
                 let mut is_file = false;
                 if meta.is_symlink() {
-                    if let Ok(m) = blocking_io!(self.fs.metadata(&dest)) {
+                    if let Ok(m) = await!(self.fs.metadata(&dest)) {
                         is_file = m.is_file();
                     }
                 }
