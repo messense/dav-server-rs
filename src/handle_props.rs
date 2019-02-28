@@ -212,7 +212,7 @@ impl DavInner {
     ) -> impl Future03<Output = DavResult<()>> + Send + 'a
     {
         async move {
-            let mut entries = match await!(self.fs.read_dir(path)) {
+            let mut entries = match await!(self.fs.read_dir(path, ReadDirMeta::Data)) {
                 Ok(entries) => entries,
                 Err(e) => {
                     // if we cannot read_dir, just skip it.

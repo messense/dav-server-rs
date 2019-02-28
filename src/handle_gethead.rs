@@ -188,7 +188,7 @@ impl crate::DavInner {
             }
 
             // read directory or bail.
-            let mut entries = await!(self.fs.read_dir(&path))?;
+            let mut entries = await!(self.fs.read_dir(&path, ReadDirMeta::Data))?;
 
             // start output
             res.headers_mut()
@@ -215,11 +215,7 @@ impl crate::DavInner {
                     }
                     let mut npath = path.clone();
                     npath.push_segment(&name);
-                    let meta = match await!(dirent.is_symlink()) {
-                        Ok(v) if v == true => await!(self.fs.metadata(&npath)),
-                        _ => await!(dirent.metadata()),
-                    };
-                    if let Ok(meta) = meta {
+                    if let Ok(meta) = await!(dirent.metadata()) {
                         if meta.is_dir() {
                             name.push(b'/');
                             npath.add_slash();

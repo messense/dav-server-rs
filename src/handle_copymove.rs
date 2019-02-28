@@ -74,14 +74,13 @@ impl crate::DavInner {
                 return Ok(());
             }
 
-            let mut entries = match await!(self.fs.read_dir(source)) {
+            let mut entries = match await!(self.fs.read_dir(source, ReadDirMeta::DataSymlink)) {
                 Ok(entries) => entries,
                 Err(e) => {
                     debug!("do_copy: self.fs.read_dir error: {:?}", e);
                     return await!(add_status(&mut multierror, source, e));
                 },
             };
-            //let entries: Box<Stream03<Item=FsResult<Box<DavDirEntry>>> + StreamExt> = entries;
 
             // If we encounter errors, just print them, and keep going.
             // Last seen error is returned from function.

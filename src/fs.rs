@@ -54,16 +54,33 @@ pub struct DavProp {
 pub type FsFuture<'a, T> = Pin<Box<Future<Output=FsResult<T>> + Send + 'a>>;
 //pub type FsFuture<T> = Pin<Box<Future<Output=FsResult<T>> + Send>>;
 
+/// Used as argument to the read_dir() method. It is:
+///
+/// - an optimization hint (the implementation may call metadata() and
+///   store the result in the returned directory entry)
+/// - a way to get metadata instead of symlink_metadata from
+///   the directory entry.
+///
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReadDirMeta {
+    /// DavDirEntry.metadata() behaves as metadata()
+    Data,
+    /// DavDirEntry.metadata() behaves as symlink_metadata()
+    DataSymlink,
+    /// No optimizations, otherwise like DataSymlink.
+    None,
+}
+
 /// The trait that defines a filesystem.
 ///
 /// The BoxCloneFs trait is a helper trait that is automatically implemented
 /// so that Box\<DavFileSystem\>.clone() works.
-pub trait DavFileSystem: Debug + Sync + Send + BoxCloneFs {
+pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     /// Open a file.
     fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<DavFile>>;
 
     /// Perform read_dir.
-    fn read_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>>;
+    fn read_dir<'a>(&'a self, path: &'a WebPath, meta: ReadDirMeta) -> FsFuture<Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>>;
 
     /// Return the metadata of a file or directory.
     fn metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<DavMetaData>>;
@@ -219,7 +236,7 @@ impl<FS: Clone + DavFileSystem + 'static> BoxCloneFs for FS {
 }
 
 /// One directory entry (or child node).
-pub trait DavDirEntry: Debug + Send + Sync {
+pub trait DavDirEntry: Send + Sync {
     /// name of the entry.
     fn name(&self) -> Vec<u8>;
 

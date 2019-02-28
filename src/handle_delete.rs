@@ -64,10 +64,11 @@ impl crate::DavInner {
             }
 
             // walk over all entries.
-            let mut entries = match await!(self.fs.read_dir(path)) {
+            let mut entries = match await!(self.fs.read_dir(path, ReadDirMeta::DataSymlink)) {
                 Ok(x) => Ok(x),
                 Err(e) => Err(await!(add_status(&mut res, path, e))),
             }?;
+
             let mut result = Ok(());
             while let Some(dirent) = await!(entries.next()) {
                 // if metadata() fails, skip to next entry.

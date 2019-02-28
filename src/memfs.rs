@@ -128,7 +128,7 @@ impl DavFileSystem for MemFs {
         })
     }
 
-    fn read_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>> {
+    fn read_dir<'a>(&'a self, path: &'a WebPath, _meta: ReadDirMeta) -> FsFuture<Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>> {
         Box::pin(async move {
             let tree = &*self.tree.lock().unwrap();
             let node_id = tree.lookup(path.as_bytes())?;
