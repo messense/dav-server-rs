@@ -4,6 +4,7 @@
 //! probably the easiest, to just create a new instance in your
 //! handler function every time.
 
+use std::any::Any;
 use std::collections::VecDeque;
 use std::io::ErrorKind;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -32,8 +33,7 @@ use crate::webpath::WebPath;
 // Run some code via tokio_threadpool::blocking().
 //
 // There's also a method on LocalFs for this, use the freestanding
-// function if you do not want the before_fs_access() and
-// after_fs_access() closures to be called.
+// function if you do not want the fs_access_guard() closure to be used.
 fn blocking<'a, F, T>(func: F) -> impl Future<Output=T> + 'a
     where F: FnOnce() -> T + 'a,
           T: 'a
@@ -64,8 +64,7 @@ pub struct LocalFs {
 struct LocalFsInner {
     basedir: PathBuf,
     public:  bool,
-    before_fs_access:    Option<Box<Fn() + Send + Sync + 'static>>,
-    after_fs_access:     Option<Box<Fn() + Send + Sync + 'static>>,
+    fs_access_guard:    Option<Box<Fn() -> Box<Any> + Send + Sync + 'static>>,
 }
 
 #[derive(Debug)]
@@ -100,20 +99,18 @@ impl LocalFs {
         let inner = LocalFsInner {
             basedir: base.as_ref().to_path_buf(),
             public:  public,
-            before_fs_access:    None,
-            after_fs_access:     None,
+            fs_access_guard: None,
         };
         Box::new({ LocalFs{ inner: Arc::new(inner) } })
     }
 
-    // Like new() but pass in before/after hooks.
+    // Like new() but pass in a fs_access_guard hook.
     #[doc(hidden)]
-    pub fn new_with_hooks<P: AsRef<Path>>(base: P, public: bool, before_fs_access: Box<Fn() + Send + Sync + 'static>, after_fs_access: Box<Fn() + Send + Sync + 'static>) -> Box<LocalFs> {
+    pub fn new_with_fs_access_guard<P: AsRef<Path>>(base: P, public: bool, fs_access_guard: Option<Box<Fn() -> Box<Any> + Send + Sync + 'static>>) -> Box<LocalFs> {
         let inner = LocalFsInner {
             basedir: base.as_ref().to_path_buf(),
             public:  public,
-            before_fs_access:    Some(before_fs_access),
-            after_fs_access:     Some(after_fs_access),
+            fs_access_guard: fs_access_guard,
         };
         Box::new({ LocalFs{ inner: Arc::new(inner) } })
     }
@@ -131,11 +128,9 @@ impl LocalFs {
             .then(move |mut func| {
             let fut03 = futures01::future::poll_fn(move || {
                 tokio_threadpool::blocking(|| {
-                    self.inner.before_fs_access.as_ref().map(|f| f());
-                    let res = (func.take().unwrap())();
-                    self.inner.after_fs_access.as_ref().map(|f| f());
-                    res
-                })
+                    let _guard = self.inner.fs_access_guard.as_ref().map(|f| f());
+                    (func.take().unwrap())()
+                }
             })
             .compat()
             .then(|res| match res {
@@ -294,11 +289,12 @@ impl futures01::Stream for LocalFsReadDir {
             // call straight into tokio_threadpool::blocking because:
             //
             // - we need something futures 0.1 compatible (this is a futures 0.1 stream)
-            // - we don't always want to run the ..._fs_access hooks.
+            // - we don't always want to run the fs_access_guard hook.
             let b = tokio_threadpool::blocking(|| {
-                if self.do_meta != ReadDirMeta::None {
-                    self.fs.inner.before_fs_access.as_ref().map(|f| f());
-                }
+                let _guard = match self.do_meta {
+                    ReadDirMeta::None => None,
+                    _ => self.fs.inner.fs_access_guard.as_ref().map(|f| f())
+                };
                 for _ in 0 .. 256 {
                     match self.iterator.next() {
                         Some(Ok(entry)) => {
@@ -316,9 +312,6 @@ impl futures01::Stream for LocalFsReadDir {
                         },
                         None => break,
                     }
-                }
-                if self.do_meta != ReadDirMeta::None {
-                    self.fs.inner.after_fs_access.as_ref().map(|f| f());
                 }
             });
             match b {
