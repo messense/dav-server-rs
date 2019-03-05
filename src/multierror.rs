@@ -3,7 +3,6 @@ use std::io::Write;
 use std::rc::Rc;
 
 use futures::prelude::*;
-use futures03::sink::SinkExt;
 use futures03::stream::Stream as Stream03;
 use futures03::stream::StreamExt;
 
@@ -15,17 +14,16 @@ use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
 use xml::EmitterConfig;
 
-use crate::makestream;
+use crate::corostream::CoroStream;
 use crate::webpath::WebPath;
 use crate::{empty_body, BoxedByteStream, DavError};
 
-#[derive(Clone)]
-pub(crate) struct MultiError(futures03::channel::mpsc::Sender<Result<(WebPath, StatusCode), DavError>>);
+type Sender = crate::corostream::Sender<(WebPath, StatusCode), DavError>;
+
+pub(crate) struct MultiError(Sender);
 
 impl MultiError {
-    pub fn new(
-        sender: futures03::channel::mpsc::Sender<Result<(WebPath, StatusCode), DavError>>,
-    ) -> MultiError {
+    pub fn new(sender: Sender) -> MultiError {
         MultiError(sender)
     }
 
@@ -36,7 +34,8 @@ impl MultiError {
     ) -> Result<(), futures03::channel::mpsc::SendError>
     {
         let status = status.into().statuscode();
-        await!(self.0.send(Ok((path.clone(), status))))
+        await!(self.0.send((path.clone(), status)));
+        Ok(())
     }
 }
 
@@ -131,7 +130,7 @@ where
     }
 
     // Transform path/status items to XML.
-    let body = makestream::stream01(async move |mut tx| {
+    let body = CoroStream::stream01(async move |mut tx| {
         // Write initial header.
         let buffer = MultiBuf::new();
         let mut xw = EventWriter::new_with_config(
@@ -147,7 +146,8 @@ where
             standalone: None,
         })?;
         xw.write(XmlWEvent::start_element("D:multistatus").ns("D", "DAV:"))?;
-        await!(tx.send(buffer.take()))?;
+        let data = buffer.take()?;
+        await!(tx.send(data));
 
         // now write the items.
         let mut status_stream = futures03::stream::iter(items).chain(status_stream);
@@ -159,14 +159,16 @@ where
                 status
             };
             write_response(&mut xw, &path, status)?;
-            await!(tx.send(buffer.take()))?;
+            let data = buffer.take()?;
+            await!(tx.send(data));
         }
 
         // and finally write the trailer.
         xw.write(XmlWEvent::end_element())?;
-        await!(tx.send(buffer.take()))?;
+        let data = buffer.take()?;
+        await!(tx.send(data));
 
-        Ok(())
+        Ok::<_, DavError>(())
     });
 
     // return response.

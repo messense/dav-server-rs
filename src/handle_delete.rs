@@ -7,10 +7,10 @@ use http::{Request, Response, StatusCode};
 
 use crate::common::*;
 use crate::conditional::if_match_get_tokens;
+use crate::corostream::CoroStream;
 use crate::errors::*;
 use crate::fs::*;
 use crate::headers::Depth;
-use crate::makestream;
 use crate::multierror::{multi_error, MultiError};
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::WebPath;
@@ -148,7 +148,7 @@ impl crate::DavInner {
 
         let req_path = path.clone();
 
-        let items = makestream::stream03(async move |tx| {
+        let items = CoroStream::stream03(async move |tx| {
             // turn the Sink into something easier to pass around.
             let mut multierror = MultiError::new(tx);
 

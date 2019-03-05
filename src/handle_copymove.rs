@@ -5,7 +5,7 @@ use crate::conditional::*;
 use crate::errors::*;
 use crate::fs::*;
 use crate::headers::{self, Depth};
-use crate::makestream;
+use crate::corostream::CoroStream;
 use crate::multierror::{multi_error, MultiError};
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::WebPath;
@@ -237,7 +237,7 @@ impl crate::DavInner {
 
         let req_path = path.clone();
 
-        let items = makestream::stream03(async move |tx| {
+        let items = CoroStream::stream03(async move |tx| {
             let mut multierror = MultiError::new(tx);
 
             // see if we need to delete the destination first.

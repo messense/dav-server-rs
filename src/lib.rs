@@ -88,6 +88,7 @@ macro_rules! blocking_io {
 
 mod common;
 mod conditional;
+mod corostream;
 mod errors;
 mod handle_copymove;
 mod handle_delete;
@@ -98,7 +99,6 @@ mod handle_options;
 mod handle_props;
 mod handle_put;
 mod headers;
-mod makestream;
 mod multierror;
 mod tree;
 mod xmltree_ext;

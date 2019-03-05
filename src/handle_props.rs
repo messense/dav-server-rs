@@ -13,12 +13,12 @@ use xmltree::Element;
 
 use crate::common::*;
 use crate::conditional::if_match_get_tokens;
+use crate::corostream::CoroStream;
 use crate::errors::*;
 use crate::fs::*;
 use crate::handle_lock::{list_lockdiscovery, list_supportedlock};
 use crate::headers;
 use crate::ls::*;
-use crate::makestream;
 use crate::multierror::MultiBuf;
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::*;
@@ -68,7 +68,7 @@ lazy_static! {
 }
 
 type Emitter = EventWriter<MultiBuf>;
-type Sender = futures03::channel::mpsc::Sender<Result<bytes::Bytes, io::Error>>;
+type Sender = crate::corostream::Sender<bytes::Bytes, io::Error>;
 
 struct StatusElement {
     status:     StatusCode,
@@ -187,7 +187,7 @@ impl DavInner {
 
         let mut pw = PropWriter::new(&req, &mut res, name, props, &self.fs, self.ls.as_ref())?;
 
-        *res.body_mut() = Box::new(makestream::stream01(async move |tx| {
+        *res.body_mut() = Box::new(CoroStream::stream01(async move |tx| {
             pw.set_tx(tx);
             let is_dir = meta.is_dir();
             await!(pw.write_props(&path, meta))?;
@@ -224,7 +224,7 @@ impl DavInner {
             while let Some(dirent) = await!(entries.next()) {
                 let mut npath = path.clone();
                 npath.push_segment(&dirent.name());
-                let meta = match await!(self.fs.metadata(&npath)) {
+                let meta = match await!(dirent.metadata()) {
                     Ok(meta) => meta,
                     Err(e) => {
                         debug!("metadata error on {}. Skipping {:?}", npath, e);
@@ -460,10 +460,11 @@ impl DavInner {
 
         // And reply.
         let mut pw = PropWriter::new(&req, &mut res, "propertyupdate", Vec::new(), &self.fs, None)?;
-        *res.body_mut() = Box::new(makestream::stream01(async move |tx| {
+        *res.body_mut() = Box::new(CoroStream::stream01(async move |tx| {
             pw.set_tx(tx);
             pw.write_propresponse(&path, hm)?;
-            await!(pw.close())
+            await!(pw.close())?;
+            Ok::<_, io::Error>(())
         }));
 
         Ok(res)
@@ -847,14 +848,15 @@ impl PropWriter {
         Ok(())
     }
 
-    pub fn flush(&mut self) -> impl Future03<Output = DavResult<()>> + '_ {
-        let b = self.buffer.take().map_err(|e| e.into());
-        self.tx.as_mut().unwrap().send(b).map_err(|e| e.into())
+    pub async fn flush(&mut self) -> DavResult<()> {
+        let b = self.buffer.take()?;
+        await!(self.tx.as_mut().unwrap().send(b));
+        Ok(())
     }
 
-    pub fn close(&mut self) -> impl Future03<Output = DavResult<()>> + '_ {
+    pub async fn close(&mut self) -> DavResult<()> {
         let _ = self.emitter.write(XmlWEvent::end_element());
-        self.flush()
+        await!(self.flush())
     }
 }
 

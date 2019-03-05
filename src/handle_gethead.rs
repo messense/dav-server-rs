@@ -2,12 +2,14 @@ use htmlescape;
 use http::{status::StatusCode, Request, Response};
 use time;
 
+use bytes::Bytes;
+
 use crate::common::*;
 use crate::conditional;
+use crate::corostream::CoroStream;
 use crate::errors::*;
 use crate::fs::*;
 use crate::headers;
-use crate::makestream;
 use crate::typed_headers::{self, ByteRangeSpec, HeaderMapExt};
 use crate::BoxedByteStream;
 use crate::{empty_body, systemtime_to_httpdate, systemtime_to_timespec};
@@ -132,7 +134,7 @@ impl crate::DavInner {
             }
 
             // now just loop and send data.
-            *res.body_mut() = Box::new(makestream::stream01(async move |mut tx| {
+            *res.body_mut() = Box::new(CoroStream::stream01(async move |mut tx| {
                 let mut buffer = [0; 8192];
                 let zero = [0; 4096];
 
@@ -154,9 +156,9 @@ impl crate::DavInner {
                     }
                     count -= n as u64;
                     debug!("sending {} bytes", data.len());
-                    await!(tx.send(Ok(data.into())))?;
+                    await!(tx.send(Bytes::from(data)));
                 }
-                Ok::<(), DavError>(())
+                Ok::<(), std::io::Error>(())
             }));
 
             Ok(res)
@@ -199,7 +201,7 @@ impl crate::DavInner {
             }
 
             // now just loop and send data.
-            *res.body_mut() = Box::new(makestream::stream01(async move |mut tx| {
+            *res.body_mut() = Box::new(CoroStream::stream01(async move |mut tx| {
                 // transform all entries into a dirent struct.
                 struct Dirent {
                     path: String,
@@ -267,7 +269,7 @@ impl crate::DavInner {
                 w.push_str("<th>Name</th><th>Last modified</th><th>Size</th>");
                 w.push_str("<tr><th colspan=\"3\"><hr></th></tr>");
                 w.push_str("<tr><td><a href=\"..\">Parent Directory</a></td><td>&nbsp;</td><td class=\"mono\" align=\"right\">[DIR]</td></tr>");
-                await!(tx.send(Ok(w.into())))?;
+                await!(tx.send(Bytes::from(w)));
 
                 for dirent in &dirents {
                     let modified = match dirent.meta.modified() {
@@ -291,15 +293,15 @@ impl crate::DavInner {
                     let name = htmlescape::encode_minimal(&dirent.name);
                     let s = format!("<tr><td><a href=\"{}\">{}</a></td><td class=\"mono\">{}</td><td class=\"mono\" align=\"right\">{}</td></tr>",
                              dirent.path, name, modified, size);
-                    await!(tx.send(Ok(s.into())))?;
+                    await!(tx.send(Bytes::from(s)));
                 }
 
                 let mut w = String::new();
                 w.push_str("<tr><th colspan=\"3\"><hr></th></tr>");
                 w.push_str("</table></body></html>");
-                await!(tx.send(Ok(w.into())))?;
+                await!(tx.send(Bytes::from(w)));
 
-                Ok(())
+                Ok::<_, std::io::Error>(())
             }));
 
             Ok(res)
