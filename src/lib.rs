@@ -76,16 +76,6 @@ extern crate lazy_static;
 #[macro_use]
 extern crate percent_encoding;
 
-macro_rules! blocking_io {
-    ($expression:expr) => {
-        await!(futures::future::poll_fn(|| {
-            tokio_threadpool::blocking(|| $expression).map_err(|_| panic!("the threadpool shut down"))
-        })
-        .compat())
-        .unwrap()
-    };
-}
-
 mod common;
 mod conditional;
 mod corostream;

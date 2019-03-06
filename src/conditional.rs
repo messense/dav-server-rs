@@ -3,7 +3,6 @@ use std::time::SystemTime;
 use http::StatusCode;
 use http::{self, Method};
 
-use crate::common::*;
 use crate::fs::{DavFileSystem, DavMetaData};
 use crate::headers;
 use crate::ls::DavLockSystem;
@@ -140,7 +139,7 @@ pub(crate) async fn dav_if_match<'a>(
                         false
                     } else {
                         match ls {
-                            &Some(ref ls) => blocking_io!(ls.check(p, None, true, false, vec![s])).is_ok(),
+                            &Some(ref ls) => ls.check(p, None, true, false, vec![s]).is_ok(),
                             &None => false,
                         }
                     }
