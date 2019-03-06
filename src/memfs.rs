@@ -8,8 +8,7 @@
 //! it to the DavHandler. Cloning is ofcourse not expensive, the
 //! MemFs handle is refcounted, obviously.
 use std::collections::HashMap;
-use std::io::{self, SeekFrom};
-use std::io::{Error, ErrorKind};
+use std::io::{Error, ErrorKind, SeekFrom};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -326,8 +325,8 @@ impl DavFile for MemFsFile {
     fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize> {
         Box::pin(async move {
             let tree = &*self.tree.lock().unwrap();
-            let node = tree.get_node(self.node_id).map_err(fserror_to_ioerror)?;
-            let file = node.as_file().map_err(fserror_to_ioerror)?;
+            let node = tree.get_node(self.node_id)?;
+            let file = node.as_file()?;
             let curlen = file.data.len();
             let mut start = self.pos;
             let mut end = self.pos + buf.len();
@@ -346,8 +345,8 @@ impl DavFile for MemFsFile {
     fn write_bytes<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<usize> {
         Box::pin(async move {
             let tree = &mut *self.tree.lock().unwrap();
-            let node = tree.get_node_mut(self.node_id).map_err(fserror_to_ioerror)?;
-            let file = node.as_file_mut().map_err(fserror_to_ioerror)?;
+            let node = tree.get_node_mut(self.node_id)?;
+            let file = node.as_file_mut()?;
             let start = if self.append { file.data.len() } else { self.pos };
             let end = start + buf.len();
             if end > file.data.len() {
@@ -540,18 +539,3 @@ fn file_name(path: &[u8]) -> Vec<u8> {
         .to_vec()
 }
 
-// error translation
-fn fserror_to_ioerror(e: FsError) -> io::Error {
-    match e {
-        FsError::NotImplemented => io::Error::new(io::ErrorKind::Other, "NotImplemented"),
-        FsError::GeneralFailure => io::Error::new(io::ErrorKind::Other, "GeneralFailure"),
-        FsError::Exists => io::Error::new(io::ErrorKind::AlreadyExists, "Exists"),
-        FsError::NotFound => io::Error::new(io::ErrorKind::NotFound, "Notfound"),
-        FsError::Forbidden => io::Error::new(io::ErrorKind::PermissionDenied, "Forbidden"),
-        FsError::InsufficientStorage => io::Error::new(io::ErrorKind::Other, "InsufficientStorage"),
-        FsError::LoopDetected => io::Error::new(io::ErrorKind::Other, "LoopDetected"),
-        FsError::PathTooLong => io::Error::new(io::ErrorKind::Other, "PathTooLong"),
-        FsError::TooLarge => io::Error::new(io::ErrorKind::Other, "TooLarge"),
-        FsError::IsRemote => io::Error::new(io::ErrorKind::Other, "IsRemote"),
-    }
-}
