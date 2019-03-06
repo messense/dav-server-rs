@@ -1,5 +1,12 @@
 //! Contains the structs and traits that define a "locksystem" backend.
 //!
+//! Note that the methods DO NOT return futures, they are sychronous.
+//! This is because currently only two locksystems exist, `MemLs` and `FakeLs`.
+//! Both of them do not do any I/O, all methods return instantly.
+//!
+//! If ever anyone implements a locksystem that does I/O (to a filesystem,
+//! a database, or over the network) we'll need to revisit this.
+//!
 use crate::webpath::WebPath;
 use std::fmt::Debug;
 use std::time::{Duration, SystemTime};

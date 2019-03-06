@@ -3,6 +3,8 @@
 //! You only need this if you are going to implement your own
 //! filesystem backend. Most people just use 'LocalFs' or 'MemFs'.
 //!
+//! The futures/streams used here are the ones from futures 0.3.
+//!
 use std::fmt::Debug;
 use std::io::SeekFrom;
 use std::pin::Pin;
@@ -63,9 +65,8 @@ pub struct DavProp {
     pub xml:       Option<Vec<u8>>,
 }
 
-/// Helper type for the common case.
+/// Future (futures 0.3) returned by almost all of the DavFileSystem methods.
 pub type FsFuture<'a, T> = Pin<Box<Future<Output=FsResult<T>> + Send + 'a>>;
-//pub type FsFuture<T> = Pin<Box<Future<Output=FsResult<T>> + Send>>;
 
 /// Used as argument to the read_dir() method. It is:
 ///
