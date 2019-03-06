@@ -1,5 +1,8 @@
 //! Contains the structs and traits that define a "filesystem" backend.
 //!
+//! You only need this if you are going to implement your own
+//! filesystem backend. Most people just use 'LocalFs' or 'MemFs'.
+//!
 use std::fmt::Debug;
 use std::io::SeekFrom;
 use std::pin::Pin;
@@ -27,15 +30,25 @@ macro_rules! notimplemented_fut {
 /// These are more result-codes than errors, really.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FsError {
+    /// Operation not implemented (501)
     NotImplemented,
+    /// Something went wrong (500)
     GeneralFailure,
+    /// tried to create something, but it existed (405 / 412) (yes, 405. RFC4918 says so)
     Exists,
+    /// File / Directory not found (401)
     NotFound,
+    /// Not allowed (403)
     Forbidden,
+    /// Out of space (507)
     InsufficientStorage,
+    /// Symbolic link loop detected (ELOOP) (508)
     LoopDetected,
+    /// The path is too long (ENAMETOOLONG) (414)
     PathTooLong,
+    /// The file being PUT is too large (413)
     TooLarge,
+    /// Trying to MOVE over a mount boundary (EXDEV) (502)
     IsRemote,
 }
 /// The Result type.
@@ -91,7 +104,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     /// it return the metadata for the link itself, not for the thing
     /// it points to.
     ///
-    /// Has a default implementation that punts to metadata().
+    /// The default implementation returns FsError::NotImplemented.
     #[allow(unused_variables)]
     fn symlink_metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
         self.metadata(path)
@@ -99,7 +112,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
 
     /// Create a directory.
     ///
-    /// Has a default "notimplemented_fut" implementation.
+    /// The default implementation returns FsError::NotImplemented.
     #[allow(unused_variables)]
     fn create_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
         notimplemented_fut!("create_dir")
@@ -107,7 +120,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
 
     /// Remove a directory.
     ///
-    /// Has a default "notimplemented_fut" implementation.
+    /// The default implementation returns FsError::NotImplemented.
     #[allow(unused_variables)]
     fn remove_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
         notimplemented_fut!("remove_dir")
@@ -115,7 +128,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
 
     /// Remove a file.
     ///
-    /// Has a default "notimplemented_fut" implementation.
+    /// The default implementation returns FsError::NotImplemented.
     #[allow(unused_variables)]
     fn remove_file<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
         notimplemented_fut!("remove_file")
@@ -128,7 +141,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     /// should be replaced. If it is a directory it should give
     /// an error.
     ///
-    /// Has a default "notimplemented_fut" implementation.
+    /// The default implementation returns FsError::NotImplemented.
     #[allow(unused_variables)]
     fn rename<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
         notimplemented_fut!("rename")
@@ -139,7 +152,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     /// Should also copy the DAV properties, if properties
     /// are implemented.
     ///
-    /// Has a default "notimplemented_fut" implementation.
+    /// The default implementation returns FsError::NotImplemented.
     #[allow(unused_variables)]
     fn copy<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
         notimplemented_fut!("copy")
@@ -147,7 +160,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
 
     /// Set the access time of a file / directory.
     ///
-    /// Default: notimplemented_fut.
+    /// The default implementation returns FsError::NotImplemented.
     #[doc(hidden)]
     #[allow(unused_variables)]
     fn set_accessed<'a>(&'a self, path: &'a WebPath, tm: SystemTime) -> FsFuture<()> {
@@ -156,16 +169,16 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
 
     /// Set the modified time of a file / directory.
     ///
-    /// Default: notimplemented_fut.
+    /// The default implementation returns FsError::NotImplemented.
     #[doc(hidden)]
     #[allow(unused_variables)]
     fn set_modified<'a>(&'a self, path: &'a WebPath, tm: SystemTime) -> FsFuture<()> {
-        notimplemented_fut!("set_accessed")
+        notimplemented_fut!("set_mofified")
     }
 
     /// Indicator that tells if this filesystem driver supports DAV properties.
     ///
-    /// Has a default "false" implementation.
+    /// The default implementation returns `false`.
     #[allow(unused_variables)]
     fn have_props<'a>(&'a self, path: &'a WebPath) -> Pin<Box<Future<Output=bool> + Send + 'a>> {
         Box::pin(future::ready(false))
@@ -173,7 +186,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
 
     /// Patch the DAV properties of a node (add/remove props)
     ///
-    /// Has a default "notimplemented_fut" implementation.
+    /// The default implementation returns FsError::NotImplemented.
     #[allow(unused_variables)]
     fn patch_props<'a>(
         &'a self,
@@ -187,7 +200,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
 
     /// List/get the DAV properties of a node.
     ///
-    /// Has a default "notimplemented_fut" implementation.
+    /// The default implementation returns FsError::NotImplemented.
     #[allow(unused_variables)]
     fn get_props<'a>(&'a self, path: &'a WebPath, do_content: bool) -> FsFuture<Vec<DavProp>> {
         notimplemented_fut!("get_props")
@@ -195,7 +208,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
 
     /// Get one specific named property of a node.
     ///
-    /// Has a default "notimplemented_fut" implementation.
+    /// The default implementation returns FsError::NotImplemented.
     #[allow(unused_variables)]
     fn get_prop<'a>(&'a self, path: &'a WebPath, prop: DavProp) -> FsFuture<Vec<u8>> {
         notimplemented_fut!("get_prop`")
@@ -207,7 +220,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     /// the second optional value is the total amount of space
     /// (used + available).
     ///
-    /// Has a default "notimplemented_fut" implementation.
+    /// The default implementation returns FsError::NotImplemented.
     #[allow(unused_variables)]
     fn get_quota<'a>(&'a self) -> FsFuture<(u64, Option<u64>)> {
         notimplemented_fut!("get_quota`")

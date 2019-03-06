@@ -1,8 +1,8 @@
 //! Local filesystem access.
 //!
-//! This implementation is stateless. So it is no problem, and
-//! probably the easiest, to just create a new instance in your
-//! handler function every time.
+//! This implementation is stateless. So the easiest way to use it
+//! is to create a new instance in your handler every time
+//! you need one.
 
 use std::any::Any;
 use std::collections::VecDeque;
@@ -55,6 +55,7 @@ fn blocking<'a, F, T>(func: F) -> impl Future<Output=T> + 'a
 #[derive(Debug, Clone)]
 struct LocalFsMetaData(std::fs::Metadata);
 
+/// Local Filesystem implementation.
 #[derive(Clone)]
 pub struct LocalFs {
     inner:  Arc<LocalFsInner>

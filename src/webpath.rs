@@ -35,13 +35,14 @@ impl std::fmt::Debug for WebPath {
     }
 }
 
+/// Error returned by some of the WebPath methods.
 #[derive(Debug)]
 pub enum ParseError {
-    // cannot parse
+    /// cannot parse
     InvalidPath,
-    // outside of prefix
+    /// outside of prefix
     IllegalPath,
-    // too many dotdots
+    /// too many dotdots
     ForbiddenPath,
 }
 

@@ -13,6 +13,7 @@ use xmltree::Element;
 use crate::ls::*;
 use crate::webpath::WebPath;
 
+/// Fake locksystem implementation.
 #[derive(Debug, Clone)]
 pub struct FakeLs {}
 

@@ -3,10 +3,9 @@
 //! This implementation has state - if you create a
 //! new instance in a handler(), it will be empty every time.
 //!
-//! So you have to create the instance once, using `MemLs::new`, store
+//! This means you have to create the instance once, using `MemLs::new`, store
 //! it in your handler struct, and clone() it every time you pass
-//! it to the DavHandler. Cloning is ofcourse not expensive, the
-//! MemLs handle is refcounted, obviously.
+//! it to the DavHandler. As a MemLs struct is just a handle, cloning is cheap.
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
@@ -21,6 +20,7 @@ use crate::webpath::WebPath;
 
 type Tree = tree::Tree<Vec<u8>, Vec<DavLock>>;
 
+/// In-memory LockSystem.
 #[derive(Debug, Clone)]
 pub struct MemLs(Arc<Mutex<MemLsInner>>);
 
