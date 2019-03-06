@@ -5,7 +5,8 @@ use crate::conditional::*;
 use crate::fs::*;
 use crate::headers;
 use crate::typed_headers::HeaderMapExt;
-use crate::{empty_body, BoxedByteStream, DavError, DavResult};
+use crate::util::empty_body;
+use crate::{BoxedByteStream, DavError, DavResult};
 
 impl crate::DavInner {
     pub(crate) fn handle_mkcol(

@@ -3,7 +3,8 @@ use http::{Request, Response};
 use crate::common::*;
 use crate::headers;
 use crate::typed_headers::{self, HeaderMapExt};
-use crate::{dav_method, empty_body, BoxedByteStream, DavResult, Method};
+use crate::util::{dav_method, empty_body, Method};
+use crate::{BoxedByteStream, DavResult};
 
 impl crate::DavInner {
     pub(crate) fn handle_options(

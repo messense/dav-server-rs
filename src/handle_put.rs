@@ -10,7 +10,7 @@ use crate::conditional::if_match_get_tokens;
 use crate::fs::*;
 use crate::headers;
 use crate::typed_headers::{self, HeaderMapExt};
-use crate::{empty_body, systemtime_to_httpdate};
+use crate::util::{empty_body, systemtime_to_httpdate};
 use crate::{BoxedByteStream, DavError, DavResult};
 
 const SABRE: &'static str = "application/x-sabredav-partialupdate";

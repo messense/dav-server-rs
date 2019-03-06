@@ -6,6 +6,8 @@ use xml;
 
 use crate::fs::FsError;
 
+pub(crate) type DavResult<T> = Result<T, DavError>;
+
 #[derive(Debug)]
 pub(crate) enum DavError {
     XmlReadError,  // error reading/parsing xml

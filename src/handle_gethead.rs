@@ -4,6 +4,7 @@ use time;
 
 use bytes::Bytes;
 
+use crate::BoxedByteStream;
 use crate::common::*;
 use crate::conditional;
 use crate::corostream::CoroStream;
@@ -11,8 +12,7 @@ use crate::errors::*;
 use crate::fs::*;
 use crate::headers;
 use crate::typed_headers::{self, ByteRangeSpec, HeaderMapExt};
-use crate::BoxedByteStream;
-use crate::{empty_body, systemtime_to_httpdate, systemtime_to_timespec};
+use crate::util::{empty_body,systemtime_to_httpdate,systemtime_to_timespec};
 
 impl crate::DavInner {
     pub(crate) fn handle_get(

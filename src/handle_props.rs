@@ -22,8 +22,8 @@ use crate::ls::*;
 use crate::multierror::MultiBuf;
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::*;
-use crate::{empty_body, single_body, BoxedByteStream, DavInner, DavResult};
-use crate::{systemtime_to_httpdate, systemtime_to_rfc3339};
+use crate::{BoxedByteStream, DavInner, DavResult};
+use crate::util::{empty_body,single_body,systemtime_to_httpdate, systemtime_to_rfc3339};
 
 const NS_APACHE_URI: &'static str = "http://apache.org/dav/props/";
 const NS_DAV_URI: &'static str = "DAV:";

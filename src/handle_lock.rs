@@ -15,7 +15,8 @@ use crate::multierror::MultiBuf;
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::WebPath;
 use crate::xmltree_ext::{self, ElementExt};
-use crate::{empty_body, single_body, BoxedByteStream, DavResult};
+use crate::util::{empty_body,single_body};
+use crate::{BoxedByteStream, DavResult};
 
 impl crate::DavInner {
     pub(crate) async fn handle_lock(

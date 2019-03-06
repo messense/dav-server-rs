@@ -9,7 +9,7 @@ use crate::corostream::CoroStream;
 use crate::multierror::{multi_error, MultiError};
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::WebPath;
-use crate::{BoxedByteStream, DavResult, Method};
+use crate::{BoxedByteStream, DavResult, util::Method};
 
 // map_err helper.
 async fn add_status<'a>(

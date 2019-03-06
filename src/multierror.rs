@@ -16,7 +16,8 @@ use xml::EmitterConfig;
 
 use crate::corostream::CoroStream;
 use crate::webpath::WebPath;
-use crate::{empty_body, BoxedByteStream, DavError};
+use crate::util::empty_body;
+use crate::{BoxedByteStream, DavError};
 
 type Sender = crate::corostream::Sender<(WebPath, StatusCode), DavError>;
 
