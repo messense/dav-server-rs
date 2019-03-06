@@ -76,7 +76,6 @@ extern crate lazy_static;
 #[macro_use]
 extern crate percent_encoding;
 
-mod common;
 mod conditional;
 mod corostream;
 mod davhandler;
@@ -109,7 +108,6 @@ pub mod webpath;
 use std::io;
 
 use bytes::Bytes;
-use futures as futures01;
 
 pub(crate) use crate::davhandler::DavInner;
 pub(crate) use crate::errors::{DavError, DavResult};

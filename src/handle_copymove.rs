@@ -1,6 +1,7 @@
+use futures::{Future,StreamExt,future::FutureObj};
 use http::{Request, Response, StatusCode};
 
-use crate::common::*;
+//use crate::common::*;
 use crate::conditional::*;
 use crate::errors::*;
 use crate::fs::*;
@@ -33,7 +34,7 @@ impl crate::DavInner {
         dest: &'a WebPath,
         depth: Depth,
         mut multierror: &'a mut MultiError,
-    ) -> impl Future03<Output = DavResult<()>> + Send + 'a
+    ) -> impl Future<Output = DavResult<()>> + Send + 'a
     {
         async move {
             // when doing "COPY /a/b /a/b/c make sure we don't recursively
@@ -102,7 +103,7 @@ impl crate::DavInner {
                     ndest.add_slash();
                 }
                 let recurse =
-                    FutureObj03::new(Box::new(self.do_copy(&nsrc, topdest, &ndest, depth, multierror)));
+                    FutureObj::new(Box::new(self.do_copy(&nsrc, topdest, &ndest, depth, multierror)));
                 if let Err(e) = await!(recurse) {
                     retval = Err(e);
                 }

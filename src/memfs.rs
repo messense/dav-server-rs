@@ -1,20 +1,18 @@
 //! Simple in-memory filesystem.
 //!
-//! This implementation has state so - if you create a
+//! This implementation has state, so if you create a
 //! new instance in a handler(), it will be empty every time.
 //!
-//! So you have to create the instance once, using `MemFs::new`, store
+//! This means you have to create the instance once, using `MemFs::new`, store
 //! it in your handler struct, and clone() it every time you pass
-//! it to the DavHandler. Cloning is ofcourse not expensive, the
-//! MemFs handle is refcounted, obviously.
+//! it to the DavHandler. As a MemFs struct is just a handle, cloning is cheap.
 use std::collections::HashMap;
 use std::io::{Error, ErrorKind, SeekFrom};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use futures03 as futures;
-use futures03::{Future,Stream,future};
+use futures::{Future,Stream,future};
 use http::StatusCode;
 
 use crate::fs::*;
@@ -227,7 +225,7 @@ impl DavFileSystem for MemFs {
     }
 
     fn have_props<'a>(&'a self, _path: &'a WebPath) -> Pin<Box<Future<Output=bool> + Send + 'a>> {
-        Box::pin(futures03::future::ready(true))
+        Box::pin(future::ready(true))
     }
 
     fn patch_props<'a>(

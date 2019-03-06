@@ -1,6 +1,6 @@
+use futures::Future;
 use http::{Request, Response};
 
-use crate::common::*;
 use crate::headers;
 use crate::typed_headers::{self, HeaderMapExt};
 use crate::util::{dav_method, empty_body, Method};
@@ -10,7 +10,7 @@ impl crate::DavInner {
     pub(crate) fn handle_options(
         self,
         req: Request<()>,
-    ) -> impl Future03<Output = DavResult<Response<BoxedByteStream>>>
+    ) -> impl Future<Output = DavResult<Response<BoxedByteStream>>>
     {
         async move {
             let mut res = Response::new(empty_body());

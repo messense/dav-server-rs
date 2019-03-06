@@ -98,8 +98,8 @@ impl From<xml::writer::Error> for DavError {
     }
 }
 
-impl From<futures03::channel::mpsc::SendError> for DavError {
-    fn from(_e: futures03::channel::mpsc::SendError) -> Self {
+impl From<futures::channel::mpsc::SendError> for DavError {
+    fn from(_e: futures::channel::mpsc::SendError) -> Self {
         DavError::ChanError
     }
 }

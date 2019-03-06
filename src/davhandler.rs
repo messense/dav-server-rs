@@ -8,10 +8,10 @@ use std::sync::Arc;
 
 use bytes;
 
-use futures::future;
-use futures::prelude::*;
-use futures03::future::{FutureExt, TryFutureExt};
-use futures03::stream::StreamExt;
+use futures01;
+use futures::future::{FutureExt, TryFutureExt};
+use futures::stream::StreamExt;
+use futures::compat::Stream01CompatExt;
 
 use http::{Request, Response, StatusCode};
 
@@ -134,16 +134,16 @@ impl DavHandler {
     pub fn handle<ReqBody, ReqError>(
         &self,
         req: Request<ReqBody>,
-    ) -> impl Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
+    ) -> impl futures01::Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
     where
-        ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
         ReqError: StdError + Send + Sync + 'static,
     {
         if self.config.fs.is_none() {
-            return future::Either::A(notfound());
+            return futures01::future::Either::A(notfound());
         }
         let inner = DavInner::from(&*self.config);
-        future::Either::B(inner.handle(req))
+        futures01::future::Either::B(inner.handle(req))
     }
 
     /// Handle a webdav request, overriding parts of the config.
@@ -157,9 +157,9 @@ impl DavHandler {
         &self,
         config: DavConfig,
         req: Request<ReqBody>,
-    ) -> impl Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
+    ) -> impl futures01::Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
     where
-        ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
         ReqError: StdError + Send + Sync + 'static,
     {
         let orig = &*self.config;
@@ -171,10 +171,10 @@ impl DavHandler {
             principal: config.principal.or(orig.principal.clone()),
         };
         if newconf.fs.is_none() {
-            return future::Either::A(notfound());
+            return futures01::future::Either::A(notfound());
         }
         let inner = DavInner::from(newconf);
-        future::Either::B(inner.handle(req))
+        futures01::future::Either::B(inner.handle(req))
     }
 }
 
@@ -217,10 +217,10 @@ impl DavInner {
         max_size: usize,
     ) -> DavResult<Vec<u8>>
     where
-        ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
         ReqError: StdError + Send + Sync + 'static,
     {
-        let mut body = futures03::compat::Compat01As03::new(body);
+        let mut body = futures::compat::Compat01As03::new(body);
         let mut data = Vec::new();
         while let Some(res) = await!(body.next()) {
             let chunk = res.map_err(|_| {
@@ -238,9 +238,9 @@ impl DavInner {
     fn handle<ReqBody, ReqError>(
         self,
         req: Request<ReqBody>,
-    ) -> impl Future<Item = Response<BoxedByteStream>, Error = io::Error>
+    ) -> impl futures01::Future<Item = Response<BoxedByteStream>, Error = io::Error>
     where
-        ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
         ReqError: StdError + Send + Sync + 'static,
     {
         let fut = async move {
@@ -306,7 +306,7 @@ impl DavInner {
                 Method::Lock => await!(self.handle_lock(req, body_data)),
                 Method::Unlock => await!(self.handle_unlock(req)),
                 Method::Head | Method::Get => await!(self.handle_get(req)),
-                Method::Put | Method::Patch => await!(self.handle_put(req, body_strm.unwrap())),
+                Method::Put | Method::Patch => await!(self.handle_put(req, body_strm.unwrap().compat())),
                 Method::Copy | Method::Move => await!(self.handle_copymove(req, method)),
             };
             res

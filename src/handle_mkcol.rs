@@ -1,6 +1,6 @@
+use futures::Future;
 use http::{Request, Response, StatusCode};
 
-use crate::common::*;
 use crate::conditional::*;
 use crate::fs::*;
 use crate::headers;
@@ -12,7 +12,7 @@ impl crate::DavInner {
     pub(crate) fn handle_mkcol(
         self,
         req: Request<()>,
-    ) -> impl Future03<Output = DavResult<Response<BoxedByteStream>>>
+    ) -> impl Future<Output = DavResult<Response<BoxedByteStream>>>
     {
         async move {
             let mut path = self.path(&req);

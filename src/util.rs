@@ -3,8 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::{self, Bytes};
 
-use futures::prelude::*;
-use futures03::stream::TryStreamExt;
+use futures01;
+use futures::stream::TryStreamExt;
 
 use http::Method as httpMethod;
 
@@ -92,25 +92,25 @@ impl AllowedMethods {
 }
 
 // return a 404 reply.
-pub(crate) fn notfound() -> impl Future<Item = http::Response<BoxedByteStream>, Error = io::Error> {
-    let body = futures::stream::once(Ok(bytes::Bytes::from("Not Found")));
+pub(crate) fn notfound() -> impl futures01::Future<Item = http::Response<BoxedByteStream>, Error = io::Error> {
+    let body = futures01::stream::once(Ok(bytes::Bytes::from("Not Found")));
     let body: BoxedByteStream = Box::new(body);
     let response = http::Response::builder()
         .status(404)
         .header("connection", "close")
         .body(body)
         .unwrap();
-    return Box::new(futures::future::ok(response));
+    return Box::new(futures01::future::ok(response));
 }
 
 // helper.
 pub(crate) fn empty_body() -> BoxedByteStream {
-    Box::new(futures03::stream::empty::<io::Result<Bytes>>().compat())
+    Box::new(futures::stream::empty::<io::Result<Bytes>>().compat())
 }
 
 pub(crate) fn single_body(body: impl Into<Bytes>) -> BoxedByteStream {
     let body = vec![Ok::<Bytes, io::Error>(body.into())].into_iter();
-    Box::new(futures03::stream::iter(body).compat())
+    Box::new(futures::stream::iter(body).compat())
 }
 
 pub(crate) fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {

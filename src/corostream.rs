@@ -3,17 +3,17 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use futures::Async as Async01;
-use futures::Future as Future01;
-use futures::Poll as Poll01;
-use futures::Stream as Stream01;
+use futures01::Async as Async01;
+use futures01::Future as Future01;
+use futures01::Poll as Poll01;
+use futures01::Stream as Stream01;
 
-use futures03::task::Poll as Poll03;
-use futures03::task::Waker;
-use futures03::future::FutureExt as _;
-use futures03::future::Future as Future03;
-use futures03::compat::Compat as Compat03As01;
-use futures03::compat::Compat01As03;
+use futures::task::Poll as Poll03;
+use futures::task::Waker;
+use futures::future::FutureExt as _;
+use futures::future::Future as Future03;
+use futures::compat::Compat as Compat03As01;
+use futures::compat::Compat01As03;
 
 use bytes;
 use hyper;

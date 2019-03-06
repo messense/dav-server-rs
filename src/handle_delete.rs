@@ -3,9 +3,9 @@
 // see https://github.com/rust-lang/rust/issues/53690#issuecomment-457993865
 //
 
+use futures::{Future,StreamExt,future::FutureObj};
 use http::{Request, Response, StatusCode};
 
-use crate::common::*;
 use crate::conditional::if_match_get_tokens;
 use crate::corostream::CoroStream;
 use crate::errors::*;
@@ -45,7 +45,7 @@ impl crate::DavInner {
         depth: Depth,
         meta: Box<DavMetaData + 'a>,
         path: &'a WebPath,
-    ) -> impl Future03<Output = DavResult<()>> + Send + 'a
+    ) -> impl Future<Output = DavResult<()>> + Send + 'a
     {
         async move {
             if !meta.is_dir() {
@@ -87,7 +87,7 @@ impl crate::DavInner {
 
                 // do the actual work. If this fails with a non-fs related error,
                 // return immediately.
-                let f = FutureObj03::new(Box::pin(self.delete_items(&mut res, depth, meta, &npath)));
+                let f = FutureObj::new(Box::pin(self.delete_items(&mut res, depth, meta, &npath)));
                 if let Err(e) = await!(f) {
                     match e {
                         DavError::Status(_) => {

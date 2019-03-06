@@ -20,9 +20,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "linux")]
 use std::os::linux::fs::MetadataExt;
 
-use futures as futures01;
-use futures03::{Future,FutureExt,Stream,StreamExt};
-use futures03::compat::{Future01CompatExt,Stream01CompatExt};
+use futures01;
+use futures::{Future,FutureExt,Stream,StreamExt,future};
+use futures::compat::{Future01CompatExt,Stream01CompatExt};
 
 use libc;
 use sha2::{self, Digest};
@@ -38,18 +38,18 @@ fn blocking<'a, F, T>(func: F) -> impl Future<Output=T> + 'a
     where F: FnOnce() -> T + 'a,
           T: 'a
 {
-    futures03::future::ready(Some(func))
+    future::ready(Some(func))
         .then(|mut func| {
-        let fut03 = futures01::future::poll_fn(move || {
-            tokio_threadpool::blocking(|| (func.take().unwrap())())
+            let fut = futures01::future::poll_fn(move || {
+                tokio_threadpool::blocking(|| (func.take().unwrap())())
+            })
+            .compat()
+            .then(|res| match res {
+                    Ok(x) => future::ready(x),
+                    Err(_) => panic!("the thread pool has shut down"),
+                });
+            fut
         })
-        .compat()
-        .then(|res| match res {
-                Ok(x) => futures03::future::ready(x),
-                Err(_) => panic!("the thread pool has shut down"),
-            });
-        fut03
-    })
 }
 
 #[derive(Debug, Clone)]
@@ -124,7 +124,7 @@ impl LocalFs {
         where F: FnOnce() -> T + 'a,
               T: 'a
     {
-        futures03::future::ready(Some(func))
+        future::ready(Some(func))
             .then(move |mut func| {
             let fut03 = futures01::future::poll_fn(move || {
                 tokio_threadpool::blocking(|| {
@@ -134,7 +134,7 @@ impl LocalFs {
             })
             .compat()
             .then(|res| match res {
-                    Ok(x) => futures03::future::ready(x),
+                    Ok(x) => future::ready(x),
                     Err(_) => panic!("the thread pool has shut down"),
                 });
             fut03
@@ -178,7 +178,7 @@ impl DavFileSystem for LocalFs {
                     };
                     let stream03 = stream01
                         .compat()
-                        .take_while(|res| futures03::future::ready(res.is_ok()))
+                        .take_while(|res| future::ready(res.is_ok()))
                         .map(|res| res.unwrap());
                     Ok(Box::pin(stream03) as Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>)
                 },
@@ -253,7 +253,7 @@ impl DavFileSystem for LocalFs {
 impl Stream for LocalFsReadDir {
     type Item = Box<DavDirEntry>;
 
-    fn poll_next(self: Pin<&mut Self>, waker: &Waker) -> futures03::task::Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, waker: &Waker) -> futures::task::Poll<Option<Self::Item>> {
         let fut = futures01::future::poll_fn(|| {
             let b = tokio_threadpool::blocking(|| {
                 match self.iterator.next() {
@@ -263,8 +263,8 @@ impl Stream for LocalFsReadDir {
                 }
             });
             match b {
-                Ok(futures01::Async::Ready(Ok(item))) => Ok(futures::Async::Ready(item)),
-                Ok(futures01::Async::NotReady) => Ok(futures::Async::NotReady),
+                Ok(futures01::Async::Ready(Ok(item))) => Ok(futures01::Async::Ready(item)),
+                Ok(futures01::Async::NotReady) => Ok(futures01::Async::NotReady),
                 Ok(futures01::Async::Ready(Err(item))) => Err(item),
                 Err(_) => panic!("the thread pool has shut down"),
             }
@@ -367,7 +367,7 @@ impl DavDirEntry for LocalFsDirEntry {
                     Ok(meta) => Ok(Box::new(LocalFsMetaData(meta.clone())) as Box<DavMetaData>),
                     Err(e) => Err(e.into()),
                 };
-                Box::pin(futures03::future::ready(m))
+                Box::pin(future::ready(m))
             },
             Meta::Fs(ref fs) => fs.blocking(move || {
                 match self.entry.metadata() {
@@ -430,7 +430,7 @@ impl DavFile for LocalFsFile {
     }
 
     fn seek<'a>(&'a mut self, pos: SeekFrom) -> FsFuture<u64> {
-        Box::pin(futures03::future::ready(self.0.seek(pos).map_err(|e| e.into())))
+        Box::pin(future::ready(self.0.seek(pos).map_err(|e| e.into())))
     }
 
     fn flush<'a>(&'a mut self) -> FsFuture<()> {

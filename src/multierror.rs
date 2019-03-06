@@ -2,9 +2,8 @@ use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
 
-use futures::prelude::*;
-use futures03::stream::Stream as Stream03;
-use futures03::stream::StreamExt;
+use futures01::Stream as Stream01;
+use futures::{Stream,StreamExt};
 
 use bytes::Bytes;
 use http::{Response, StatusCode};
@@ -32,7 +31,7 @@ impl MultiError {
         &'a mut self,
         path: &'a WebPath,
         status: impl Into<DavError> + 'static,
-    ) -> Result<(), futures03::channel::mpsc::SendError>
+    ) -> Result<(), futures::channel::mpsc::SendError>
     {
         let status = status.into().statuscode();
         await!(self.0.send((path.clone(), status)));
@@ -95,7 +94,7 @@ pub(crate) async fn multi_error<S>(
     status_stream: S,
 ) -> Result<Response<BoxedByteStream>, DavError>
 where
-    S: Stream03<Item = Result<(WebPath, StatusCode), DavError>> + Send + 'static,
+    S: Stream<Item = Result<(WebPath, StatusCode), DavError>> + Send + 'static,
 {
     // read the first path/status item
     let mut status_stream = Box::pin(status_stream);
@@ -151,7 +150,7 @@ where
         await!(tx.send(data));
 
         // now write the items.
-        let mut status_stream = futures03::stream::iter(items).chain(status_stream);
+        let mut status_stream = futures::stream::iter(items).chain(status_stream);
         while let Some(res) = await!(status_stream.next()) {
             let (path, status) = res?;
             let status = if status == StatusCode::NO_CONTENT {

@@ -1,11 +1,12 @@
 use std::any::Any;
 use std::error::Error as StdError;
 use std::io;
+use std::marker::Unpin;
 
+use futures::{Future, Stream, StreamExt};
 use http::StatusCode as SC;
 use http::{self, Request, Response};
 
-use crate::common::*;
 use crate::conditional::if_match_get_tokens;
 use crate::fs::*;
 use crate::headers;
@@ -58,9 +59,9 @@ impl crate::DavInner {
         self,
         req: Request<()>,
         body: ReqBody,
-    ) -> impl Future03<Output = DavResult<Response<BoxedByteStream>>>
+    ) -> impl Future<Output = DavResult<Response<BoxedByteStream>>>
     where
-        ReqBody: Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + 'static,
         ReqError: StdError + Sync + Send + 'static,
     {
         async move {
@@ -202,9 +203,7 @@ impl crate::DavInner {
 
             // loop, read body, write to file.
             let mut bad = false;
-
-            // turn body stream into a futures@0.3 stream.
-            let mut body = body.compat();
+            let mut body = body;
 
             while let Some(buffer) = await!(body.next()) {
                 let buffer = buffer.map_err(|e| to_ioerror(e))?;

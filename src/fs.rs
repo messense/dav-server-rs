@@ -5,7 +5,7 @@ use std::io::SeekFrom;
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures03::{Future,Stream,TryFutureExt};
+use futures::{Future,Stream,TryFutureExt,future};
 use http::StatusCode;
 
 use crate::webpath::WebPath;
@@ -18,7 +18,7 @@ macro_rules! notimplemented {
 
 macro_rules! notimplemented_fut {
     ($method:expr) => {
-        Box::pin(futures03::future::ready(Err(FsError::NotImplemented)))
+        Box::pin(future::ready(Err(FsError::NotImplemented)))
     };
 }
 
@@ -168,7 +168,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     /// Has a default "false" implementation.
     #[allow(unused_variables)]
     fn have_props<'a>(&'a self, path: &'a WebPath) -> Pin<Box<Future<Output=bool> + Send + 'a>> {
-        Box::pin(futures03::future::ready(false))
+        Box::pin(future::ready(false))
     }
 
     /// Patch the DAV properties of a node (add/remove props)
@@ -248,17 +248,17 @@ pub trait DavDirEntry: Send + Sync {
     /// expensive and there is a cheaper way to provide the same info
     /// (e.g. dirent.d_type in unix filesystems).
     fn is_dir<'a>(&'a self) -> FsFuture<bool> {
-        Box::pin(self.metadata().and_then(|meta| futures03::future::ok(meta.is_dir())))
+        Box::pin(self.metadata().and_then(|meta| future::ok(meta.is_dir())))
     }
 
     /// Likewise. Default: `!is_dir()`.
     fn is_file<'a>(&'a self) -> FsFuture<bool> {
-        Box::pin(self.metadata().and_then(|meta| futures03::future::ok(meta.is_file())))
+        Box::pin(self.metadata().and_then(|meta| future::ok(meta.is_file())))
     }
 
     /// Likewise. Default: `false`.
     fn is_symlink<'a>(&'a self) -> FsFuture<bool> {
-        Box::pin(self.metadata().and_then(|meta| futures03::future::ok(meta.is_symlink())))
+        Box::pin(self.metadata().and_then(|meta| future::ok(meta.is_symlink())))
     }
 }
 

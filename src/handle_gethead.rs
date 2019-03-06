@@ -1,3 +1,4 @@
+use futures::{Future,StreamExt};
 use htmlescape;
 use http::{status::StatusCode, Request, Response};
 use time;
@@ -5,7 +6,6 @@ use time;
 use bytes::Bytes;
 
 use crate::BoxedByteStream;
-use crate::common::*;
 use crate::conditional;
 use crate::corostream::CoroStream;
 use crate::errors::*;
@@ -18,7 +18,7 @@ impl crate::DavInner {
     pub(crate) fn handle_get(
         self,
         req: Request<()>,
-    ) -> impl Future03<Output = Result<Response<BoxedByteStream>, DavError>>
+    ) -> impl Future<Output = Result<Response<BoxedByteStream>, DavError>>
     {
         let path = self.path(&req);
 
@@ -169,7 +169,7 @@ impl crate::DavInner {
         self,
         req: Request<()>,
         head: bool,
-    ) -> impl Future03<Output = Result<Response<BoxedByteStream>, DavError>>
+    ) -> impl Future<Output = Result<Response<BoxedByteStream>, DavError>>
     {
         let path = self.path(&req);
 

@@ -10,8 +10,8 @@ path = "src/lib.rs"
 
 [dependencies]
 bytes = "0.4.11"
-futures = "0.1.25"
-futures03 = { package = "futures-preview", version = "0.3.0-alpha.13", features = ["io-compat"] }
+futures01 = { package = "futures", version = "0.1.25" }
+futures = { package = "futures-preview", version = "0.3.0-alpha.13", features = ["io-compat"] }
 htmlescape = "0.3.1"
 http = "0.1.16"
 hyper = "0.12.24"

@@ -14,8 +14,10 @@ extern crate clap;
 
 use bytes::Bytes;
 use env_logger;
-use futures::{future::Future, stream::Stream};
 use hyper;
+
+use futures01 as futures;
+use futures01::{future::Future, stream::Stream};
 
 use webdav_handler::{
     localfs,

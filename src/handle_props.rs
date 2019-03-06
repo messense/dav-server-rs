@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{self, Cursor};
 
+use futures::{Future,StreamExt,future::FutureObj};
 use http::{Request, Response, StatusCode};
 
 use crate::xmltree_ext::*;
@@ -11,7 +12,6 @@ use xml::writer::XmlEvent as XmlWEvent;
 use xml::EmitterConfig;
 use xmltree::Element;
 
-use crate::common::*;
 use crate::conditional::if_match_get_tokens;
 use crate::corostream::CoroStream;
 use crate::errors::*;
@@ -209,7 +209,7 @@ impl DavInner {
         path: &'a WebPath,
         depth: headers::Depth,
         propwriter: &'a mut PropWriter,
-    ) -> impl Future03<Output = DavResult<()>> + Send + 'a
+    ) -> impl Future<Output = DavResult<()>> + Send + 'a
     {
         async move {
             let mut entries = match await!(self.fs.read_dir(path, ReadDirMeta::Data)) {
@@ -238,7 +238,7 @@ impl DavInner {
                 await!(propwriter.write_props(&npath, meta))?;
                 await!(propwriter.flush())?;
                 if depth == headers::Depth::Infinity && is_dir {
-                    await!(FutureObj03::new(Box::pin(
+                    await!(FutureObj::new(Box::pin(
                         self.propfind_directory(&npath, depth, propwriter)
                     )))?;
                 }
@@ -573,7 +573,7 @@ impl PropWriter {
         qc: &'a mut QuotaCache,
         path: &'a WebPath,
         meta: Box<DavMetaData + 'a>,
-    ) -> impl Future03<Output=FsResult<(u64, Option<u64>)>> + Send + 'a
+    ) -> impl Future<Output=FsResult<(u64, Option<u64>)>> + Send + 'a
     {
         async move {
         // do lookup only once.
@@ -618,7 +618,7 @@ impl PropWriter {
         meta: Box<DavMetaData + 'a>,
         qc: &'a mut QuotaCache,
         docontent: bool,
-    ) -> impl Future03<Output=DavResult<StatusElement>> + Send + 'a
+    ) -> impl Future<Output=DavResult<StatusElement>> + Send + 'a
     {
         async move {
         // in some cases, a live property might be stored in the
@@ -786,7 +786,7 @@ impl PropWriter {
     }
 
     pub fn write_props<'a>(&'a mut self, path: &'a WebPath, meta: Box<DavMetaData + 'static>)
-        -> impl Future03<Output=Result<(), DavError>> + Send + 'a
+        -> impl Future<Output=Result<(), DavError>> + Send + 'a
     {
         async move {
         // A HashMap<StatusCode, Vec<Element>> for the result.
