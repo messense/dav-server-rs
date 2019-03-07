@@ -13,9 +13,9 @@ use crate::fs::{FsError, OpenOptions};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
 use crate::typed_headers::HeaderMapExt;
+use crate::util::{empty_body, single_body};
 use crate::webpath::WebPath;
 use crate::xmltree_ext::{self, ElementExt};
-use crate::util::{empty_body,single_body};
 use crate::{BoxedByteStream, DavResult};
 
 impl crate::DavInner {

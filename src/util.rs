@@ -3,14 +3,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::{self, Bytes};
 
-use futures01;
 use futures::stream::TryStreamExt;
+use futures01;
 
 use http::Method as httpMethod;
 
 use crate::errors::DavError;
 use crate::typed_headers;
-use crate::{BoxedByteStream,DavResult};
+use crate::{BoxedByteStream, DavResult};
 
 /// HTTP Methods supported by DavHandler.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -92,7 +92,8 @@ impl AllowedMethods {
 }
 
 // return a 404 reply.
-pub(crate) fn notfound() -> impl futures01::Future<Item = http::Response<BoxedByteStream>, Error = io::Error> {
+pub(crate) fn notfound() -> impl futures01::Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
+{
     let body = futures01::stream::once(Ok(bytes::Bytes::from("Not Found")));
     let body: BoxedByteStream = Box::new(body);
     let response = http::Response::builder()
@@ -133,4 +134,3 @@ pub(crate) fn systemtime_to_rfc3339(t: SystemTime) -> String {
     let ts = systemtime_to_timespec(t);
     format!("{}", time::at_utc(ts).rfc3339())
 }
-

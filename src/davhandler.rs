@@ -8,22 +8,22 @@ use std::sync::Arc;
 
 use bytes;
 
-use futures01;
+use futures::compat::Stream01CompatExt;
 use futures::future::{FutureExt, TryFutureExt};
 use futures::stream::StreamExt;
-use futures::compat::Stream01CompatExt;
+use futures01;
 
 use http::{Request, Response, StatusCode};
 
 use crate::davheaders;
 use crate::typed_headers::HeaderMapExt;
-use crate::util::{AllowedMethods,Method,dav_method,empty_body,notfound};
+use crate::util::{dav_method, empty_body, notfound, AllowedMethods, Method};
 use crate::webpath::WebPath;
 
 use crate::errors::DavError;
 use crate::fs::*;
 use crate::ls::*;
-use crate::{BoxedByteStream,DavResult};
+use crate::{BoxedByteStream, DavResult};
 
 /// The webdav handler struct.
 #[derive(Clone)]
@@ -182,9 +182,7 @@ impl DavInner {
     // helper.
     pub(crate) async fn has_parent<'a>(&'a self, path: &'a WebPath) -> bool {
         let p = path.parent();
-        await!(self.fs.metadata(&p))
-            .map(|m| m.is_dir())
-            .unwrap_or(false)
+        await!(self.fs.metadata(&p)).map(|m| m.is_dir()).unwrap_or(false)
     }
 
     // helper.
@@ -205,7 +203,8 @@ impl DavInner {
         if meta.is_dir() && !path.is_collection() {
             path.add_slash();
             let newloc = path.as_url_string_with_prefix();
-            res.headers_mut().typed_insert(davheaders::ContentLocation(newloc));
+            res.headers_mut()
+                .typed_insert(davheaders::ContentLocation(newloc));
         }
         meta
     }
@@ -244,7 +243,6 @@ impl DavInner {
         ReqError: StdError + Send + Sync + 'static,
     {
         let fut = async move {
-
             // debug when running the webdav litmus tests.
             if log_enabled!(log::Level::Debug) {
                 if let Some(t) = req.headers().typed_get::<davheaders::XLitmus>() {

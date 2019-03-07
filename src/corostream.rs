@@ -8,12 +8,12 @@ use futures01::Future as Future01;
 use futures01::Poll as Poll01;
 use futures01::Stream as Stream01;
 
-use futures::task::Poll as Poll03;
-use futures::task::Waker;
-use futures::future::FutureExt as _;
-use futures::future::Future as Future03;
 use futures::compat::Compat as Compat03As01;
 use futures::compat::Compat01As03;
+use futures::future::Future as Future03;
+use futures::future::FutureExt as _;
+use futures::task::Poll as Poll03;
+use futures::task::Waker;
 
 use bytes;
 use hyper;
@@ -21,14 +21,17 @@ use hyper;
 /// Future returned by the Sender.send() method, completes when the
 /// item is sent. All it actually does is to return the "Pending" state
 /// once. The next time it is polled it will return "Ready".
-pub struct SenderFuture<E=()> {
-    state:      bool,
-    phantom:    PhantomData<E>,
+pub struct SenderFuture<E = ()> {
+    state:   bool,
+    phantom: PhantomData<E>,
 }
 
 impl<E> SenderFuture<E> {
     fn new() -> SenderFuture<E> {
-        SenderFuture{ state: false, phantom: PhantomData::<E>, }
+        SenderFuture {
+            state:   false,
+            phantom: PhantomData::<E>,
+        }
     }
 }
 
@@ -76,8 +79,7 @@ impl<I, E> Sender<I, E> {
 
     /// Send one item to the stream.
     pub fn send<T>(&mut self, item: T) -> SenderFuture
-        where T: Into<I>,
-    {
+    where T: Into<I> {
         self.0.set(Some(item.into()));
         SenderFuture::new()
     }
@@ -90,8 +92,8 @@ impl<I, E> Sender<I, E> {
 /// because it's main use-case is to generate a body stream for
 /// a hyper service function.
 pub struct CoroStream<Item, Error> {
-    item:   Sender<Item, Error>,
-    fut:    Box<Future01<Item=(), Error=Error> + 'static + Send>,
+    item: Sender<Item, Error>,
+    fut:  Box<Future01<Item = (), Error = Error> + 'static + Send>,
 }
 
 impl<Item, Error: 'static + Send> CoroStream<Item, Error> {
@@ -101,21 +103,23 @@ impl<Item, Error: 'static + Send> CoroStream<Item, Error> {
     /// The closure is passed one argument, the sender, which has a
     /// method "send" that can be called to send a item to the stream.
     pub fn stream01<F, R>(f: F) -> Self
-        where F: FnOnce(Sender<Item, Error>) -> R,
-              R: Future03<Output=Result<(), Error>> + Send + 'static,
-              Item: 'static,
+    where
+        F: FnOnce(Sender<Item, Error>) -> R,
+        R: Future03<Output = Result<(), Error>> + Send + 'static,
+        Item: 'static,
     {
         let sender = Sender::new(None);
         CoroStream::<Item, Error> {
-            item:   sender.clone(),
-            fut:    Box::new(Compat03As01::new(f(sender).boxed())),
+            item: sender.clone(),
+            fut:  Box::new(Compat03As01::new(f(sender).boxed())),
         }
     }
 
     pub fn stream03<F, R>(f: F) -> Compat01As03<CoroStream<Item, Error>>
-        where F: FnOnce(Sender<Item, Error>) -> R,
-              R: Future03<Output=Result<(), Error>> + Send + 'static,
-              Item: 'static,
+    where
+        F: FnOnce(Sender<Item, Error>) -> R,
+        R: Future03<Output = Result<(), Error>> + Send + 'static,
+        Item: 'static,
     {
         Compat01As03::new(CoroStream::stream01(f))
     }
@@ -149,9 +153,10 @@ impl<I, E> Stream01 for CoroStream<I, E> {
 /// This implementation allows you to use anything that implements
 /// IntoBuf as a Payload item.
 impl<Item, Error> hyper::body::Payload for CoroStream<Item, Error>
-    where Item: bytes::buf::IntoBuf + Send + Sync + 'static,
-          Item::Buf: Send,
-          Error: std::error::Error + Send + Sync + 'static,
+where
+    Item: bytes::buf::IntoBuf + Send + Sync + 'static,
+    Item::Buf: Send,
+    Error: std::error::Error + Send + Sync + 'static,
 {
     type Data = Item::Buf;
     type Error = Error;
@@ -165,4 +170,3 @@ impl<Item, Error> hyper::body::Payload for CoroStream<Item, Error>
         }
     }
 }
-

@@ -3,14 +3,14 @@
 // see https://github.com/rust-lang/rust/issues/53690#issuecomment-457993865
 //
 
-use futures::{Future,StreamExt,future::FutureObj};
+use futures::{future::FutureObj, Future, StreamExt};
 use http::{Request, Response, StatusCode};
 
 use crate::conditional::if_match_get_tokens;
 use crate::corostream::CoroStream;
+use crate::davheaders::Depth;
 use crate::errors::*;
 use crate::fs::*;
-use crate::davheaders::Depth;
 use crate::multierror::{multi_error, MultiError};
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::WebPath;

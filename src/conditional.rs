@@ -3,8 +3,8 @@ use std::time::SystemTime;
 use http::StatusCode;
 use http::{self, Method};
 
-use crate::fs::{DavFileSystem, DavMetaData};
 use crate::davheaders;
+use crate::fs::{DavFileSystem, DavMetaData};
 use crate::ls::DavLockSystem;
 use crate::typed_headers::{self, EntityTag, HeaderMapExt};
 use crate::webpath::WebPath;

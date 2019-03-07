@@ -110,8 +110,8 @@ mod handle_options;
 mod handle_props;
 mod handle_put;
 mod multierror;
-mod util;
 mod tree;
+mod util;
 mod xmltree_ext;
 
 #[doc(hidden)]
@@ -137,6 +137,5 @@ pub(crate) use crate::fs::*;
 #[allow(unused)]
 pub type BoxedByteStream = Box<futures01::Stream<Item = Bytes, Error = io::Error> + Send + 'static>;
 
-pub use crate::davhandler::{DavConfig,DavHandler};
-pub use crate::util::{Method,AllowedMethods};
-
+pub use crate::davhandler::{DavConfig, DavHandler};
+pub use crate::util::{AllowedMethods, Method};

@@ -1,18 +1,18 @@
-use futures::{Future,StreamExt};
+use futures::{Future, StreamExt};
 use htmlescape;
 use http::{status::StatusCode, Request, Response};
 use time;
 
 use bytes::Bytes;
 
-use crate::BoxedByteStream;
 use crate::conditional;
 use crate::corostream::CoroStream;
 use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
 use crate::typed_headers::{self, ByteRangeSpec, HeaderMapExt};
-use crate::util::{empty_body,systemtime_to_httpdate,systemtime_to_timespec};
+use crate::util::{empty_body, systemtime_to_httpdate, systemtime_to_timespec};
+use crate::BoxedByteStream;
 
 impl crate::DavInner {
     pub(crate) fn handle_get(

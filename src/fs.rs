@@ -10,7 +10,7 @@ use std::io::SeekFrom;
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::{Future,Stream,TryFutureExt,future};
+use futures::{future, Future, Stream, TryFutureExt};
 use http::StatusCode;
 
 use crate::webpath::WebPath;
@@ -66,7 +66,7 @@ pub struct DavProp {
 }
 
 /// Future (futures 0.3) returned by almost all of the DavFileSystem methods.
-pub type FsFuture<'a, T> = Pin<Box<Future<Output=FsResult<T>> + Send + 'a>>;
+pub type FsFuture<'a, T> = Pin<Box<Future<Output = FsResult<T>> + Send + 'a>>;
 
 /// Used as argument to the read_dir() method. It is:
 ///
@@ -91,7 +91,11 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<DavFile>>;
 
     /// Perform read_dir.
-    fn read_dir<'a>(&'a self, path: &'a WebPath, meta: ReadDirMeta) -> FsFuture<Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>>;
+    fn read_dir<'a>(
+        &'a self,
+        path: &'a WebPath,
+        meta: ReadDirMeta,
+    ) -> FsFuture<Pin<Box<Stream<Item = Box<DavDirEntry>> + Send>>>;
 
     /// Return the metadata of a file or directory.
     fn metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<DavMetaData>>;
@@ -178,7 +182,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     ///
     /// The default implementation returns `false`.
     #[allow(unused_variables)]
-    fn have_props<'a>(&'a self, path: &'a WebPath) -> Pin<Box<Future<Output=bool> + Send + 'a>> {
+    fn have_props<'a>(&'a self, path: &'a WebPath) -> Pin<Box<Future<Output = bool> + Send + 'a>> {
         Box::pin(future::ready(false))
     }
 
@@ -277,7 +281,7 @@ pub trait DavDirEntry: Send + Sync {
 /// to return its metadata.
 pub trait DavFile: Debug + Send + Sync {
     fn metadata<'a>(&'a self) -> FsFuture<Box<DavMetaData>>;
-    fn write_bytes<'a> (&'a mut self, buf: &'a [u8]) -> FsFuture<usize>;
+    fn write_bytes<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<usize>;
     fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<()>;
     fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize>;
     fn seek<'a>(&'a mut self, pos: SeekFrom) -> FsFuture<u64>;

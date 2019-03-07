@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
 
+use futures::{Stream, StreamExt};
 use futures01::Stream as Stream01;
-use futures::{Stream,StreamExt};
 
 use bytes::Bytes;
 use http::{Response, StatusCode};
@@ -14,8 +14,8 @@ use xml::writer::XmlEvent as XmlWEvent;
 use xml::EmitterConfig;
 
 use crate::corostream::CoroStream;
-use crate::webpath::WebPath;
 use crate::util::empty_body;
+use crate::webpath::WebPath;
 use crate::{BoxedByteStream, DavError};
 
 type Sender = crate::corostream::Sender<(WebPath, StatusCode), DavError>;

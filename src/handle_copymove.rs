@@ -1,16 +1,16 @@
-use futures::{Future,StreamExt,future::FutureObj};
+use futures::{future::FutureObj, Future, StreamExt};
 use http::{Request, Response, StatusCode};
 
 //use crate::common::*;
 use crate::conditional::*;
+use crate::corostream::CoroStream;
+use crate::davheaders::{self, Depth};
 use crate::errors::*;
 use crate::fs::*;
-use crate::davheaders::{self, Depth};
-use crate::corostream::CoroStream;
 use crate::multierror::{multi_error, MultiError};
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::WebPath;
-use crate::{BoxedByteStream, DavResult, util::Method};
+use crate::{util::Method, BoxedByteStream, DavResult};
 
 // map_err helper.
 async fn add_status<'a>(
