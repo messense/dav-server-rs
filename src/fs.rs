@@ -86,9 +86,6 @@ pub enum ReadDirMeta {
 }
 
 /// The trait that defines a filesystem.
-///
-/// The BoxCloneFs trait is a helper trait that is automatically implemented
-/// so that Box\<DavFileSystem\>.clone() works.
 pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     /// Open a file.
     fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<DavFile>>;
@@ -287,10 +284,7 @@ pub trait DavFile: Debug + Send + Sync {
     fn flush<'a>(&'a mut self) -> FsFuture<()>;
 }
 
-/// Not much more than type, length, and some timestamps.
-///
-/// The BoxCloneMd trait is a helper trait that is automatically implemented
-/// so that Box\<DavMetaData\>.clone() works.
+/// File metadata. Not much more than type, length, and some timestamps.
 pub trait DavMetaData: Debug + BoxCloneMd + Send + Sync {
     fn len(&self) -> u64;
     fn modified(&self) -> FsResult<SystemTime>;

@@ -26,9 +26,6 @@ pub struct DavLock {
 }
 
 /// The trait that defines a locksystem.
-///
-/// The BoxCloneLs trait is a helper trait that is automatically implemented
-/// so that Box\<DavLockSystem\>.clone() works.
 pub trait DavLockSystem: Debug + Sync + Send + BoxCloneLs {
     /// Lock a node. Returns Ok(new_lock) if succeeded,
     /// or Err(conflicting_lock) if failed.
