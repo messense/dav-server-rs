@@ -29,7 +29,7 @@ use sha2::{self, Digest};
 use crate::fs::*;
 use crate::webpath::WebPath;
 
-// Run some code via tokio_threadpool::blocking().
+// Run some code via tokio_threadpool::blocking(), returns Future 0.3
 //
 // There's also a method on LocalFs for this, use the freestanding
 // function if you do not want the fs_access_guard() closure to be used.
@@ -256,35 +256,32 @@ impl Stream for LocalFsReadDir {
         // We buffer up to 256 entries, so that we batch the blocking() calls.
         if self.buffer.len() == 0 {
 
-            let mut fut = futures01::future::poll_fn(|| {
-                tokio_threadpool::blocking(|| {
-                    let _guard = match self.do_meta {
-                        ReadDirMeta::None => None,
-                        _ => self.fs.inner.fs_access_guard.as_ref().map(|f| f())
-                    };
-                    for _ in 0 .. 256 {
-                        match self.iterator.next() {
-                            Some(Ok(entry)) => {
-                                let meta = match self.do_meta {
-                                    ReadDirMeta::Data => Meta::Data(std::fs::metadata(entry.path())),
-                                    ReadDirMeta::DataSymlink => Meta::Data(entry.metadata()),
-                                    ReadDirMeta::None => Meta::Fs(self.fs.clone()),
-                                };
-                                let d = LocalFsDirEntry { meta: meta, entry: entry };
-                                self.buffer.push_back(Ok(d))
-                            },
-                            Some(Err(e)) => {
-                                self.buffer.push_back(Err(e));
-                                break;
-                            },
-                            None => break,
-                        }
+            let mut fut = blocking(|| {
+                let _guard = match self.do_meta {
+                    ReadDirMeta::None => None,
+                    _ => self.fs.inner.fs_access_guard.as_ref().map(|f| f()),
+                };
+                for _ in 0 .. 256 {
+                    match self.iterator.next() {
+                        Some(Ok(entry)) => {
+                            let meta = match self.do_meta {
+                                ReadDirMeta::Data => Meta::Data(std::fs::metadata(entry.path())),
+                                ReadDirMeta::DataSymlink => Meta::Data(entry.metadata()),
+                                ReadDirMeta::None => Meta::Fs(self.fs.clone()),
+                            };
+                            let d = LocalFsDirEntry { meta: meta, entry: entry };
+                            self.buffer.push_back(Ok(d))
+                        },
+                        Some(Err(e)) => {
+                            self.buffer.push_back(Err(e));
+                            break;
+                        },
+                        None => break,
                     }
-                })
-            }).compat();
+                }
+            });
             match Pin::new(&mut fut).poll(waker) {
-                Poll::Ready(Ok(_)) => {},
-                Poll::Ready(Err(_)) => panic!("the thread pool has shut down"),
+                Poll::Ready(_) => {},
                 Poll::Pending => return Poll::Pending,
             }
         }

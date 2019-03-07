@@ -7,9 +7,9 @@ use http::{Request, Response};
 use xmltree::{self, Element};
 
 use crate::conditional::{dav_if_match, if_match};
+use crate::davheaders::{self, DavTimeout, Depth, Timeout};
 use crate::errors::*;
 use crate::fs::{FsError, OpenOptions};
-use crate::headers::{self, DavTimeout, Depth, Timeout};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
 use crate::typed_headers::HeaderMapExt;
@@ -84,15 +84,15 @@ impl crate::DavInner {
         oo.create = true;
         if req
             .headers()
-            .typed_get::<headers::IfMatch>()
-            .map_or(false, |h| &h.0 == &headers::ETagList::Star)
+            .typed_get::<davheaders::IfMatch>()
+            .map_or(false, |h| &h.0 == &davheaders::ETagList::Star)
         {
             oo.create = false;
         }
         if req
             .headers()
-            .typed_get::<headers::IfNoneMatch>()
-            .map_or(false, |h| &h.0 == &headers::ETagList::Star)
+            .typed_get::<davheaders::IfNoneMatch>()
+            .map_or(false, |h| &h.0 == &davheaders::ETagList::Star)
         {
             oo.create_new = true;
         }
@@ -168,7 +168,7 @@ impl crate::DavInner {
 
         // output result
         res.headers_mut()
-            .typed_insert(headers::LockToken("<".to_string() + &lock.token + ">"));
+            .typed_insert(davheaders::LockToken("<".to_string() + &lock.token + ">"));
         if let None = meta {
             *res.status_mut() = SC::CREATED;
         } else {
@@ -195,7 +195,7 @@ impl crate::DavInner {
         // Must have Lock-Token header
         let t = req
             .headers()
-            .typed_get::<headers::LockToken>()
+            .typed_get::<davheaders::LockToken>()
             .ok_or(DavError::Status(SC::BAD_REQUEST))?;
         let token = t.0.trim_matches(|c| c == '<' || c == '>');
 
@@ -266,7 +266,7 @@ fn get_timeout(req: &Request<()>, refresh: bool, shared: bool) -> Option<Duratio
         Duration::new(600, 0)
     };
     match req.headers().typed_get::<Timeout>() {
-        Some(headers::Timeout(ref vec)) if vec.len() > 0 => {
+        Some(davheaders::Timeout(ref vec)) if vec.len() > 0 => {
             match vec[0] {
                 DavTimeout::Infinite => {
                     if refresh {

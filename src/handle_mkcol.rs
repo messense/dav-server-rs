@@ -2,8 +2,8 @@ use futures::Future;
 use http::{Request, Response, StatusCode};
 
 use crate::conditional::*;
+use crate::davheaders;
 use crate::fs::*;
-use crate::headers;
 use crate::typed_headers::HeaderMapExt;
 use crate::util::empty_body;
 use crate::{BoxedByteStream, DavError, DavResult};
@@ -51,7 +51,7 @@ impl crate::DavInner {
                     if path.is_collection() {
                         path.add_slash();
                         res.headers_mut()
-                            .typed_insert(headers::ContentLocation(path.as_url_string_with_prefix()));
+                            .typed_insert(davheaders::ContentLocation(path.as_url_string_with_prefix()));
                     }
                     *res.status_mut() = StatusCode::CREATED;
                 },

@@ -10,7 +10,7 @@ use crate::conditional::if_match_get_tokens;
 use crate::corostream::CoroStream;
 use crate::errors::*;
 use crate::fs::*;
-use crate::headers::Depth;
+use crate::davheaders::Depth;
 use crate::multierror::{multi_error, MultiError};
 use crate::typed_headers::HeaderMapExt;
 use crate::webpath::WebPath;

@@ -8,8 +8,8 @@ use http::StatusCode as SC;
 use http::{self, Request, Response};
 
 use crate::conditional::if_match_get_tokens;
+use crate::davheaders;
 use crate::fs::*;
-use crate::headers;
 use crate::typed_headers::{self, HeaderMapExt};
 use crate::util::{empty_body, systemtime_to_httpdate};
 use crate::{BoxedByteStream, DavError, DavResult};
@@ -89,7 +89,7 @@ impl crate::DavInner {
             if req.method() == &http::Method::PATCH {
                 if !req
                     .headers()
-                    .typed_get::<headers::ContentType>()
+                    .typed_get::<davheaders::ContentType>()
                     .map_or(false, |ct| ct.0 == SABRE)
                 {
                     return Err(DavError::StatusClose(SC::UNSUPPORTED_MEDIA_TYPE));
@@ -99,19 +99,19 @@ impl crate::DavInner {
                 };
                 let r = req
                     .headers()
-                    .typed_get::<headers::XUpdateRange>()
+                    .typed_get::<davheaders::XUpdateRange>()
                     .ok_or(DavError::StatusClose(SC::BAD_REQUEST))?;
                 match r {
-                    headers::XUpdateRange::FromTo(b, e) => {
+                    davheaders::XUpdateRange::FromTo(b, e) => {
                         if e - b + 1 != count {
                             return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
                         }
                         start = b;
                     },
-                    headers::XUpdateRange::AllFrom(b) => {
+                    davheaders::XUpdateRange::AllFrom(b) => {
                         start = b;
                     },
-                    headers::XUpdateRange::Last(n) => {
+                    davheaders::XUpdateRange::Last(n) => {
                         if let Ok(ref m) = meta {
                             if n > m.len() {
                                 return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
@@ -119,7 +119,7 @@ impl crate::DavInner {
                             start = m.len() - n;
                         }
                     },
-                    headers::XUpdateRange::Append => {
+                    davheaders::XUpdateRange::Append => {
                         oo.append = true;
                     },
                 }
@@ -128,7 +128,7 @@ impl crate::DavInner {
             }
 
             // Apache-style Content-Range header?
-            if let Some(x) = req.headers().typed_get::<headers::ContentRange>() {
+            if let Some(x) = req.headers().typed_get::<davheaders::ContentRange>() {
                 let b = x.0;
                 let e = x.1;
 
@@ -164,15 +164,15 @@ impl crate::DavInner {
             // tweak open options.
             if req
                 .headers()
-                .typed_get::<headers::IfMatch>()
-                .map_or(false, |h| &h.0 == &headers::ETagList::Star)
+                .typed_get::<davheaders::IfMatch>()
+                .map_or(false, |h| &h.0 == &davheaders::ETagList::Star)
             {
                 oo.create = false;
             }
             if req
                 .headers()
-                .typed_get::<headers::IfNoneMatch>()
-                .map_or(false, |h| &h.0 == &headers::ETagList::Star)
+                .typed_get::<davheaders::IfNoneMatch>()
+                .map_or(false, |h| &h.0 == &davheaders::ETagList::Star)
             {
                 oo.create_new = true;
             }

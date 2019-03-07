@@ -8,9 +8,9 @@ use bytes::Bytes;
 use crate::BoxedByteStream;
 use crate::conditional;
 use crate::corostream::CoroStream;
+use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
-use crate::headers;
 use crate::typed_headers::{self, ByteRangeSpec, HeaderMapExt};
 use crate::util::{empty_body,systemtime_to_httpdate,systemtime_to_timespec};
 
@@ -44,7 +44,7 @@ impl crate::DavInner {
 
             let file_etag = typed_headers::EntityTag::new(false, meta.etag());
 
-            if let Some(r) = req.headers().typed_get::<headers::IfRange>() {
+            if let Some(r) = req.headers().typed_get::<davheaders::IfRange>() {
                 do_range = conditional::ifrange_match(&r, &file_etag, meta.modified().unwrap());
             }
 

@@ -15,7 +15,7 @@ use futures::compat::Stream01CompatExt;
 
 use http::{Request, Response, StatusCode};
 
-use crate::headers;
+use crate::davheaders;
 use crate::typed_headers::HeaderMapExt;
 use crate::util::{AllowedMethods,Method,dav_method,empty_body,notfound};
 use crate::webpath::WebPath;
@@ -205,7 +205,7 @@ impl DavInner {
         if meta.is_dir() && !path.is_collection() {
             path.add_slash();
             let newloc = path.as_url_string_with_prefix();
-            res.headers_mut().typed_insert(headers::ContentLocation(newloc));
+            res.headers_mut().typed_insert(davheaders::ContentLocation(newloc));
         }
         meta
     }
@@ -247,7 +247,7 @@ impl DavInner {
 
             // debug when running the webdav litmus tests.
             if log_enabled!(log::Level::Debug) {
-                if let Some(t) = req.headers().typed_get::<headers::XLitmus>() {
+                if let Some(t) = req.headers().typed_get::<davheaders::XLitmus>() {
                     debug!("X-Litmus: {}", t);
                 }
             }

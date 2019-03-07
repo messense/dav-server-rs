@@ -14,10 +14,10 @@ use xmltree::Element;
 
 use crate::conditional::if_match_get_tokens;
 use crate::corostream::CoroStream;
+use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
 use crate::handle_lock::{list_lockdiscovery, list_supportedlock};
-use crate::headers;
 use crate::ls::*;
 use crate::multierror::MultiBuf;
 use crate::typed_headers::HeaderMapExt;
@@ -127,15 +127,15 @@ impl DavInner {
         res.headers_mut().insert("Cache-Control", cc);
         res.headers_mut().insert("Pragma", pg);
 
-        let depth = match req.headers().typed_get::<headers::Depth>() {
-            Some(headers::Depth::Infinity) | None => {
-                if let None = req.headers().typed_get::<headers::XLitmus>() {
+        let depth = match req.headers().typed_get::<davheaders::Depth>() {
+            Some(davheaders::Depth::Infinity) | None => {
+                if let None = req.headers().typed_get::<davheaders::XLitmus>() {
                     *res.status_mut() = StatusCode::FORBIDDEN;
                     *res.body_mut() =
                         single_body("PROPFIND requests with a Depth of \"infinity\" are not allowed\r\n");
                     return Ok(res);
                 }
-                headers::Depth::Infinity
+                davheaders::Depth::Infinity
             },
             Some(d) => d.clone(),
         };
@@ -193,7 +193,7 @@ impl DavInner {
             await!(pw.write_props(&path, meta))?;
             await!(pw.flush())?;
 
-            if is_dir && depth != headers::Depth::Zero {
+            if is_dir && depth != davheaders::Depth::Zero {
                 let _ = await!(self.propfind_directory(&path, depth, &mut pw));
             }
             await!(pw.close())?;
@@ -207,7 +207,7 @@ impl DavInner {
     fn propfind_directory<'a>(
         &'a self,
         path: &'a WebPath,
-        depth: headers::Depth,
+        depth: davheaders::Depth,
         propwriter: &'a mut PropWriter,
     ) -> impl Future<Output = DavResult<()>> + Send + 'a
     {
@@ -237,7 +237,7 @@ impl DavInner {
                 let is_dir = meta.is_dir();
                 await!(propwriter.write_props(&npath, meta))?;
                 await!(propwriter.flush())?;
-                if depth == headers::Depth::Infinity && is_dir {
+                if depth == davheaders::Depth::Infinity && is_dir {
                     await!(FutureObj::new(Box::pin(
                         self.propfind_directory(&npath, depth, propwriter)
                     )))?;

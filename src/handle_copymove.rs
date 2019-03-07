@@ -5,7 +5,7 @@ use http::{Request, Response, StatusCode};
 use crate::conditional::*;
 use crate::errors::*;
 use crate::fs::*;
-use crate::headers::{self, Depth};
+use crate::davheaders::{self, Depth};
 use crate::corostream::CoroStream;
 use crate::multierror::{multi_error, MultiError};
 use crate::typed_headers::HeaderMapExt;
@@ -149,7 +149,7 @@ impl crate::DavInner {
         // get and check headers.
         let overwrite = req
             .headers()
-            .typed_get::<headers::Overwrite>()
+            .typed_get::<davheaders::Overwrite>()
             .map_or(true, |o| o.0);
         let depth = match req.headers().typed_get::<Depth>() {
             Some(Depth::Infinity) | None => Depth::Infinity,
@@ -158,7 +158,7 @@ impl crate::DavInner {
         };
 
         // decode and validate destination.
-        let dest = match req.headers().typed_get::<headers::Destination>() {
+        let dest = match req.headers().typed_get::<davheaders::Destination>() {
             Some(dest) => WebPath::from_str(&dest.0, &self.prefix)?,
             None => return Err(StatusCode::BAD_REQUEST.into()),
         };

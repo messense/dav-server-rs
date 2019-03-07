@@ -4,7 +4,7 @@ use http::StatusCode;
 use http::{self, Method};
 
 use crate::fs::{DavFileSystem, DavMetaData};
-use crate::headers;
+use crate::davheaders;
 use crate::ls::DavLockSystem;
 use crate::typed_headers::{self, EntityTag, HeaderMapExt};
 use crate::webpath::WebPath;
@@ -12,21 +12,21 @@ use crate::webpath::WebPath;
 type Request = http::Request<()>;
 
 pub(crate) fn ifrange_match(
-    hdr: &headers::IfRange,
+    hdr: &davheaders::IfRange,
     tag: &typed_headers::EntityTag,
     date: SystemTime,
 ) -> bool
 {
     match hdr {
-        &headers::IfRange::Date(ref d) => typed_headers::HttpDate::from(date) < *d,
-        &headers::IfRange::EntityTag(ref t) => t == tag,
+        &davheaders::IfRange::Date(ref d) => typed_headers::HttpDate::from(date) < *d,
+        &davheaders::IfRange::EntityTag(ref t) => t == tag,
     }
 }
 
-pub(crate) fn etaglist_match(tags: &headers::ETagList, tag: &typed_headers::EntityTag) -> bool {
+pub(crate) fn etaglist_match(tags: &davheaders::ETagList, tag: &typed_headers::EntityTag) -> bool {
     match tags {
-        &headers::ETagList::Star => true,
-        &headers::ETagList::Tags(ref t) => t.iter().any(|x| x == tag),
+        &davheaders::ETagList::Star => true,
+        &davheaders::ETagList::Tags(ref t) => t.iter().any(|x| x == tag),
     }
 }
 
@@ -34,7 +34,7 @@ pub(crate) fn etaglist_match(tags: &headers::ETagList, tag: &typed_headers::Enti
 pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> Option<StatusCode> {
     let modified = meta.and_then(|m| m.modified().ok());
 
-    if let Some(r) = req.headers().typed_get::<headers::IfMatch>() {
+    if let Some(r) = req.headers().typed_get::<davheaders::IfMatch>() {
         let etag = meta.map(|m| EntityTag::new(false, m.etag()));
         if etag.map_or(true, |m| !etaglist_match(&r.0, &m)) {
             debug!("precondition fail: If-Match {:?}", r);
@@ -52,7 +52,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
         }
     }
 
-    if let Some(r) = req.headers().typed_get::<headers::IfNoneMatch>() {
+    if let Some(r) = req.headers().typed_get::<davheaders::IfNoneMatch>() {
         let etag = meta.map(|m| EntityTag::new(false, m.etag()));
         if etag.map_or(false, |m| etaglist_match(&r.0, &m)) {
             debug!("precondition fail: If-None-Match {:?}", r);
@@ -93,7 +93,7 @@ pub(crate) async fn dav_if_match<'a>(
     let mut tokens: Vec<String> = Vec::new();
     let mut any_list_ok = false;
 
-    let r = match req.headers().typed_get::<headers::If>() {
+    let r = match req.headers().typed_get::<davheaders::If>() {
         Some(r) => r,
         None => return (true, tokens),
     };
@@ -102,7 +102,7 @@ pub(crate) async fn dav_if_match<'a>(
         // save and return all statetokens that we encountered.
         let toks = iflist.conditions.iter().filter_map(|c| {
             match &c.item {
-                &headers::IfItem::StateToken(ref t) => Some(t.to_owned()),
+                &davheaders::IfItem::StateToken(ref t) => Some(t.to_owned()),
                 _ => None,
             }
         });
@@ -133,7 +133,7 @@ pub(crate) async fn dav_if_match<'a>(
         let mut list_ok = false;
         for cond in iflist.conditions.iter() {
             let cond_ok = match cond.item {
-                headers::IfItem::StateToken(ref s) => {
+                davheaders::IfItem::StateToken(ref s) => {
                     // tokens in DAV: namespace always evaluate to false (10.4.8)
                     if !valid || s.starts_with("DAV:") {
                         false
@@ -144,7 +144,7 @@ pub(crate) async fn dav_if_match<'a>(
                         }
                     }
                 },
-                headers::IfItem::ETag(ref tag) => {
+                davheaders::IfItem::ETag(ref tag) => {
                     if !valid {
                         // invalid location, so always false.
                         false

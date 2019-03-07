@@ -1,7 +1,7 @@
 use futures::Future;
 use http::{Request, Response};
 
-use crate::headers;
+use crate::davheaders;
 use crate::typed_headers::{self, HeaderMapExt};
 use crate::util::{dav_method, empty_body, Method};
 use crate::{BoxedByteStream, DavResult};
@@ -17,11 +17,11 @@ impl crate::DavInner {
 
             let h = res.headers_mut();
             if self.ls.is_some() {
-                h.typed_insert(headers::DAV("1,2,3,sabredav-partialupdate".to_string()));
+                h.typed_insert(davheaders::DAV("1,2,3,sabredav-partialupdate".to_string()));
             } else {
-                h.typed_insert(headers::DAV("1,3,sabredav-partialupdate".to_string()));
+                h.typed_insert(davheaders::DAV("1,3,sabredav-partialupdate".to_string()));
             }
-            h.typed_insert(headers::MSAuthorVia("DAV".to_string()));
+            h.typed_insert(davheaders::MSAuthorVia("DAV".to_string()));
             h.typed_insert(typed_headers::ContentLength(0));
 
             // Helper to add method to array if method is in fact
