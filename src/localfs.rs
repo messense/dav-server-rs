@@ -20,9 +20,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "linux")]
 use std::os::linux::fs::MetadataExt;
 
-use futures01;
-use futures::{Future,FutureExt,Stream,StreamExt,future};
-use futures::compat::{Future01CompatExt,Stream01CompatExt};
+use futures::{Future,FutureExt,Stream,future};
+use futures::compat::Future01CompatExt;
 
 use libc;
 use sha2::{self, Digest};
@@ -171,17 +170,13 @@ impl DavFileSystem for LocalFs {
         self.blocking(move || {
             match std::fs::read_dir(self.fspath(path)) {
                 Ok(iterator) => {
-                    let stream01 = LocalFsReadDir{
+                    let strm = LocalFsReadDir{
                         fs: self.clone(),
                         do_meta: meta,
                         buffer: VecDeque::new(),
                         iterator: iterator,
                     };
-                    let stream03 = stream01
-                        .compat()
-                        .take_while(|res| future::ready(res.is_ok()))
-                        .map(|res| res.unwrap());
-                    Ok(Box::pin(stream03) as Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>)
+                    Ok(Box::pin(strm) as Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>)
                 },
                 Err(e) => Err(e.into()),
             }
@@ -250,83 +245,55 @@ impl DavFileSystem for LocalFs {
     }
 }
 
-/*
+// The stream implementation tries to be smart and batch I/O operations
 impl Stream for LocalFsReadDir {
     type Item = Box<DavDirEntry>;
 
-    fn poll_next(self: Pin<&mut Self>, waker: &Waker) -> futures::task::Poll<Option<Self::Item>> {
-        let fut = futures01::future::poll_fn(|| {
-            let b = tokio_threadpool::blocking(|| {
-                match self.iterator.next() {
-                    Some(Err(e)) => Err(e),
-                    Some(Ok(entry)) => Ok(Some(Box::new(LocalFsDirEntry { entry: entry }) as Self::Item)),
-                    None => Ok(None)
-                }
-            });
-            match b {
-                Ok(futures01::Async::Ready(Ok(item))) => Ok(futures01::Async::Ready(item)),
-                Ok(futures01::Async::NotReady) => Ok(futures01::Async::NotReady),
-                Ok(futures01::Async::Ready(Err(item))) => Err(item),
-                Err(_) => panic!("the thread pool has shut down"),
-            }
-        }).compat();
-        // XXX the below doesn't work. Why?
-        fut.poll(waker)
-    }
-}
-*/
-
-// The stream implementation tries to be smart and batch I/O operations
-impl futures01::Stream for LocalFsReadDir {
-    type Item = Box<DavDirEntry>;
-    type Error = FsError;
-
-    fn poll(&mut self) -> futures01::Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(mut self: Pin<&mut Self>, waker: &futures::task::Waker) -> futures::task::Poll<Option<Self::Item>>
+    {
+        use futures::task::Poll;
 
         // We buffer up to 256 entries, so that we batch the blocking() calls.
         if self.buffer.len() == 0 {
 
-            // We do not use blocking() or self.blocking() here, but
-            // call straight into tokio_threadpool::blocking because:
-            //
-            // - we need something futures 0.1 compatible (this is a futures 0.1 stream)
-            // - we don't always want to run the fs_access_guard hook.
-            let b = tokio_threadpool::blocking(|| {
-                let _guard = match self.do_meta {
-                    ReadDirMeta::None => None,
-                    _ => self.fs.inner.fs_access_guard.as_ref().map(|f| f())
-                };
-                for _ in 0 .. 256 {
-                    match self.iterator.next() {
-                        Some(Ok(entry)) => {
-                            let meta = match self.do_meta {
-                                ReadDirMeta::Data => Meta::Data(std::fs::metadata(entry.path())),
-                                ReadDirMeta::DataSymlink => Meta::Data(entry.metadata()),
-                                ReadDirMeta::None => Meta::Fs(self.fs.clone()),
-                            };
-                            let d = LocalFsDirEntry { meta: meta, entry: entry };
-                            self.buffer.push_back(Ok(d))
-                        },
-                        Some(Err(e)) => {
-                            self.buffer.push_back(Err(e));
-                            break;
-                        },
-                        None => break,
+            let mut fut = futures01::future::poll_fn(|| {
+                tokio_threadpool::blocking(|| {
+                    let _guard = match self.do_meta {
+                        ReadDirMeta::None => None,
+                        _ => self.fs.inner.fs_access_guard.as_ref().map(|f| f())
+                    };
+                    for _ in 0 .. 256 {
+                        match self.iterator.next() {
+                            Some(Ok(entry)) => {
+                                let meta = match self.do_meta {
+                                    ReadDirMeta::Data => Meta::Data(std::fs::metadata(entry.path())),
+                                    ReadDirMeta::DataSymlink => Meta::Data(entry.metadata()),
+                                    ReadDirMeta::None => Meta::Fs(self.fs.clone()),
+                                };
+                                let d = LocalFsDirEntry { meta: meta, entry: entry };
+                                self.buffer.push_back(Ok(d))
+                            },
+                            Some(Err(e)) => {
+                                self.buffer.push_back(Err(e));
+                                break;
+                            },
+                            None => break,
+                        }
                     }
-                }
-            });
-            match b {
-                Ok(futures01::Async::Ready(_)) => {},
-                Ok(futures01::Async::NotReady) => return Ok(futures01::Async::NotReady),
-                Err(_) => panic!("the thread pool has shut down"),
+                })
+            }).compat();
+            match Pin::new(&mut fut).poll(waker) {
+                Poll::Ready(Ok(_)) => {},
+                Poll::Ready(Err(_)) => panic!("the thread pool has shut down"),
+                Poll::Pending => return Poll::Pending,
             }
         }
 
         // we filled the buffer, now pop from the buffer.
         match self.buffer.pop_front() {
-            Some(Ok(item)) => Ok(futures01::Async::Ready(Some(Box::new(item)))),
-            Some(Err(e)) => Err(e.into()),
-            None => Ok(futures01::Async::Ready(None))
+            Some(Ok(item)) => Poll::Ready(Some(Box::new(item))),
+            Some(Err(_e)) => Poll::Ready(None),
+            None => Poll::Ready(None),
         }
     }
 }
