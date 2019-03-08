@@ -1,3 +1,27 @@
+//! CoroStream - async closure used in a coroutine-like way to yield
+//! items to a stream.
+//!
+//! Example:
+//!
+//! ```no_run
+//! let strm = CoroStream::new(async move |mut tx| {
+//!     for i in 0..10 {
+//!         tx.send(format!("number {}", i));
+//!     }
+//!     Ok::<_, std::io::Error>(())
+//! });
+//! strm.for_each(|num| {
+//!     println!("{:?}", num);
+//! };
+//! ```
+//!
+//! The stream will produce an Item/Error (for 0.1 streams)
+//! or a Result<Item, Error> (for 0.3 streams) where the Item
+//! is an item sent with tx.send(item). Any errors returned by
+//! the async closure will be returned as the final item.
+//!
+//! On success the async closure should return Ok(()).
+//!
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -17,9 +41,9 @@ use futures::task::Waker;
 use bytes;
 use hyper;
 
-/// Future returned by the Sender.send() method, completes when the
-/// item is sent. All it actually does is to return the "Pending" state
-/// once. The next time it is polled it will return "Ready".
+/// Future returned by the Sender.send() method.
+///
+/// Completes when the item is sent.
 pub struct SenderFuture<E = ()> {
     state:   bool,
     phantom: PhantomData<E>,
@@ -63,6 +87,7 @@ impl Future03 for SenderFuture {
 
 // Only internally used by one CoroStream and never shared
 // in any other way, so we don't have to use Arc<Mutex<..>>.
+/// Type of the sender passed as first argument into the async closure.
 pub struct Sender<I, E>(Arc<Cell<Option<I>>>, PhantomData<E>);
 unsafe impl<I, E> Sync for Sender<I, E> {}
 unsafe impl<I, E> Send for Sender<I, E> {}
@@ -88,7 +113,7 @@ impl<I, E> Sender<I, E> {
 /// future can internally loop and yield items.
 ///
 /// CoroStream::new() takes a futures 0.3 Future (async closure, usually)
-/// and CorosStream then implements both a futures 0.1 Stream and a
+/// and CoroStream then implements both a futures 0.1 Stream and a
 /// futures 0.3 Stream.
 pub struct CoroStream<Item, Error> {
     item: Sender<Item, Error>,
@@ -136,7 +161,7 @@ impl<I, E> Stream01 for CoroStream<I, E> {
             // If the future returned Async::Ready, that signals the end of the stream.
             Ok(Async01::Ready(_)) => Ok(Async01::Ready(None)),
             Ok(Async01::NotReady) => {
-                // Async::NotReady means that there might be new item.
+                // Async::NotReady means that there is a new item.
                 let mut item = self.item.0.replace(None);
                 if item.is_none() {
                     Ok(Async01::NotReady)
@@ -163,7 +188,7 @@ impl<I, E: Unpin> Stream03 for CoroStream<I, E> {
             Poll03::Ready(Ok(_)) => Poll03::Ready(None),
             Poll03::Ready(Err(e)) => Poll03::Ready(Some(Err(e))),
             Poll03::Pending => {
-                // NotReady means that there might be new item.
+                // Pending means that there is a new item.
                 let mut item = self.item.0.replace(None);
                 if item.is_none() {
                     Poll03::Pending
