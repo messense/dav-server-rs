@@ -87,9 +87,9 @@ impl<I, E> Sender<I, E> {
 /// A CoroStream is an abstraction around a future, where the
 /// future can internally loop and yield items.
 ///
-/// For now it only accepts Future@0.3 and implements Stream@0.1,
-/// because it's main use-case is to generate a body stream for
-/// a hyper service function.
+/// CoroStream::new() takes a futures 0.3 Future (async closure, usually)
+/// and CorosStream then implements both a futures 0.1 Stream and a
+/// futures 0.3 Stream.
 pub struct CoroStream<Item, Error> {
     item: Sender<Item, Error>,
     fut:  Option<Pin<Box<Future03<Output = Result<(), Error>> + 'static + Send>>>,
@@ -103,7 +103,7 @@ impl<Item, Error: 'static + Send> CoroStream<Item, Error> {
     /// method "send" that can be called to send a item to the stream.
     ///
     /// The CoroStream instance that is returned impl's both
-    /// the futures 0.1 Stream and the futures 0.3 Stream.
+    /// a futures 0.1 Stream and a futures 0.3 Stream.
     pub fn new<F, R>(f: F) -> Self
     where
         F: FnOnce(Sender<Item, Error>) -> R,
@@ -124,6 +124,11 @@ impl<I, E> Stream01 for CoroStream<I, E> {
     type Error = E;
 
     fn poll(&mut self) -> Result<Async01<Option<Self::Item>>, Self::Error> {
+        // We use a futures::compat::Compat wrapper to be able to call
+        // the futures 0.3 Future in a futures 0.1 context. Because
+        // the Compat wrapper wants to to take ownership, the future
+        // is stored in an Option which we can temporarily move it out
+        // of, and then move it back in.
         let mut fut = Compat03As01::new(self.fut.take().unwrap());
         let pollres = fut.poll();
         self.fut.replace(fut.into_inner());
