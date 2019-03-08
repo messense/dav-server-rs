@@ -134,7 +134,7 @@ impl crate::DavInner {
             }
 
             // now just loop and send data.
-            *res.body_mut() = Box::new(CoroStream::stream01(async move |mut tx| {
+            *res.body_mut() = Box::new(CoroStream::new(async move |mut tx| {
                 let mut buffer = [0; 8192];
                 let zero = [0; 4096];
 
@@ -201,7 +201,7 @@ impl crate::DavInner {
             }
 
             // now just loop and send data.
-            *res.body_mut() = Box::new(CoroStream::stream01(async move |mut tx| {
+            *res.body_mut() = Box::new(CoroStream::new(async move |mut tx| {
                 // transform all entries into a dirent struct.
                 struct Dirent {
                     path: String,

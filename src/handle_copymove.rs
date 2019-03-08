@@ -238,7 +238,7 @@ impl crate::DavInner {
 
         let req_path = path.clone();
 
-        let items = CoroStream::stream03(async move |tx| {
+        let items = CoroStream::new(async move |tx| {
             let mut multierror = MultiError::new(tx);
 
             // see if we need to delete the destination first.

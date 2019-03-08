@@ -9,9 +9,8 @@ use futures01::Poll as Poll01;
 use futures01::Stream as Stream01;
 
 use futures::compat::Compat as Compat03As01;
-use futures::compat::Compat01As03;
-use futures::future::Future as Future03;
-use futures::future::FutureExt as _;
+use futures::Future as Future03;
+use futures::Stream as Stream03;
 use futures::task::Poll as Poll03;
 use futures::task::Waker;
 
@@ -93,7 +92,7 @@ impl<I, E> Sender<I, E> {
 /// a hyper service function.
 pub struct CoroStream<Item, Error> {
     item: Sender<Item, Error>,
-    fut:  Box<Future01<Item = (), Error = Error> + 'static + Send>,
+    fut:  Option<Pin<Box<Future03<Output = Result<(), Error>> + 'static + Send>>>,
 }
 
 impl<Item, Error: 'static + Send> CoroStream<Item, Error> {
@@ -102,7 +101,10 @@ impl<Item, Error: 'static + Send> CoroStream<Item, Error> {
     ///
     /// The closure is passed one argument, the sender, which has a
     /// method "send" that can be called to send a item to the stream.
-    pub fn stream01<F, R>(f: F) -> Self
+    ///
+    /// The CoroStream instance that is returned impl's both
+    /// the futures 0.1 Stream and the futures 0.3 Stream.
+    pub fn new<F, R>(f: F) -> Self
     where
         F: FnOnce(Sender<Item, Error>) -> R,
         R: Future03<Output = Result<(), Error>> + Send + 'static,
@@ -111,17 +113,8 @@ impl<Item, Error: 'static + Send> CoroStream<Item, Error> {
         let sender = Sender::new(None);
         CoroStream::<Item, Error> {
             item: sender.clone(),
-            fut:  Box::new(Compat03As01::new(f(sender).boxed())),
+            fut:  Some(Box::pin(f(sender))),
         }
-    }
-
-    pub fn stream03<F, R>(f: F) -> Compat01As03<CoroStream<Item, Error>>
-    where
-        F: FnOnce(Sender<Item, Error>) -> R,
-        R: Future03<Output = Result<(), Error>> + Send + 'static,
-        Item: 'static,
-    {
-        Compat01As03::new(CoroStream::stream01(f))
     }
 }
 
@@ -131,7 +124,10 @@ impl<I, E> Stream01 for CoroStream<I, E> {
     type Error = E;
 
     fn poll(&mut self) -> Result<Async01<Option<Self::Item>>, Self::Error> {
-        match self.fut.poll() {
+        let mut fut = Compat03As01::new(self.fut.take().unwrap());
+        let pollres = fut.poll();
+        self.fut.replace(fut.into_inner());
+        match pollres {
             // If the future returned Async::Ready, that signals the end of the stream.
             Ok(Async01::Ready(_)) => Ok(Async01::Ready(None)),
             Ok(Async01::NotReady) => {
@@ -144,6 +140,32 @@ impl<I, E> Stream01 for CoroStream<I, E> {
                 }
             },
             Err(e) => Err(e),
+        }
+    }
+}
+
+/// Stream implementation for Futures 0.3.
+impl<I, E: Unpin> Stream03 for CoroStream<I, E> {
+    type Item = Result<I, E>;
+
+    fn poll_next(mut self: Pin<&mut Self>, waker: &Waker) -> Poll03<Option<Result<I, E>>> {
+        let pollres = {
+            let fut = self.fut.as_mut().unwrap();
+            fut.as_mut().poll(waker)
+        };
+        match pollres {
+            // If the future returned Poll::Ready, that signals the end of the stream.
+            Poll03::Ready(Ok(_)) => Poll03::Ready(None),
+            Poll03::Ready(Err(e)) => Poll03::Ready(Some(Err(e))),
+            Poll03::Pending => {
+                // NotReady means that there might be new item.
+                let mut item = self.item.0.replace(None);
+                if item.is_none() {
+                    Poll03::Pending
+                } else {
+                    Poll03::Ready(Some(Ok(item.take().unwrap())))
+                }
+            },
         }
     }
 }

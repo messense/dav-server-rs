@@ -148,7 +148,7 @@ impl crate::DavInner {
 
         let req_path = path.clone();
 
-        let items = CoroStream::stream03(async move |tx| {
+        let items = CoroStream::new(async move |tx| {
             // turn the Sink into something easier to pass around.
             let mut multierror = MultiError::new(tx);
 

@@ -130,7 +130,7 @@ where
     }
 
     // Transform path/status items to XML.
-    let body = CoroStream::stream01(async move |mut tx| {
+    let body = CoroStream::new(async move |mut tx| {
         // Write initial header.
         let buffer = MultiBuf::new();
         let mut xw = EventWriter::new_with_config(

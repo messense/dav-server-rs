@@ -187,7 +187,7 @@ impl DavInner {
 
         let mut pw = PropWriter::new(&req, &mut res, name, props, &self.fs, self.ls.as_ref())?;
 
-        *res.body_mut() = Box::new(CoroStream::stream01(async move |tx| {
+        *res.body_mut() = Box::new(CoroStream::new(async move |tx| {
             pw.set_tx(tx);
             let is_dir = meta.is_dir();
             await!(pw.write_props(&path, meta))?;
@@ -460,7 +460,7 @@ impl DavInner {
 
         // And reply.
         let mut pw = PropWriter::new(&req, &mut res, "propertyupdate", Vec::new(), &self.fs, None)?;
-        *res.body_mut() = Box::new(CoroStream::stream01(async move |tx| {
+        *res.body_mut() = Box::new(CoroStream::new(async move |tx| {
             pw.set_tx(tx);
             pw.write_propresponse(&path, hm)?;
             await!(pw.close())?;
