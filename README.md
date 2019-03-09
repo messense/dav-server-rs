@@ -1,7 +1,7 @@
 
-## webdav-handler
+# WEBDAV-HANDLER
 
-Webdav` (RFC4918) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
+`Webdav` (RFC4918) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
 
 This crate implements a futures/stream based webdav handler for Rust, using
 the types from the `http` crate. It comes complete with a async filesystem
@@ -9,8 +9,9 @@ backend, so it can be used as a HTTP or WEBDAV fileserver.
 
 NOTE: this crate uses futures 0.3 + async/await code internally, so it
 only works on Rust nightly (currently rustc 1.34.0-nightly (00aae71f5 2019-02-25)).
-The external interface is futures 0.1 based though, so it can work with
-stable hyper and actix (actix with a few hacks; see examples/actix-web.rs).
+The external interface is futures 0.1 based though.
+
+# Interface.
 
 It has an interface similar to the Go x/net/webdav package:
 
@@ -20,7 +21,11 @@ It has an interface similar to the Go x/net/webdav package:
 - you can supply a "locksystem" that handles the webdav locks
 
 With some glue code, this handler can be used from HTTP server
-libraries/frameworks such as hyper or actix-web.
+libraries/frameworks such as hyper or actix-web (actix-web with a
+few hacks because webdav_handler uses tokio_threadpool::blocking;
+see examples/actix-web.rs).
+
+# Implemented standards.
 
 Currently passes the "http", "basic", "copymove", "locks", and "props"
 checks of the Webdav Litmus Test testsuite. That's all of the base
@@ -38,6 +43,8 @@ non-standard ways to do it: `PUT` with the `Content-Range` header, which is what
 Apache's `mod_dav` implements, and `PATCH` with the `X-Update-Range` header
 from `SabreDav`.
 
+# Included backends.
+
 Included are two filesystems:
 
 - localfs: serves a directory on the local filesystem
@@ -48,12 +55,12 @@ Also included are two locksystems:
 - memls: ephemeral in-memory locksystem.
 - fakels: fake locksystem. just enough LOCK/UNLOCK support for OSX/Windows.
 
-# building
+# Building.
 
 This crate uses futures@0.3 and async/await internally, so you have to
 build it with a nightly toolchain.
 
-# testing
+# Testing.
 
 ```
 RUST_LOG=webdav_handler=debug cargo run --example sample-litmus-server
@@ -62,7 +69,7 @@ RUST_LOG=webdav_handler=debug cargo run --example sample-litmus-server
 This will start a server on port 4918, serving an in-memory filesystem.
 For other options, run `cargo run --example sample-litmus-server -- --help`
 
-# webdav protocol compliance
+# Webdav protocol compliance.
 
 The standard for webdav compliance testing is "litmus", which is available
 at https://github.com/tolsen/litmus .
