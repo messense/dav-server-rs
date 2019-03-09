@@ -1,8 +1,18 @@
 
 ## webdav-handler
 
-A futures/stream based webdav handler for Rust, using the types from
-the `http` crate. It has an interface similar to the Go x/net/webdav package:
+Webdav` (RFC4918) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
+
+This crate implements a futures/stream based webdav handler for Rust, using
+the types from the `http` crate. It comes complete with a async filesystem
+backend, so it can be used as a HTTP or WEBDAV fileserver.
+
+NOTE: this crate uses futures 0.3 + async/await code internally, so it
+only works on Rust nightly (currently rustc 1.34.0-nightly (00aae71f5 2019-02-25)).
+The external interface is futures 0.1 based though, so it can work with
+stable hyper and actix (actix with a few hacks; see examples/actix-web.rs).
+
+It has an interface similar to the Go x/net/webdav package:
 
 - the library contains an HTTP handler
 - you supply a "filesystem" for backend storage, which can optionally
@@ -19,7 +29,17 @@ RFC4918 webdav specification.
 The litmus test suite also has tests for RFC3744 "acl" and "principal",
 RFC5842 "bind", and RFC3253 "versioning". Those we do not support right now.
 
+The relevant parts of the HTTP RFCs are also implemented, such as the
+preconditions (If-Match, If-None-Match, If-Modified-Since, If-Unmodified-Since,
+If-Range), partial transfers (Range).
+
+Also implemented is partial PUT, for which there are currently two
+non-standard ways to do it: `PUT` with the `Content-Range` header, which is what
+Apache's `mod_dav` implements, and `PATCH` with the `X-Update-Range` header
+from `SabreDav`.
+
 Included are two filesystems:
+
 - localfs: serves a directory on the local filesystem
 - memfs: ephemeral in-memory filesystem. supports DAV properties.
 
@@ -36,11 +56,11 @@ build it with a nightly toolchain.
 # testing
 
 ```
-RUST_LOG=webdav_handler=debug cargo run
+RUST_LOG=webdav_handler=debug cargo run --example sample-litmus-server
 ```
 
 This will start a server on port 4918, serving an in-memory filesystem.
-For other options, run `cargo run -- --help`
+For other options, run `cargo run --example sample-litmus-server -- --help`
 
 # webdav protocol compliance
 
@@ -48,7 +68,7 @@ The standard for webdav compliance testing is "litmus", which is available
 at https://github.com/tolsen/litmus .
 
 For some tests, "litmus" assumes that it is using basic authentication, so
-you must run the test server with the `--auth` flag.
+you must run the test server (sample-litmus-server) with the `--auth` flag.
 
 You do not have to install the litmus binary, it's possible to run the tests
 straight from the unpacked & compiled litmus directory:
