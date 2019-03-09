@@ -59,14 +59,10 @@ the lock database is seperate from the webdav server.
   this is the list that NextCloud uses for fake locking.
   probably (WebDAVFS|Microsoft) would do the trick.
 
-- API: do we need really need metadata() in DavDirEntry? If not, we can change
-  DavDirEntry to a struct instead of a trait and simplify a lot of things
 - API: perhaps move filesystem interface to Path/PathBuf or similar and hide WebPath
 
 - add documentation
 - add tests, tests ...
-
-- port to hyper 0.11
 
 ## Project ideas:
 
