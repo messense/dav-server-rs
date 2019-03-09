@@ -14,7 +14,6 @@ futures01 = { package = "futures", version = "0.1.25" }
 futures = { package = "futures-preview", version = "0.3.0-alpha.13", features = ["io-compat"] }
 htmlescape = "0.3.1"
 http = "0.1.16"
-hyper = "0.12.25"
 hyperx = "0.14.0"
 lazy_static = "1.3.0"
 libc = "0.2.50"
@@ -33,7 +32,13 @@ uuid = { version = "0.7.2", features = ["v4"] }
 xml-rs = "0.8.0"
 xmltree = "0.8.0"
 
-# for bin/sample-server.rs
-env_logger = "0.6.0"
+[dev-dependencies]
+actix = "0.7.9"
+actix-web = "0.7.18"
 clap = "2.32.0"
+env_logger = "0.6.0"
+failure = "0.1.5"
+hyper = "0.12.25"
+tokio = "0.1.16"
+tokio-current-thread = "0.1.5"
 
