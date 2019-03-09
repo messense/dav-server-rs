@@ -51,7 +51,7 @@
 //! ```no_run
 //! use hyper;
 //! use bytes::Bytes;
-//! use futures::{future::Future, stream::Stream};
+//! use futures01::{future::Future, stream::Stream};
 //! use webdav_handler::{DavHandler, localfs::LocalFs, fakels::FakeLs};
 //!
 //! fn main() {
