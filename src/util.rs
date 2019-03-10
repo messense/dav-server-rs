@@ -58,7 +58,9 @@ pub(crate) fn dav_method(m: &http::Method) -> DavResult<Method> {
     Ok(m)
 }
 
-/// A set of allowed `Method`s.
+/// A set of allowed [`Method`]s.
+///
+/// [`Method`]: enum.Method.html
 #[derive(Clone, Copy)]
 pub struct AllowedMethods(u32);
 

@@ -8,8 +8,7 @@
 //!
 //! NOTE: this crate uses futures 0.3 + async/await code internally, so it
 //! only works on Rust nightly (currently rustc 1.34.0-nightly (00aae71f5 2019-02-25)).
-//! The external interface is futures 0.1 based though, so it can work with
-//! stable hyper and actix.
+//! The external interface is futures 0.1 based though (might add 0.3 as well).
 //!
 //! ## Interface.
 //!
@@ -21,7 +20,8 @@
 //! - you can supply a [locksystem][DavLockSystem] that handles the webdav locks
 //!
 //! With some glue code, this handler can be used from HTTP server
-//! libraries/frameworks such as [hyper][hyper_example] or [actix-web][actix_web_example].
+//! libraries/frameworks such as [hyper] or [actix-web].
+//! (See [examples/hyper.rs][hyper_example] or [examples/actix-web][actix_web_example]).
 //!
 //! ## Implemented standards.
 //!
@@ -111,6 +111,8 @@
 //! [PartialPut]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
 //! [PUT]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
 //! [PATCH]: https://github.com/miquels/webdavfs/blob/master/SABREDAV-partialupdate.md
+//! [hyper]: https://hyper.rs/
+//! [actix-web]: https://actix.rs/
 //!
 #![feature(async_await, await_macro, futures_api)]
 
