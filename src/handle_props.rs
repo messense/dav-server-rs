@@ -21,7 +21,7 @@ use crate::handle_lock::{list_lockdiscovery, list_supportedlock};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
 use crate::typed_headers::HeaderMapExt;
-use crate::util::{empty_body, single_body, systemtime_to_httpdate, systemtime_to_rfc3339};
+use crate::util::{empty_body, dav_xml_error, systemtime_to_httpdate, systemtime_to_rfc3339};
 use crate::webpath::*;
 use crate::{BoxedByteStream, DavInner, DavResult};
 
@@ -130,9 +130,10 @@ impl DavInner {
         let depth = match req.headers().typed_get::<davheaders::Depth>() {
             Some(davheaders::Depth::Infinity) | None => {
                 if let None = req.headers().typed_get::<davheaders::XLitmus>() {
+                    let contenttype = "application/xml; charset=utf-8".parse().unwrap();
+                    res.headers_mut().insert("content-type", contenttype);
                     *res.status_mut() = StatusCode::FORBIDDEN;
-                    *res.body_mut() =
-                        single_body("PROPFIND requests with a Depth of \"infinity\" are not allowed\r\n");
+                    *res.body_mut() = dav_xml_error("<D:propfind-finite-depth/>");
                     return Ok(res);
                 }
                 davheaders::Depth::Infinity

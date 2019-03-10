@@ -116,6 +116,15 @@ pub(crate) fn single_body(body: impl Into<Bytes>) -> BoxedByteStream {
     Box::new(futures::stream::iter(body).compat())
 }
 
+pub(crate) fn dav_xml_error(body: &str) -> BoxedByteStream {
+    let xml = format!("{}\n{}\n{}\n{}\n",
+        r#"<?xml version="1.0" encoding="utf-8" ?>"#,
+        r#"<D:error xmlns:D="DAV:">"#,
+        body,
+        r#"</D:error>"#);
+    single_body(xml)
+}
+
 pub(crate) fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {
     match t.duration_since(UNIX_EPOCH) {
         Ok(t) => {
