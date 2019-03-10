@@ -1,4 +1,6 @@
-//! `Webdav` (RFC4918) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
+//! ## Generic async HTTP/WEBDAV handler
+//!
+//! [`Webdav`] ([RFC4918]) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
 //!
 //! This crate implements a futures/stream based webdav handler for Rust, using
 //! the types from the `http` crate. It comes complete with a async filesystem
@@ -9,19 +11,23 @@
 //! The external interface is futures 0.1 based though, so it can work with
 //! stable hyper and actix.
 //!
+//! ## Interface.
+//!
 //! It has an interface similar to the Go x/net/webdav package:
 //!
-//! - the library contains an HTTP handler
-//! - you supply a "filesystem" for backend storage, which can optionally
-//!   implement reading/writing "DAV properties"
-//! - you can supply a "locksystem" that handles the webdav locks
+//! - the library contains an [HTTP handler](DavHandler)
+//! - you supply a [filesystem](DavFileSystem) for backend storage, which can optionally
+//!   implement reading/writing [DAV properties](DavProp).
+//! - you can supply a [locksystem][DavLockSystem] that handles the webdav locks
 //!
 //! With some glue code, this handler can be used from HTTP server
-//! libraries/frameworks such as hyper or actix-web.
+//! libraries/frameworks such as [hyper][hyper_example] or [actix-web][actix_web_example].
+//!
+//! ## Implemented standards.
 //!
 //! Currently passes the "basic", "copymove", "props", "locks" and "http"
 //! checks of the Webdav Litmus Test testsuite. That's all of the base
-//! RFC4918 webdav specification.
+//! [RFC4918] webdav specification.
 //!
 //! The litmus test suite also has tests for RFC3744 "acl" and "principal",
 //! RFC5842 "bind", and RFC3253 "versioning". Those we do not support right now.
@@ -30,28 +36,33 @@
 //! preconditions (If-Match, If-None-Match, If-Modified-Since, If-Unmodified-Since,
 //! If-Range), partial transfers (Range).
 //!
-//! Also implemented is partial PUT, for which there are currently two
-//! non-standard ways to do it: `PUT` with the `Content-Range` header, which is what
-//! Apache's `mod_dav` implements, and `PATCH` with the `X-Update-Range` header
-//! from `SabreDav`.
+//! Also implemented is `partial PUT`, for which there are currently [two
+//! non-standard ways][PartialPut] to do it: [`PUT` with the `Content-Range` header][PUT],
+//! which is what Apache's `mod_dav` implements, and [`PATCH` with the `X-Update-Range`
+//! header][PATCH] from `SabreDav`.
+//!
+//! ## Backends.
 //!
 //! Included are two filesystems:
 //!
-//! - localfs: serves a directory on the local filesystem
-//! - memfs: ephemeral in-memory filesystem. supports DAV properties.
+//! - [`LocalFs`]: serves a directory on the local filesystem
+//! - [`MemFs`]: ephemeral in-memory filesystem. supports DAV properties.
 //!
 //! Also included are two locksystems:
 //!
-//! - memls: ephemeral in-memory locksystem.
-//! - fakels: fake locksystem. just enough LOCK/UNLOCK support for OSX/Windows.
+//! - [`MemLs`]: ephemeral in-memory locksystem.
+//! - [`FakeLs`]: fake locksystem. just enough LOCK/UNLOCK support for OSX/Windows.
+//!
+//! ## Example.
 //!
 //! Example server that serves the /tmp directory in r/w mode. You should be
 //! able to mount this network share from Linux, OSX and Windows.
 //!
 //! ```no_run
+//! # extern crate futures01 as futures;
 //! use hyper;
 //! use bytes::Bytes;
-//! use futures01::{future::Future, stream::Stream};
+//! use futures::{future::Future, stream::Stream};
 //! use webdav_handler::{DavHandler, localfs::LocalFs, fakels::FakeLs};
 //!
 //! fn main() {
@@ -85,6 +96,22 @@
 //!     hyper::rt::run(server);
 //! }
 //! ```
+//! [DavHandler]: struct.DavHandler.html
+//! [DavFileSystem]: fs/struct.DavFileSystem.html
+//! [DavLockSystem]: ls/struct.DavLockSystem.html
+//! [DavProp]: fs/struct.DavProp.html
+//! [`WebDav`]: https://tools.ietf.org/html/rfc4918
+//! [RFC4918]: https://tools.ietf.org/html/rfc4918
+//! [`MemLs`]: memls/index.html
+//! [`MemFs`]: memfs/index.html
+//! [`LocalFs`]: localfs/index.html
+//! [`FakeLs`]: fakels/index.html
+//! [hyper_example]: https://github.xs4all.net/mikevs/webdav-handler-rs/blob/master/examples/hyper.rs
+//! [actix_web_example]: https://github.xs4all.net/mikevs/webdav-handler-rs/blob/master/examples/actix-web.rs
+//! [PartialPut]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
+//! [PUT]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
+//! [PATCH]: https://github.com/miquels/webdavfs/blob/master/SABREDAV-partialupdate.md
+//!
 #![feature(async_await, await_macro, futures_api)]
 
 #[macro_use]
@@ -97,7 +124,7 @@ extern crate lazy_static;
 extern crate percent_encoding;
 
 mod conditional;
-mod corostream;
+pub mod corostream;
 mod davhandler;
 mod davheaders;
 mod errors;

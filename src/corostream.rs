@@ -1,9 +1,8 @@
-//! CoroStream - async closure used in a coroutine-like way to produce
-//! items for a stream.
+//! Use an [async closure][async] in a coroutine-like way to produce items for a stream.
 //!
 //! Example:
 //!
-//! ```rust ignore
+//! ```rust text
 //! #![feature(async_await, await_macro, futures_api)]
 //! use futures::{future, Future, Stream, StreamExt};
 //! use futures::executor::block_on;
@@ -29,13 +28,18 @@
 //!
 //! ```
 //!
-//! The stream will produce an Item/Error (for 0.1 streams)
-//! or a Result<Item, Error> (for 0.3 streams) where the Item
-//! is an item sent with tx.send(item). Any errors returned by
+//! The stream will produce an `Item/Error` (for [0.1 streams][Stream01])
+//! or a `Result<Item, Error>` (for [0.3 streams][Stream03]) where the `Item`
+//! is an item sent with [tx.send(item)][send]. Any errors returned by
 //! the async closure will be returned as an error value on
 //! the stream.
 //!
-//! On success the async closure should return Ok(()).
+//! On success the async closure should return `Ok(())`.
+//!
+//! [async]: https://rust-lang.github.io/async-book/getting_started/async_await_primer.html
+//! [Stream01]: https://docs.rs/futures/0.1/futures/stream/trait.Stream.html
+//! [Stream03]: https://rust-lang-nursery.github.io/futures-api-docs/0.3.0-alpha.13/futures/stream/trait.Stream.html
+//! [send]: corostream/struct.Sender.html#method.send
 //!
 use std::cell::Cell;
 use std::marker::PhantomData;
@@ -108,12 +112,17 @@ impl<I, E> Sender<I, E> {
     }
 }
 
-/// A CoroStream is an abstraction around a future, where the
+/// An abstraction around a future, where the
 /// future can internally loop and yield items.
 ///
-/// CoroStream::new() takes a futures 0.3 Future (async closure, usually)
-/// and CoroStream then implements both a futures 0.1 Stream and a
-/// futures 0.3 Stream.
+/// CoroStream::new() takes a [futures 0.3 Future][Future03] ([async closure][async], usually)
+/// and CoroStream then implements both a [futures 0.1 Stream][Stream01] and a
+/// [futures 0.3 Stream][Stream03].
+///
+/// [async]: https://rust-lang.github.io/async-book/getting_started/async_await_primer.html
+/// [Future03]: https://doc.rust-lang.org/nightly/std/future/trait.Future.html
+/// [Stream01]: https://docs.rs/futures/0.1/futures/stream/trait.Stream.html
+/// [Stream03]: https://rust-lang-nursery.github.io/futures-api-docs/0.3.0-alpha.13/futures/stream/trait.Stream.html
 #[must_use]
 pub struct CoroStream<Item, Error> {
     item: Sender<Item, Error>,
