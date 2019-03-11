@@ -12,7 +12,7 @@ use crate::errors::*;
 use crate::fs::*;
 use crate::typed_headers::{self, ByteRangeSpec, HeaderMapExt};
 use crate::util::{empty_body, systemtime_to_httpdate, systemtime_to_timespec};
-use crate::BoxedByteStream;
+use crate::{BoxedByteStream, Method};
 
 impl crate::DavInner {
     pub(crate) fn handle_get(
@@ -187,6 +187,14 @@ impl crate::DavInner {
                 res.headers_mut().typed_insert(typed_headers::ContentLength(0));
                 *res.status_mut() = StatusCode::FOUND;
                 return Ok(res);
+            }
+
+            // If we do not allow PROPFIND, we don't allow directory indexes either.
+            if let Some(ref a) = self.allow {
+                if !a.allowed(Method::PropFind) {
+                    debug!("method {} not allowed on request {}", req.method(), req.uri());
+                    return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
+                }
             }
 
             // read directory or bail.
