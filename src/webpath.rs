@@ -235,8 +235,8 @@ impl WebPath {
         std::string::String::from_utf8(p).unwrap()
     }
 
-    // as utf8 string, with prefix.
-    pub(crate) fn as_utf8_string_with_prefix(&self) -> String {
+    /// as utf8 string, with prefix. uses String::from_utf8_lossy.
+    pub fn as_utf8_string_with_prefix(&self) -> String {
         let mut p = self.prefix.clone();
         p.extend_from_slice(&self.path);
         return String::from_utf8_lossy(&p).to_string();
