@@ -61,7 +61,7 @@ impl crate::DavInner {
         body: ReqBody,
     ) -> impl Future<Output = DavResult<Response<BoxedByteStream>>>
     where
-        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + 'static,
+        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin,
         ReqError: StdError + Sync + Send + 'static,
     {
         async move {

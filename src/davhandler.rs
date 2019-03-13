@@ -136,7 +136,7 @@ impl DavHandler {
         req: Request<ReqBody>,
     ) -> impl futures01::Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
     where
-        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
         if self.config.fs.is_none() {
@@ -159,7 +159,7 @@ impl DavHandler {
         req: Request<ReqBody>,
     ) -> impl futures01::Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
     where
-        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
         let orig = &*self.config;
@@ -210,13 +210,13 @@ impl DavInner {
     }
 
     // drain request body and return length.
-    pub(crate) async fn read_request<ReqBody, ReqError>(
-        &self,
+    pub(crate) async fn read_request<'a, ReqBody, ReqError>(
+        &'a self,
         body: ReqBody,
         max_size: usize,
     ) -> DavResult<Vec<u8>>
     where
-        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send + 'a,
         ReqError: StdError + Send + Sync + 'static,
     {
         let mut body = futures::compat::Compat01As03::new(body);
@@ -239,7 +239,7 @@ impl DavInner {
         req: Request<ReqBody>,
     ) -> impl futures01::Future<Item = Response<BoxedByteStream>, Error = io::Error>
     where
-        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + 'static,
+        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
         let fut = async move {
