@@ -211,8 +211,8 @@ impl WebPath {
         std::string::String::from_utf8(p).unwrap()
     }
 
-    // as URL encoded string, with prefix.
-    pub(crate) fn as_url_string_with_prefix(&self) -> String {
+    /// as URL encoded string, with prefix.
+    pub fn as_url_string_with_prefix(&self) -> String {
         let mut p = encode_path(&self.path);
         if self.prefix.len() > 0 {
             let mut u = encode_path(&self.prefix);
@@ -331,7 +331,8 @@ impl WebPath {
         }
     }
 
-    pub(crate) fn file_name(&self) -> &[u8] {
+    /// The filename is the last segment of the path. Can be empty.
+    pub fn file_name(&self) -> &[u8] {
         let segs = self
             .path
             .split(|&c| c == b'/')
@@ -344,7 +345,17 @@ impl WebPath {
         }
     }
 
-    pub(crate) fn push_segment(&mut self, b: &[u8]) {
+    /// Count the number of segments the path has. "/" has 0.
+    pub fn num_segments(&self) -> usize {
+        self
+            .path
+            .split(|&c| c == b'/')
+            .filter(|e| e.len() > 0)
+            .count()
+    }
+
+    /// Add a segment to the end of the path.
+    pub fn push_segment(&mut self, b: &[u8]) {
         if !self.is_collection() {
             self.path.push(b'/');
         }
