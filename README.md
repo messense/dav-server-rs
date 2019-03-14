@@ -256,3 +256,10 @@ WARNING: Server did not return the property: resource-id
 <- summary for `http': of 4 tests run: 4 passed, 0 failed. 100.0%
 
 ```
+
+## Copyright and License.
+
+ * © 2018, 2019 XS4ALL Internet bv
+ * © 2018, 2019 Miquel van Smoorenburg
+ * [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0)
+

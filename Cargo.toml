@@ -3,6 +3,7 @@ name = "webdav-handler"
 version = "0.1.0"
 authors = ["Miquel van Smoorenburg <mikevs@xs4all.net>"]
 edition = "2018"
+license = "Apache-2.0"
 
 [lib]
 name = "webdav_handler"
