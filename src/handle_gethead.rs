@@ -252,7 +252,7 @@ impl crate::DavInner {
                 });
 
                 // and output html
-                let upath = htmlescape::encode_minimal(&path.as_url_string());
+                let upath = htmlescape::encode_minimal(&path.as_url_string_with_prefix());
                 let mut w = String::new();
                 w.push_str("<html><head>");
                 w.push_str(&format!("<title>Index of {}</title>", upath));
