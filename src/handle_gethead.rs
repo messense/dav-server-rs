@@ -1,3 +1,6 @@
+use std::cmp;
+use std::io::Write;
+
 use futures::{Future, StreamExt};
 use htmlescape;
 use http::{status::StatusCode, Request, Response};
@@ -13,6 +16,17 @@ use crate::fs::*;
 use crate::typed_headers::{self, ByteRangeSpec, HeaderMapExt};
 use crate::util::{empty_body, systemtime_to_httpdate, systemtime_to_timespec};
 use crate::{BoxedByteStream, Method};
+
+struct Range {
+    start:  u64,
+    count:  u64,
+}
+
+const BOUNDARY: &str = "BOUNDARY";
+const BOUNDARY_START: &str = "\n--BOUNDARY\n";
+const BOUNDARY_END: &str = "\n--BOUNDARY--\n";
+
+const READ_BUF_SIZE: usize = 16384;
 
 impl crate::DavInner {
     pub(crate) fn handle_get(
@@ -36,47 +50,35 @@ impl crate::DavInner {
             if !meta.is_file() {
                 return Err(DavError::Status(StatusCode::METHOD_NOT_ALLOWED));
             }
-
-            let mut start = 0;
-            let mut count = meta.len();
-            let len = count;
-            let mut do_range = true;
-
+            let len = meta.len();
+            let mut curpos = 0u64;
             let file_etag = typed_headers::EntityTag::new(false, meta.etag());
 
-            if let Some(r) = req.headers().typed_get::<davheaders::IfRange>() {
-                do_range = conditional::ifrange_match(&r, &file_etag, meta.modified().unwrap());
-            }
+            let mut ranges = Vec::new();
+            let do_range = match req.headers().typed_get::<davheaders::IfRange>() {
+                Some(r) => conditional::ifrange_match(&r, &file_etag, meta.modified().unwrap()),
+                None => true,
+            };
 
-            // see if we want to get a range.
+            // see if we want to get one or more ranges.
             if do_range {
-                do_range = false;
                 if let Some(r) = req.headers().typed_get::<typed_headers::Range>() {
+                    debug!("handle_gethead: range header {:?}", r);
                     match r {
-                        typed_headers::Range::Bytes(ref ranges) => {
-                            // we only support a single range
-                            if ranges.len() == 1 {
-                                match &ranges[0] {
-                                    &ByteRangeSpec::FromTo(s, e) => {
-                                        start = s;
-                                        count = e - s + 1;
-                                    },
-                                    &ByteRangeSpec::AllFrom(s) => {
-                                        start = s;
-                                        count = len - s;
-                                    },
-                                    &ByteRangeSpec::Last(n) => {
-                                        start = len - n;
-                                        count = n;
-                                    },
-                                }
+                        typed_headers::Range::Bytes(ref byteranges) => {
+                            for range in byteranges {
+                                let (start, mut count) = match range {
+                                    &ByteRangeSpec::FromTo(s, e) => (s, e - s + 1),
+                                    &ByteRangeSpec::AllFrom(s) => (s, len - s),
+                                    &ByteRangeSpec::Last(n) => (len - n, n),
+                                };
                                 if start >= len {
                                     return Err(DavError::Status(StatusCode::RANGE_NOT_SATISFIABLE));
                                 }
                                 if start + count > len {
                                     count = len - start;
                                 }
-                                do_range = true;
+                                ranges.push(Range{start, count});
                             }
                         },
                         _ => {},
@@ -104,59 +106,95 @@ impl crate::DavInner {
                 return Err(DavError::Status(s));
             }
 
-            if do_range {
-                // seek to beginning of requested data.
-                if let Err(_) = await!(file.seek(std::io::SeekFrom::Start(start))) {
+            if ranges.len() > 0 {
+                // seek to beginning of the first range.
+                if let Err(_) = await!(file.seek(std::io::SeekFrom::Start(ranges[0].start))) {
+                    let r = format!("bytes */{}", len);
+                    res.headers_mut().insert("Content-Range", r.parse().unwrap());
                     *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
                     return Ok(res);
                 }
+                curpos = ranges[0].start;
 
-                // set partial-content status and add content-range header.
-                let r = format!("bytes {}-{}/{}", start, start + count - 1, len);
-                res.headers_mut().insert("Content-Range", r.parse().unwrap());
                 *res.status_mut() = StatusCode::PARTIAL_CONTENT;
+                if ranges.len() == 1 {
+                    // add content-range header.
+                    let r = format!("bytes {}-{}/{}",
+                                    ranges[0].start, ranges[0].start + ranges[0].count - 1, len);
+                    res.headers_mut().insert("Content-Range", r.parse().unwrap());
+                } else {
+                    // add content-type header.
+                    let r = format!("multipart/byteranges; boundary={}", BOUNDARY);
+                    res.headers_mut().insert("Content-Type", r.parse().unwrap());
+                }
             } else {
                 // normal request, send entire file.
+                res.headers_mut()
+                    .typed_insert(typed_headers::AcceptRanges(vec![typed_headers::RangeUnit::Bytes]));
                 *res.status_mut() = StatusCode::OK;
+                ranges.push(Range{start: 0, count: len});
             }
 
-            // set content-length and start.
-            res.headers_mut()
-                .insert("Content-Type", path.get_mime_type_str().parse().unwrap());
-            res.headers_mut()
-                .typed_insert(typed_headers::ContentLength(count));
-            res.headers_mut()
-                .typed_insert(typed_headers::AcceptRanges(vec![typed_headers::RangeUnit::Bytes]));
+            // set content-length and start if we're not doing multipart.
+            let content_type = path.get_mime_type_str();
+            if ranges.len() <= 1 {
+                res.headers_mut().insert("Content-Type", content_type.parse().unwrap());
+                res.headers_mut().typed_insert(typed_headers::ContentLength(len));
+            }
 
-            debug!("head is {}", head);
             if head {
                 return Ok(res);
             }
 
             // now just loop and send data.
             *res.body_mut() = Box::new(CoroStream::new(async move |mut tx| {
-                let mut buffer = [0; 8192];
+                let mut buffer = [0; READ_BUF_SIZE];
                 let zero = [0; 4096];
 
-                debug!("count = {}", count);
+                let multipart = ranges.len() > 1;
+                for range in ranges {
+                    if multipart {
+                        let mut hdrs = Vec::new();
+                        let _ = write!(hdrs, "{}", BOUNDARY_START);
+                        let _ = writeln!(hdrs, "Content-Range: bytes {}-{}/{}", 
+                                range.start, range.start + range.count - 1, len);
+                        let _ = writeln!(hdrs, "Content-Type: {}", content_type);
+                        let _ = writeln!(hdrs, "");
+                        await!(tx.send(Bytes::from(hdrs)));
+                    }
 
-                while count > 0 {
-                    let data;
-                    let mut n = await!(file.read_bytes(&mut buffer[..]))?;
-                    if n > count as usize {
-                        n = count as usize;
+                    debug!("handle_get: start = {}, count = {}", range.start, range.count);
+                    if curpos != range.start {
+                        // this should never fail, but if it does, just skip this range
+                        // and try the next one.
+                        if let Err(_e) = await!(file.seek(std::io::SeekFrom::Start(range.start))) {
+                            debug!("handle_get: failed to seek to {}: {:?}", range.start, _e);
+                            continue;
+                        }
+                        curpos = range.start;
                     }
-                    if n == 0 {
-                        // this is a cop out. if the file got truncated, just
-                        // return zero bytes instead of file content.
-                        n = if count > 4096 { 4096 } else { count as usize };
-                        data = &zero[..n];
-                    } else {
-                        data = &buffer[..n];
+
+                    let mut count = range.count;
+                    while count > 0 {
+                        let data;
+                        let blen = cmp::min(count, READ_BUF_SIZE as u64) as usize;
+                        let mut n = await!(file.read_bytes(&mut buffer[..blen]))?;
+                        if n == 0 {
+                            // this is a cop out. if the file got truncated, just
+                            // return zero bytes instead of file content.
+                            n = if count > 4096 { 4096 } else { count as usize };
+                            data = &zero[..n];
+                        } else {
+                            data = &buffer[..n];
+                        }
+                        count -= n as u64;
+                        curpos += n as u64;
+                        debug!("sending {} bytes", data.len());
+                        await!(tx.send(Bytes::from(data)));
                     }
-                    count -= n as u64;
-                    debug!("sending {} bytes", data.len());
-                    await!(tx.send(Bytes::from(data)));
+                }
+                if multipart {
+                    await!(tx.send(Bytes::from(BOUNDARY_END)));
                 }
                 Ok::<(), std::io::Error>(())
             }));
