@@ -299,8 +299,8 @@ impl WebPath {
         self.path.truncate(l);
     }
 
-    // add a slash
-    pub(crate) fn add_slash(&mut self) {
+    /// add a slash to the end of the path (if not already present).
+    pub fn add_slash(&mut self) {
         if !self.is_collection() {
             self.path.push(b'/');
         }

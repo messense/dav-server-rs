@@ -365,7 +365,7 @@ impl<MD: Clone + DavMetaData + 'static> BoxCloneMd for MD {
 }
 
 /// OpenOptions for open().
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct OpenOptions {
     /// open for reading
     pub read: bool,
