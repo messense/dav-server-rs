@@ -124,13 +124,12 @@ impl LocalFs {
         where F: FnOnce() -> T + 'a,
               T: 'a
     {
-        future::ready(Some(func))
-            .then(move |mut func| {
+        future::ready(Some(func)).then(move |mut func| {
             let fut03 = futures01::future::poll_fn(move || {
                 tokio_threadpool::blocking(|| {
                     let _guard = self.inner.fs_access_guard.as_ref().map(|f| f());
                     (func.take().unwrap())()
-                }
+                })
             })
             .compat()
             .then(|res| match res {
