@@ -213,7 +213,11 @@ impl DavInner {
     ) -> impl Future<Output = DavResult<()>> + Send + 'a
     {
         async move {
-            let mut entries = match await!(self.fs.read_dir(path, ReadDirMeta::Data)) {
+            let readdir_meta = match self.hide_symlinks {
+                Some(true)|None => ReadDirMeta::DataSymlink,
+                Some(false) => ReadDirMeta::Data,
+            };
+            let mut entries = match await!(self.fs.read_dir(path, readdir_meta)) {
                 Ok(entries) => entries,
                 Err(e) => {
                     // if we cannot read_dir, just skip it.
@@ -232,6 +236,9 @@ impl DavInner {
                         continue;
                     },
                 };
+                if meta.is_symlink() {
+                    continue;
+                }
                 if meta.is_dir() {
                     npath.add_slash();
                 }

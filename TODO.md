@@ -15,6 +15,10 @@ Any headers included with DELETE MUST be applied in processing every resource to
 Currently we do not do this- we do apply the If-Match, If-None-Match, If-Modified-Since,
 If-Unmodified-Since, and If headers to the request url, but not recursively.
 
+### Props on symbolic links
+
+Should probably disallow that
+
 ### In MOVE/DELETE test locks seperately per resource
 
 Right now we check if we hold the locks (if any) for the request url, and paths

@@ -45,6 +45,8 @@ pub struct DavConfig {
     /// Principal is webdav speak for "user", used to give locks an owner (if a locksystem is
     /// active).
     pub principal: Option<String>,
+    /// Hide symbolic links? `None` maps to `true`.
+    pub hide_symlinks: Option<bool>,
 }
 
 // The actual inner struct.
@@ -52,21 +54,23 @@ pub struct DavConfig {
 // At the start of the request, DavConfig is used to generate
 // a DavInner struct. DavInner::handle then handles the request.
 pub(crate) struct DavInner {
-    pub prefix:    String,
-    pub fs:        Box<DavFileSystem>,
-    pub ls:        Option<Box<DavLockSystem>>,
-    pub allow:     Option<AllowedMethods>,
-    pub principal: Option<String>,
+    pub prefix:        String,
+    pub fs:            Box<DavFileSystem>,
+    pub ls:            Option<Box<DavLockSystem>>,
+    pub allow:         Option<AllowedMethods>,
+    pub principal:     Option<String>,
+    pub hide_symlinks: Option<bool>,
 }
 
 impl From<DavConfig> for DavInner {
     fn from(cfg: DavConfig) -> Self {
         DavInner {
-            prefix:    cfg.prefix.unwrap_or("".to_string()),
-            fs:        cfg.fs.unwrap(),
-            ls:        cfg.ls,
-            allow:     cfg.allow,
-            principal: cfg.principal,
+            prefix:        cfg.prefix.unwrap_or("".to_string()),
+            fs:            cfg.fs.unwrap(),
+            ls:            cfg.ls,
+            allow:         cfg.allow,
+            principal:     cfg.principal,
+            hide_symlinks: cfg.hide_symlinks,
         }
     }
 }
@@ -74,15 +78,16 @@ impl From<DavConfig> for DavInner {
 impl From<&DavConfig> for DavInner {
     fn from(cfg: &DavConfig) -> Self {
         DavInner {
-            prefix:    cfg
+            prefix:        cfg
                 .prefix
                 .as_ref()
                 .map(|p| p.to_owned())
                 .unwrap_or("".to_string()),
-            fs:        cfg.fs.clone().unwrap(),
-            ls:        cfg.ls.clone(),
-            allow:     cfg.allow,
-            principal: cfg.principal.clone(),
+            fs:            cfg.fs.clone().unwrap(),
+            ls:            cfg.ls.clone(),
+            allow:         cfg.allow,
+            principal:     cfg.principal.clone(),
+            hide_symlinks: cfg.hide_symlinks.clone(),
         }
     }
 }
@@ -90,11 +95,12 @@ impl From<&DavConfig> for DavInner {
 impl Clone for DavInner {
     fn clone(&self) -> Self {
         DavInner {
-            prefix:    self.prefix.clone(),
-            fs:        self.fs.clone(),
-            ls:        self.ls.clone(),
-            allow:     self.allow.clone(),
-            principal: self.principal.clone(),
+            prefix:        self.prefix.clone(),
+            fs:            self.fs.clone(),
+            ls:            self.ls.clone(),
+            allow:         self.allow.clone(),
+            principal:     self.principal.clone(),
+            hide_symlinks: self.hide_symlinks.clone(),
         }
     }
 }
@@ -106,11 +112,12 @@ impl DavHandler {
     /// - `ls:` Optional locksystem backend
     pub fn new(prefix: Option<&str>, fs: Box<DavFileSystem>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
         let config = DavConfig {
-            prefix:    prefix.map(|s| s.to_string()),
-            fs:        Some(fs),
-            ls:        ls,
-            allow:     None,
-            principal: None,
+            prefix:        prefix.map(|s| s.to_string()),
+            fs:            Some(fs),
+            ls:            ls,
+            allow:         None,
+            principal:     None,
+            hide_symlinks: None,
         };
         DavHandler {
             config: Arc::new(config),
@@ -164,11 +171,12 @@ impl DavHandler {
     {
         let orig = &*self.config;
         let newconf = DavConfig {
-            prefix:    config.prefix.or(orig.prefix.clone()),
-            fs:        config.fs.or(orig.fs.clone()),
-            ls:        config.ls.or(orig.ls.clone()),
-            allow:     config.allow.or(orig.allow.clone()),
-            principal: config.principal.or(orig.principal.clone()),
+            prefix:        config.prefix.or(orig.prefix.clone()),
+            fs:            config.fs.or(orig.fs.clone()),
+            ls:            config.ls.or(orig.ls.clone()),
+            allow:         config.allow.or(orig.allow.clone()),
+            principal:     config.principal.or(orig.principal.clone()),
+            hide_symlinks: config.hide_symlinks.or(orig.hide_symlinks.clone()),
         };
         if newconf.fs.is_none() {
             return futures01::future::Either::A(notfound());
