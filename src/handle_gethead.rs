@@ -139,7 +139,7 @@ impl crate::DavInner {
             let content_type = path.get_mime_type_str();
             if ranges.len() <= 1 {
                 res.headers_mut().insert("Content-Type", content_type.parse().unwrap());
-                res.headers_mut().typed_insert(typed_headers::ContentLength(len));
+                res.headers_mut().typed_insert(typed_headers::ContentLength(ranges[0].count));
             }
 
             if head {
