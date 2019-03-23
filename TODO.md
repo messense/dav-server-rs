@@ -74,10 +74,25 @@ the lock database is seperate from the webdav server.
   scalable extended attributes. ext2/3/4 can store max 4KB. On XFS we can
   then also store creationdate in an attribute.
 
-- Add support for setting mtime/atime
+- Add support for changing live props like mtime/atime
+  - atime could be done with Win32LastAccessTime
+  - allow setting apache "executable" prop
+  - it appears that there are webdav implementations that allow
+    you to set "DAV:getcontentlength".
 
-- return windows "hidden" attribute for windows clients if filename starts with "."
+- we could support (at least return) some Win32FileAttributes:
+  - readonly:  00000001   (unix mode)
+  - hidden:    00000002   (if file starts with a "."
+  - dir:       00000010
+  - file:      00000020
 
+  readonly on dirs means "all files in the directory" so that
+  is best not implemented.
+
+- allow setting of some windows live props:
+  - readonly (on files, via chmod)
+  - Win32LastAccessTime, Win32LastModifiedTime
+ 
 - implement [RFC4437 Webdav Redirectref](https://tools.ietf.org/html/rfc4437) -- basically support for symbolic links
 
 - implement [RFC3744 Webdac ACL](https://tools.ietf.org/html/rfc3744)
