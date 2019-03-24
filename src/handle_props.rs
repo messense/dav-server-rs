@@ -61,8 +61,29 @@ const ALLPROP_STR: &'static [&'static str] = &[
     "D:supportedlock",
 ];
 
+// properties returned by PROPFIND with empty body for Microsoft clients.
+const MS_ALLPROP_STR: &'static [&'static str] = &[
+    "D:creationdate",
+    "D:displayname",
+    "D:getcontentlanguage",
+    "D:getcontentlength",
+    "D:getcontenttype",
+    "D:getetag",
+    "D:getlastmodified",
+    "D:lockdiscovery",
+    "D:resourcetype",
+    "D:supportedlock",
+    "D:quota-available-bytes",
+    "D:quota-used-bytes",
+    "M:Win32CreationTime",
+    "M:Win32FileAttributes",
+    "M:Win32LastAccessTime",
+    "M:Win32LastModifiedTime",
+];
+
 lazy_static! {
     static ref ALLPROP: Vec<Element> = init_staticprop(ALLPROP_STR);
+    static ref MS_ALLPROP: Vec<Element> = init_staticprop(MS_ALLPROP_STR);
     static ref PROPNAME: Vec<Element> = init_staticprop(PROPNAME_STR);
 }
 
@@ -155,7 +176,6 @@ impl DavInner {
                         return Err(DavError::XmlParseError.into());
                     }
                 },
-                // Err(e) => return Err(daverror(&mut res, e)),
                 Err(_) => return Err(DavError::XmlParseError.into()),
             };
         }
@@ -505,11 +525,20 @@ impl PropWriter {
             standalone: None,
         })?;
 
+        // user-agent header.
+        let ua = match req.headers().get("user-agent") {
+            Some(s) => s.to_str().unwrap_or(""),
+            None => "",
+        };
 
         if name != "prop" && name != "propertyupdate" {
             let mut v = Vec::new();
             let iter = if name == "allprop" {
-                ALLPROP.iter()
+                if ua.contains("Microsoft") {
+                    MS_ALLPROP.iter()
+                } else {
+                    ALLPROP.iter()
+                }
             } else {
                 PROPNAME.iter()
             };
@@ -545,11 +574,6 @@ impl PropWriter {
             }
         }
         emitter.write(ev)?;
-
-        let ua = match req.headers().get("user-agent") {
-            Some(s) => s.to_str().unwrap_or(""),
-            None => "",
-        };
 
         Ok(PropWriter {
             emitter:   emitter,
