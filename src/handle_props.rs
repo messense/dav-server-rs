@@ -148,7 +148,8 @@ impl DavInner {
         if xmldata.len() > 0 {
             root = match Element::parse(Cursor::new(xmldata)) {
                 Ok(t) => {
-                    if t.name == "propfind" && t.namespace == Some("DAV:".to_owned()) {
+                    if t.name == "propfind" &&
+                        t.namespace.as_ref().map(|s| s.as_str()) == Some("DAV:") {
                         Some(t)
                     } else {
                         return Err(DavError::XmlParseError.into());
@@ -567,18 +568,31 @@ impl PropWriter {
         self.tx = Some(tx)
     }
 
-    fn build_elem<T>(&self, content: bool, e: &Element, text: T) -> DavResult<StatusElement>
+    fn build_elem<T>(&self, content: bool, pfx: &str, e: &Element, text: T)
+        -> DavResult<StatusElement>
     where T: Into<String> {
-        let mut e = e.clone();
-        if content {
+        let t = if content {
             let t = text.into();
             if t != "" {
-                e.text = Some(t);
+                Some(t)
+            } else {
+                None
             }
-        }
+        } else {
+            None
+        };
+        let elem = Element{
+            prefix: Some(pfx.to_string()),
+            namespace: None,
+            namespaces: None,
+            name: e.name.clone(),
+            attributes: HashMap::new(),
+            children: Vec::new(),
+            text: t,
+        };
         Ok(StatusElement {
             status:  StatusCode::OK,
-            element: e,
+            element: elem,
         })
     }
 
@@ -638,14 +652,16 @@ impl PropWriter {
             // in some cases, a live property might be stored in the
             // dead prop database, like DAV:displayname.
             let mut try_deadprop = false;
+            let mut pfx = "";
 
             match prop.namespace.as_ref().map(|x| x.as_str()) {
                 Some(NS_DAV_URI) => {
+                    pfx = "D";
                     match prop.name.as_str() {
                         "creationdate" => {
                             if let Ok(time) = meta.created() {
                                 let tm = systemtime_to_rfc3339(time);
-                                return self.build_elem(docontent, prop, tm);
+                                return self.build_elem(docontent, pfx, prop, tm);
                             }
                             // use ctime instead - apache seems to do this.
                             if let Ok(ctime) = meta.status_changed() {
@@ -656,31 +672,31 @@ impl PropWriter {
                                     }
                                 }
                                 let tm = systemtime_to_rfc3339(time);
-                                return self.build_elem(docontent, prop, tm);
+                                return self.build_elem(docontent, pfx, prop, tm);
                             }
                         },
                         "displayname" | "getcontentlanguage" => {
                             try_deadprop = true;
                         },
                         "getetag" => {
-                            return self.build_elem(docontent, prop, meta.etag());
+                            return self.build_elem(docontent, pfx, prop, meta.etag());
                         },
                         "getcontentlength" => {
                             if !meta.is_dir() {
-                                return self.build_elem(docontent, prop, meta.len().to_string());
+                                return self.build_elem(docontent, pfx, prop, meta.len().to_string());
                             }
                         },
                         "getcontenttype" => {
                             return if meta.is_dir() {
-                                self.build_elem(docontent, prop, "httpd/unix-directory")
+                                self.build_elem(docontent, pfx, prop, "httpd/unix-directory")
                             } else {
-                                self.build_elem(docontent, prop, path.get_mime_type_str())
+                                self.build_elem(docontent, pfx, prop, path.get_mime_type_str())
                             };
                         },
                         "getlastmodified" => {
                             if let Ok(time) = meta.modified() {
                                 let tm = format!("{}", systemtime_to_httpdate(time));
-                                return self.build_elem(docontent, prop, tm);
+                                return self.build_elem(docontent, pfx, prop, tm);
                             }
                         },
                         "resourcetype" => {
@@ -709,7 +725,7 @@ impl PropWriter {
                         "quota-available-bytes" => {
                             let mut qc = qc;
                             if let Ok((_, Some(avail))) = await!(self.get_quota(&mut qc, path, meta)) {
-                                return self.build_elem(docontent, prop, avail.to_string());
+                                return self.build_elem(docontent, pfx, prop, avail.to_string());
                             }
                         },
                         "quota-used-bytes" => {
@@ -722,29 +738,31 @@ impl PropWriter {
                                 } else {
                                     used.to_string()
                                 };
-                                return self.build_elem(docontent, prop, used);
+                                return self.build_elem(docontent, pfx, prop, used);
                             }
                         },
                         _ => {},
                     }
                 },
                 Some(NS_APACHE_URI) => {
+                    pfx = "A";
                     match prop.name.as_str() {
                         "executable" => {
                             if let Ok(x) = meta.executable() {
                                 let b = if x { "T" } else { "F" };
-                                return self.build_elem(docontent, prop, b);
+                                return self.build_elem(docontent, pfx, prop, b);
                             }
                         },
                         _ => {},
                     }
                 },
                 Some(NS_MS_URI) => {
+                    pfx = "M";
                     match prop.name.as_str() {
                         "Win32CreationTime" => {
                             if let Ok(time) = meta.created() {
                                 let tm = format!("{}", systemtime_to_httpdate(time));
-                                return self.build_elem(docontent, prop, tm);
+                                return self.build_elem(docontent, pfx, prop, tm);
                             }
                             // use ctime instead - apache seems to do this.
                             if let Ok(ctime) = meta.status_changed() {
@@ -755,20 +773,39 @@ impl PropWriter {
                                     }
                                 }
                                 let tm = format!("{}", systemtime_to_httpdate(time));
-                                return self.build_elem(docontent, prop, tm);
+                                return self.build_elem(docontent, pfx, prop, tm);
                             }
                         },
                         "Win32LastAccessTime" => {
                             if let Ok(time) = meta.accessed() {
                                 let tm = format!("{}", systemtime_to_httpdate(time));
-                                return self.build_elem(docontent, prop, tm);
+                                return self.build_elem(docontent, pfx, prop, tm);
                             }
                         },
                         "Win32LastModifiedTime" => {
                             if let Ok(time) = meta.modified() {
                                 let tm = format!("{}", systemtime_to_httpdate(time));
-                                return self.build_elem(docontent, prop, tm);
+                                return self.build_elem(docontent, pfx, prop, tm);
                             }
+                        },
+                        "Win32FileAttributes" => {
+                            let mut attr = 0u32;
+                            // Enable when we implement permissions() on DavMetaData.
+                            //if meta.permissions().readonly() {
+                            //    attr |= 0x0001;
+                            //}
+                            if path.file_name().starts_with(b".") {
+                                attr |= 0x0002;
+                            }
+                            if meta.is_dir() {
+                                attr |= 0x0010;
+                            } else {
+                                // this is the 'Archive' bit, which is set by
+                                // default on _all_ files on creation and on
+                                // modification.
+                                attr |= 0x0020;
+                            }
+                            return self.build_elem(docontent, pfx, prop, format!("{:08x}", attr));
                         },
                         _ => {},
                     }
@@ -790,9 +827,14 @@ impl PropWriter {
                     }
                 }
             }
+            let prop = if pfx != "" {
+                self.build_elem(false, pfx, prop, "").map(|s| s.element).unwrap()
+            } else {
+                prop.clone()
+            };
             Ok(StatusElement {
                 status:  StatusCode::NOT_FOUND,
-                element: prop.clone(),
+                element: prop,
             })
         }
     }
