@@ -27,9 +27,9 @@ use crate::{BoxedByteStream, DavInner, DavResult};
 
 const NS_APACHE_URI: &'static str = "http://apache.org/dav/props/";
 const NS_DAV_URI: &'static str = "DAV:";
-const NS_XS4ALL_URI: &'static str = "http://xs4all.net/dav/props/";
 const NS_MS_URI: &'static str = "urn:schemas-microsoft-com:";
 
+// list returned by PROPFIND <propname/>.
 const PROPNAME_STR: &'static [&'static str] = &[
     "D:creationdate",
     "D:displayname",
@@ -44,11 +44,10 @@ const PROPNAME_STR: &'static [&'static str] = &[
     "D:quota-available-bytes",
     "D:quota-used-bytes",
     "A:executable",
-    "X:atime",
-    "X:ctime",
     "M:Win32LastAccessTime",
 ];
 
+// properties returned by PROPFIND <allprop/> or empty body.
 const ALLPROP_STR: &'static [&'static str] = &[
     "D:creationdate",
     "D:displayname",
@@ -101,7 +100,6 @@ fn init_staticprop(p: &[&str]) -> Vec<Element> {
         e.namespace = match e.prefix.as_ref().map(|x| x.as_str()) {
             Some("D") => Some(NS_DAV_URI.to_string()),
             Some("A") => Some(NS_APACHE_URI.to_string()),
-            Some("X") => Some(NS_XS4ALL_URI.to_string()),
             Some("M") => Some(NS_MS_URI.to_string()),
             _ => None,
         };
@@ -314,10 +312,6 @@ impl DavInner {
                     _ => StatusCode::FORBIDDEN,
                 }
             },
-            Some(NS_XS4ALL_URI) => {
-                // no xs4all properties can be changed.
-                StatusCode::FORBIDDEN
-            },
             Some(NS_MS_URI) => {
                 match prop.name.as_str() {
                     "Win32CreationTime" |
@@ -355,7 +349,7 @@ impl DavInner {
                     _ => StatusCode::FORBIDDEN,
                 }
             },
-            Some(NS_APACHE_URI) | Some(NS_XS4ALL_URI) | Some(NS_MS_URI) => StatusCode::FORBIDDEN,
+            Some(NS_APACHE_URI) | Some(NS_MS_URI) => StatusCode::FORBIDDEN,
             _ => StatusCode::CONTINUE,
         }
     }
@@ -730,23 +724,6 @@ impl PropWriter {
                             if let Ok(x) = meta.executable() {
                                 let b = if x { "T" } else { "F" };
                                 return self.build_elem(docontent, prop, b);
-                            }
-                        },
-                        _ => {},
-                    }
-                },
-                Some(NS_XS4ALL_URI) => {
-                    match prop.name.as_str() {
-                        "atime" => {
-                            if let Ok(time) = meta.accessed() {
-                                let tm = format!("{}", systemtime_to_rfc3339(time));
-                                return self.build_elem(docontent, prop, tm);
-                            }
-                        },
-                        "ctime" => {
-                            if let Ok(time) = meta.status_changed() {
-                                let tm = systemtime_to_rfc3339(time);
-                                return self.build_elem(docontent, prop, tm);
                             }
                         },
                         _ => {},
