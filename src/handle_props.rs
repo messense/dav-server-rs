@@ -504,18 +504,6 @@ impl PropWriter {
             standalone: None,
         })?;
 
-        let mut ev = XmlWEvent::start_element("D:multistatus").ns("D", NS_DAV_URI);
-
-        // could check the prop prefixes and namespace to see if we
-        // actually need these.
-        if name != "propertyupdate" {
-            ev = ev
-                .ns("A", NS_APACHE_URI)
-                .ns("X", NS_XS4ALL_URI)
-                .ns("M", NS_MS_URI);
-        }
-
-        emitter.write(ev)?;
 
         if name != "prop" && name != "propertyupdate" {
             let mut v = Vec::new();
@@ -534,6 +522,28 @@ impl PropWriter {
             }
             props.append(&mut v);
         }
+
+        // check the prop namespaces to see what namespaces
+        // we need to put in the preamble.
+        let mut ev = XmlWEvent::start_element("D:multistatus").ns("D", NS_DAV_URI);
+        if name != "propertyupdate" {
+            let mut a = false;
+            let mut m = false;
+            for prop in &props {
+                match prop.namespace.as_ref().map(|x| x.as_str()) {
+                    Some(NS_APACHE_URI) => a = true,
+                    Some(NS_MS_URI) => m = true,
+                    _ => {},
+                }
+            }
+            if a {
+                ev = ev.ns("A", NS_APACHE_URI);
+            }
+            if m {
+                ev = ev.ns("M", NS_MS_URI);
+            }
+        }
+        emitter.write(ev)?;
 
         let ua = match req.headers().get("user-agent") {
             Some(s) => s.to_str().unwrap_or(""),
