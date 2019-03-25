@@ -52,11 +52,11 @@ impl crate::DavInner {
             }
             let len = meta.len();
             let mut curpos = 0u64;
-            let file_etag = typed_headers::EntityTag::new(false, meta.etag());
+            let file_etag = meta.etag().map(|tag| typed_headers::EntityTag::new(false, tag));
 
             let mut ranges = Vec::new();
             let do_range = match req.headers().typed_get::<davheaders::IfRange>() {
-                Some(r) => conditional::ifrange_match(&r, &file_etag, meta.modified().unwrap()),
+                Some(r) => conditional::ifrange_match(&r, file_etag.as_ref(), meta.modified().ok()),
                 None => true,
             };
 
@@ -93,7 +93,9 @@ impl crate::DavInner {
                 res.headers_mut()
                     .typed_insert(typed_headers::LastModified(systemtime_to_httpdate(modified)));
             }
-            res.headers_mut().typed_insert(typed_headers::ETag(file_etag));
+            if let Some(etag) = file_etag {
+                res.headers_mut().typed_insert(typed_headers::ETag(etag));
+            }
 
             // handle the if-headers.
             if let Some(s) = await!(conditional::if_match(

@@ -247,9 +247,10 @@ impl crate::DavInner {
             res.headers_mut().remove(http::header::CONNECTION);
 
             if let Ok(m) = await!(file.metadata()) {
-                let file_etag = typed_headers::EntityTag::new(false, m.etag());
-                res.headers_mut().typed_insert(typed_headers::ETag(file_etag));
-
+                if let Some(tag) = m.etag() {
+                    let etag = typed_headers::EntityTag::new(false, tag);
+                    res.headers_mut().typed_insert(typed_headers::ETag(etag));
+                }
                 if let Ok(modified) = m.modified() {
                     res.headers_mut()
                         .typed_insert(typed_headers::LastModified(systemtime_to_httpdate(modified)));

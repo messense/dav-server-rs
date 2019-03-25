@@ -298,18 +298,19 @@ pub trait DavMetaData: Debug + BoxCloneMd + Send + Sync {
     ///
     /// Returns a simple etag that basically is "\<length\>-\<timestamp_in_ms\>"
     /// with the numbers in hex. Enough for most implementations.
-    fn etag(&self) -> String {
+    fn etag(&self) -> Option<String> {
         if let Ok(t) = self.modified() {
             if let Ok(t) = t.duration_since(UNIX_EPOCH) {
-                // apache style etag.
-                return format!(
-                    "{:x}-{:x}",
-                    self.len(),
-                    t.as_secs() * 1000000 + t.subsec_nanos() as u64 / 1000
-                );
+                let t = t.as_secs() * 1000000 + t.subsec_nanos() as u64 / 1000;
+                let tag = if self.is_file() && self.len() > 0 {
+                    format!("{:x}-{:x}", self.len(), t)
+                } else {
+                    format!("{:x}", t)
+                };
+                return Some(tag);
             }
         }
-        format!("{:x}", self.len())
+        None
     }
 
     /// Default implementation for is_file() is !self.is_dir()

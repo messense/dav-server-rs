@@ -13,20 +13,29 @@ type Request = http::Request<()>;
 
 pub(crate) fn ifrange_match(
     hdr: &davheaders::IfRange,
-    tag: &typed_headers::EntityTag,
-    date: SystemTime,
+    tag: Option<&typed_headers::EntityTag>,
+    date: Option<SystemTime>,
 ) -> bool
 {
     match hdr {
-        &davheaders::IfRange::Date(ref d) => typed_headers::HttpDate::from(date) < *d,
-        &davheaders::IfRange::EntityTag(ref t) => t == tag,
+        &davheaders::IfRange::Date(ref d) => match date {
+            Some(date) => *d == typed_headers::HttpDate::from(date),
+            None => false,
+        },
+        &davheaders::IfRange::EntityTag(ref t) => match tag {
+            Some(tag) => t == tag,
+            None => false,
+        },
     }
 }
 
-pub(crate) fn etaglist_match(tags: &davheaders::ETagList, tag: &typed_headers::EntityTag) -> bool {
+pub(crate) fn etaglist_match(tags: &davheaders::ETagList, tag: Option<&typed_headers::EntityTag>) -> bool {
     match tags {
         &davheaders::ETagList::Star => true,
-        &davheaders::ETagList::Tags(ref t) => t.iter().any(|x| x == tag),
+        &davheaders::ETagList::Tags(ref t) => match tag {
+            Some(tag) => t.iter().any(|x| x == tag),
+            None => false,
+        },
     }
 }
 
@@ -35,8 +44,8 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
     let modified = meta.and_then(|m| m.modified().ok());
 
     if let Some(r) = req.headers().typed_get::<davheaders::IfMatch>() {
-        let etag = meta.map(|m| EntityTag::new(false, m.etag()));
-        if etag.map_or(true, |m| !etaglist_match(&r.0, &m)) {
+        let etag = meta.and_then(|m| m.etag()).map(|t| EntityTag::new(false, t));
+        if !etaglist_match(&r.0, etag.as_ref()) {
             debug!("precondition fail: If-Match {:?}", r);
             return Some(StatusCode::PRECONDITION_FAILED);
         }
@@ -53,8 +62,8 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
     }
 
     if let Some(r) = req.headers().typed_get::<davheaders::IfNoneMatch>() {
-        let etag = meta.map(|m| EntityTag::new(false, m.etag()));
-        if etag.map_or(false, |m| etaglist_match(&r.0, &m)) {
+        let etag = meta.and_then(|m| m.etag()).map(|t| EntityTag::new(false, t));
+        if etaglist_match(&r.0, etag.as_ref()) {
             debug!("precondition fail: If-None-Match {:?}", r);
             if req.method() == &Method::GET || req.method() == &Method::HEAD {
                 return Some(StatusCode::NOT_MODIFIED);
@@ -65,7 +74,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
     } else if let Some(r) = req.headers().typed_get::<typed_headers::IfModifiedSince>() {
         if req.method() == &Method::GET || req.method() == &Method::HEAD {
             if let Some(m) = modified {
-                if typed_headers::HttpDate::from(m) > r.0 {
+                if typed_headers::HttpDate::from(m) <= r.0 {
                     debug!("not-modified If-Modified-Since {:?}", r.0);
                     return Some(StatusCode::NOT_MODIFIED);
                 }
@@ -151,8 +160,13 @@ pub(crate) async fn dav_if_match<'a>(
                     } else {
                         match await!(fs.metadata(p)) {
                             Ok(meta) => {
-                                // exists and has metadata, now match.
-                                tag == &EntityTag::new(false, meta.etag())
+                                // exists and has metadata ..
+                                if let Some(mtag) = meta.etag() {
+                                    // .. and has a valid etag, so match.
+                                    tag == &EntityTag::new(false, mtag)
+                                } else {
+                                    false
+                                }
                             },
                             Err(_) => {
                                 // metadata error, fail.

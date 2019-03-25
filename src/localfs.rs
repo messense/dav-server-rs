@@ -24,7 +24,6 @@ use futures::{Future,FutureExt,Stream,future};
 use futures::compat::Future01CompatExt;
 
 use libc;
-use sha2::{self, Digest};
 
 use crate::fs::*;
 use crate::webpath::WebPath;
@@ -436,27 +435,16 @@ impl DavMetaData for LocalFsMetaData {
         Err(FsError::NotImplemented)
     }
 
-    #[cfg(target_os = "linux")]
-    fn etag(&self) -> String {
-        fn u64_to_bytes(n: u64) -> [u8; 8] {
-            unsafe { std::mem::transmute(n) }
+    // same as the default apache etag.
+    fn etag(&self) -> Option<String> {
+        let modified = self.0.modified().ok()?;
+        let t = modified.duration_since(UNIX_EPOCH).ok()?;
+        let t = t.as_secs() * 1000000 + t.subsec_nanos() as u64 / 1000;
+        if self.is_file() {
+            Some(format!("{:x}-{:x}-{:x}", self.0.st_ino(), self.0.len(), t))
+        } else {
+            Some(format!("{:x}-{:x}", self.0.st_ino(), t))
         }
-        let mut d = sha2::Sha256::default();
-
-        // hash in modification time, filesize, inode.
-        if let Ok(t) = self.0.modified() {
-            if let Ok(t) = t.duration_since(UNIX_EPOCH) {
-                d.input(&u64_to_bytes(t.as_secs() as u64));
-                d.input(&u64_to_bytes(t.subsec_nanos() as u64));
-            }
-        }
-        d.input(&u64_to_bytes(self.0.len()));
-        d.input(&u64_to_bytes(self.0.st_ino()));
-        let res = d.result();
-        format!(
-            "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-            res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7], res[8], res[9]
-        )
     }
 }
 

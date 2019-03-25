@@ -703,7 +703,9 @@ impl PropWriter {
                             try_deadprop = true;
                         },
                         "getetag" => {
-                            return self.build_elem(docontent, pfx, prop, meta.etag());
+                            if let Some(etag) = meta.etag() {
+                                return self.build_elem(docontent, pfx, prop, etag);
+                            }
                         },
                         "getcontentlength" => {
                             if !meta.is_dir() {
