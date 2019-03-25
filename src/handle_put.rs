@@ -11,7 +11,7 @@ use crate::conditional::if_match_get_tokens;
 use crate::davheaders;
 use crate::fs::*;
 use crate::typed_headers::{self, HeaderMapExt};
-use crate::util::{empty_body, systemtime_to_httpdate};
+use crate::util::empty_body;
 use crate::{BoxedByteStream, DavError, DavResult};
 
 const SABRE: &'static str = "application/x-sabredav-partialupdate";
@@ -252,8 +252,7 @@ impl crate::DavInner {
                     res.headers_mut().typed_insert(typed_headers::ETag(etag));
                 }
                 if let Ok(modified) = m.modified() {
-                    res.headers_mut()
-                        .typed_insert(typed_headers::LastModified(systemtime_to_httpdate(modified)));
+                    res.headers_mut().typed_insert(typed_headers::LastModified(modified.into()));
                 }
             }
             Ok(res)

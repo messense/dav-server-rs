@@ -14,7 +14,7 @@ use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
 use crate::typed_headers::{self, ByteRangeSpec, HeaderMapExt};
-use crate::util::{empty_body, systemtime_to_httpdate, systemtime_to_timespec};
+use crate::util::{empty_body, systemtime_to_timespec};
 use crate::{BoxedByteStream, Method};
 
 struct Range {
@@ -90,8 +90,7 @@ impl crate::DavInner {
 
             // set Last-Modified and ETag headers.
             if let Ok(modified) = meta.modified() {
-                res.headers_mut()
-                    .typed_insert(typed_headers::LastModified(systemtime_to_httpdate(modified)));
+                res.headers_mut().typed_insert(typed_headers::LastModified(modified.into()));
             }
             if let Some(etag) = file_etag {
                 res.headers_mut().typed_insert(typed_headers::ETag(etag));

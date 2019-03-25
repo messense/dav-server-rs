@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use http::StatusCode;
 use http::{self, Method};
@@ -11,6 +11,16 @@ use crate::webpath::WebPath;
 
 type Request = http::Request<()>;
 
+// SystemTime has nanosecond precision. Round it down to the
+// nearest second, because an HttpDate has second precision.
+fn round_time(tm: impl Into<SystemTime>) -> SystemTime {
+    let tm = tm.into();
+    match tm.duration_since(UNIX_EPOCH) {
+        Ok(d) => UNIX_EPOCH + Duration::from_secs(d.as_secs()),
+        Err(_) => tm,
+    }
+}
+
 pub(crate) fn ifrange_match(
     hdr: &davheaders::IfRange,
     tag: Option<&typed_headers::EntityTag>,
@@ -19,7 +29,7 @@ pub(crate) fn ifrange_match(
 {
     match hdr {
         &davheaders::IfRange::Date(ref d) => match date {
-            Some(date) => *d == typed_headers::HttpDate::from(date),
+            Some(date) => round_time(date) == round_time(*d),
             None => false,
         },
         &davheaders::IfRange::EntityTag(ref t) => match tag {
@@ -41,7 +51,7 @@ pub(crate) fn etaglist_match(tags: &davheaders::ETagList, tag: Option<&typed_hea
 
 // Handle the if-headers: RFC 7232, HTTP/1.1 Conditional Requests.
 pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> Option<StatusCode> {
-    let modified = meta.and_then(|m| m.modified().ok());
+    let file_modified = meta.and_then(|m| m.modified().ok());
 
     if let Some(r) = req.headers().typed_get::<davheaders::IfMatch>() {
         let etag = meta.and_then(|m| m.etag()).map(|t| EntityTag::new(false, t));
@@ -50,10 +60,10 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
             return Some(StatusCode::PRECONDITION_FAILED);
         }
     } else if let Some(r) = req.headers().typed_get::<typed_headers::IfUnmodifiedSince>() {
-        match modified {
+        match file_modified {
             None => return Some(StatusCode::PRECONDITION_FAILED),
-            Some(m) => {
-                if typed_headers::HttpDate::from(m) > r.0 {
+            Some(file_modified) => {
+                if round_time(file_modified) > round_time(r.0) {
                     debug!("precondition fail: If-Unmodified-Since {:?}", r.0);
                     return Some(StatusCode::PRECONDITION_FAILED);
                 }
@@ -73,8 +83,8 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
         }
     } else if let Some(r) = req.headers().typed_get::<typed_headers::IfModifiedSince>() {
         if req.method() == &Method::GET || req.method() == &Method::HEAD {
-            if let Some(m) = modified {
-                if typed_headers::HttpDate::from(m) <= r.0 {
+            if let Some(file_modified) = file_modified {
+                if round_time(file_modified) <= round_time(r.0) {
                     debug!("not-modified If-Modified-Since {:?}", r.0);
                     return Some(StatusCode::NOT_MODIFIED);
                 }
