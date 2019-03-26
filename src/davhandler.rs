@@ -250,76 +250,21 @@ impl DavInner {
         ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
-        let fut = async move {
-            // debug when running the webdav litmus tests.
-            if log_enabled!(log::Level::Debug) {
-                if let Some(t) = req.headers().typed_get::<davheaders::XLitmus>() {
-                    debug!("X-Litmus: {}", t);
-                }
-            }
-
-            // translate HTTP method to Webdav method.
-            let method = match dav_method(req.method()) {
-                Ok(m) => m,
-                Err(e) => {
-                    debug!("refusing method {} request {}", req.method(), req.uri());
-                    return Err(e);
-                },
-            };
-
-            // see if method is allowed.
-            if let Some(ref a) = self.allow {
-                if !a.allowed(method) {
-                    debug!("method {} not allowed on request {}", req.method(), req.uri());
-                    return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
-                }
-            }
-
-            // make sure the request path is valid.
-            let path = WebPath::from_uri(req.uri(), &self.prefix)?;
-
+        async move {
             let (req, body) = {
                 let (parts, body) = req.into_parts();
                 (Request::from_parts(parts, ()), body)
             };
 
-            // PUT is the only handler that reads the body itself. All the
-            // other handlers either expected no body, or a pre-read Vec<u8>.
-            let (body_strm, body_data) = match method {
-                Method::Put | Method::Patch => (Some(body), Vec::new()),
-                _ => (None, await!(self.read_request(body, 65536))?),
-            };
+            let is_ms = req
+                .headers()
+                .get("user-agent")
+                .and_then(|s| s.to_str().ok())
+                .map(|s| s.contains("Microsoft"))
+                .unwrap_or(false);
 
-            // Not all methods accept a body.
-            match method {
-                Method::Put | Method::Patch | Method::PropFind | Method::PropPatch | Method::Lock => {},
-                _ => {
-                    if body_data.len() > 0 {
-                        return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into());
-                    }
-                },
-            }
-
-            debug!("== START REQUEST {:?} {}", method, path);
-
-            let res = match method {
-                Method::Options => await!(self.handle_options(req)),
-                Method::PropFind => await!(self.handle_propfind(req, body_data)),
-                Method::PropPatch => await!(self.handle_proppatch(req, body_data)),
-                Method::MkCol => await!(self.handle_mkcol(req)),
-                Method::Delete => await!(self.handle_delete(req)),
-                Method::Lock => await!(self.handle_lock(req, body_data)),
-                Method::Unlock => await!(self.handle_unlock(req)),
-                Method::Head | Method::Get => await!(self.handle_get(req)),
-                Method::Put | Method::Patch => await!(self.handle_put(req, body_strm.unwrap().compat())),
-                Method::Copy | Method::Move => await!(self.handle_copymove(req, method)),
-            };
-            res
-        };
-
-        // Turn any DavError results into a HTTP error response.
-        async {
-            match await!(fut) {
+            // Turn any DavError results into a HTTP error response.
+            match await!(self.handle2(req, body)) {
                 Ok(resp) => {
                     debug!("== END REQUEST result OK");
                     Ok(resp)
@@ -327,6 +272,10 @@ impl DavInner {
                 Err(err) => {
                     debug!("== END REQUEST result {:?}", err);
                     let mut resp = Response::builder();
+                    if is_ms && err.statuscode() == StatusCode::NOT_FOUND {
+                        resp.header("Cache-Control", "no-store, no-cache, must-revalidate");
+                        resp.header("Progma", "no-cache");
+                    }
                     resp.status(err.statuscode());
                     if err.must_close() {
                         resp.header("connection", "close");
@@ -338,5 +287,76 @@ impl DavInner {
         }
             .boxed()
             .compat()
+    }
+
+    // internal dispatcher part 2.
+    async fn handle2<ReqBody, ReqError>(
+        self,
+        req: Request<()>,
+        body: ReqBody,
+    ) -> DavResult<Response<BoxedByteStream>>
+    where
+        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send,
+        ReqError: StdError + Send + Sync + 'static,
+    {
+        // debug when running the webdav litmus tests.
+        if log_enabled!(log::Level::Debug) {
+            if let Some(t) = req.headers().typed_get::<davheaders::XLitmus>() {
+                debug!("X-Litmus: {}", t);
+            }
+        }
+
+        // translate HTTP method to Webdav method.
+        let method = match dav_method(req.method()) {
+            Ok(m) => m,
+            Err(e) => {
+                debug!("refusing method {} request {}", req.method(), req.uri());
+                return Err(e);
+            },
+        };
+
+        // see if method is allowed.
+        if let Some(ref a) = self.allow {
+            if !a.allowed(method) {
+                debug!("method {} not allowed on request {}", req.method(), req.uri());
+                return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
+            }
+        }
+
+        // make sure the request path is valid.
+        let path = WebPath::from_uri(req.uri(), &self.prefix)?;
+
+        // PUT is the only handler that reads the body itself. All the
+        // other handlers either expected no body, or a pre-read Vec<u8>.
+        let (body_strm, body_data) = match method {
+            Method::Put | Method::Patch => (Some(body), Vec::new()),
+            _ => (None, await!(self.read_request(body, 65536))?),
+        };
+
+        // Not all methods accept a body.
+        match method {
+            Method::Put | Method::Patch | Method::PropFind | Method::PropPatch | Method::Lock => {},
+            _ => {
+                if body_data.len() > 0 {
+                    return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into());
+                }
+            },
+        }
+
+        debug!("== START REQUEST {:?} {}", method, path);
+
+        let res = match method {
+            Method::Options => await!(self.handle_options(req)),
+            Method::PropFind => await!(self.handle_propfind(req, body_data)),
+            Method::PropPatch => await!(self.handle_proppatch(req, body_data)),
+            Method::MkCol => await!(self.handle_mkcol(req)),
+            Method::Delete => await!(self.handle_delete(req)),
+            Method::Lock => await!(self.handle_lock(req, body_data)),
+            Method::Unlock => await!(self.handle_unlock(req)),
+            Method::Head | Method::Get => await!(self.handle_get(req)),
+            Method::Put | Method::Patch => await!(self.handle_put(req, body_strm.unwrap().compat())),
+            Method::Copy | Method::Move => await!(self.handle_copymove(req, method)),
+        };
+        res
     }
 }
