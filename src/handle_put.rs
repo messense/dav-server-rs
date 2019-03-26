@@ -252,7 +252,8 @@ impl crate::DavInner {
                     res.headers_mut().typed_insert(typed_headers::ETag(etag));
                 }
                 if let Ok(modified) = m.modified() {
-                    res.headers_mut().typed_insert(typed_headers::LastModified(modified.into()));
+                    res.headers_mut()
+                        .typed_insert(typed_headers::LastModified(modified.into()));
                 }
             }
             Ok(res)

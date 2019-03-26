@@ -18,8 +18,8 @@ use crate::util::{empty_body, systemtime_to_timespec};
 use crate::{BoxedByteStream, Method};
 
 struct Range {
-    start:  u64,
-    count:  u64,
+    start: u64,
+    count: u64,
 }
 
 const BOUNDARY: &str = "BOUNDARY";
@@ -78,7 +78,7 @@ impl crate::DavInner {
                                 if start + count > len {
                                     count = len - start;
                                 }
-                                ranges.push(Range{start, count});
+                                ranges.push(Range { start, count });
                             }
                         },
                         _ => {},
@@ -90,7 +90,8 @@ impl crate::DavInner {
 
             // set Last-Modified and ETag headers.
             if let Ok(modified) = meta.modified() {
-                res.headers_mut().typed_insert(typed_headers::LastModified(modified.into()));
+                res.headers_mut()
+                    .typed_insert(typed_headers::LastModified(modified.into()));
             }
             if let Some(etag) = file_etag {
                 res.headers_mut().typed_insert(typed_headers::ETag(etag));
@@ -120,8 +121,12 @@ impl crate::DavInner {
                 *res.status_mut() = StatusCode::PARTIAL_CONTENT;
                 if ranges.len() == 1 {
                     // add content-range header.
-                    let r = format!("bytes {}-{}/{}",
-                                    ranges[0].start, ranges[0].start + ranges[0].count - 1, len);
+                    let r = format!(
+                        "bytes {}-{}/{}",
+                        ranges[0].start,
+                        ranges[0].start + ranges[0].count - 1,
+                        len
+                    );
                     res.headers_mut().insert("Content-Range", r.parse().unwrap());
                 } else {
                     // add content-type header.
@@ -133,14 +138,16 @@ impl crate::DavInner {
                 res.headers_mut()
                     .typed_insert(typed_headers::AcceptRanges(vec![typed_headers::RangeUnit::Bytes]));
                 *res.status_mut() = StatusCode::OK;
-                ranges.push(Range{start: 0, count: len});
+                ranges.push(Range { start: 0, count: len });
             }
 
             // set content-length and start if we're not doing multipart.
             let content_type = path.get_mime_type_str();
             if ranges.len() <= 1 {
-                res.headers_mut().insert("Content-Type", content_type.parse().unwrap());
-                res.headers_mut().typed_insert(typed_headers::ContentLength(ranges[0].count));
+                res.headers_mut()
+                    .insert("Content-Type", content_type.parse().unwrap());
+                res.headers_mut()
+                    .typed_insert(typed_headers::ContentLength(ranges[0].count));
             }
 
             if head {
@@ -157,8 +164,13 @@ impl crate::DavInner {
                     if multipart {
                         let mut hdrs = Vec::new();
                         let _ = write!(hdrs, "{}", BOUNDARY_START);
-                        let _ = writeln!(hdrs, "Content-Range: bytes {}-{}/{}", 
-                                range.start, range.start + range.count - 1, len);
+                        let _ = writeln!(
+                            hdrs,
+                            "Content-Range: bytes {}-{}/{}",
+                            range.start,
+                            range.start + range.count - 1,
+                            len
+                        );
                         let _ = writeln!(hdrs, "Content-Type: {}", content_type);
                         let _ = writeln!(hdrs, "");
                         await!(tx.send(Bytes::from(hdrs)));

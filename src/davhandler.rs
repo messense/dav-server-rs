@@ -286,8 +286,7 @@ impl DavInner {
             // PUT is the only handler that reads the body itself. All the
             // other handlers either expected no body, or a pre-read Vec<u8>.
             let (body_strm, body_data) = match method {
-                Method::Put |
-                Method::Patch => (Some(body), Vec::new()),
+                Method::Put | Method::Patch => (Some(body), Vec::new()),
                 _ => (None, await!(self.read_request(body, 65536))?),
             };
 

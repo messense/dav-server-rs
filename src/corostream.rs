@@ -51,10 +51,10 @@ use futures01::Future as Future01;
 use futures01::Stream as Stream01;
 
 use futures::compat::Compat as Compat03As01;
-use futures::Future as Future03;
-use futures::Stream as Stream03;
 use futures::task::Poll as Poll03;
 use futures::task::Waker;
+use futures::Future as Future03;
+use futures::Stream as Stream03;
 
 /// Future returned by the Sender.send() method.
 ///
@@ -211,8 +211,8 @@ impl<I, E: Unpin> Stream03 for CoroStream<I, E> {
 
 #[cfg(feature = "hyper")]
 mod hyper {
-    use futures01::Poll as Poll01;
     use bytes;
+    use futures01::Poll as Poll01;
     use hyper;
 
     /// hyper::body::Payload trait implementation.

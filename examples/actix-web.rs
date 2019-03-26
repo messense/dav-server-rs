@@ -4,11 +4,10 @@ use futures01::{future, Future, Stream};
 use http;
 use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 
-use threadpool_helper::{pipe_to_threadpool, pipe_from_threadpool, spawn_on_threadpool};
+use threadpool_helper::{pipe_from_threadpool, pipe_to_threadpool, spawn_on_threadpool};
 
 // Actix-web webdav handler.
-fn handle_webdav(httpreq: &HttpRequest<DavHandler>) -> Box<Future<Item = HttpResponse, Error = Error>>
-{
+fn handle_webdav(httpreq: &HttpRequest<DavHandler>) -> Box<Future<Item = HttpResponse, Error = Error>> {
     // transform the Actix http request into a standard http request.
     let req = httpreq.request();
     let mut builder = http::Request::builder();
@@ -16,7 +15,7 @@ fn handle_webdav(httpreq: &HttpRequest<DavHandler>) -> Box<Future<Item = HttpRes
     builder.uri(req.uri().to_owned());
     builder.version(req.version().to_owned());
     for (name, value) in req.headers().iter() {
-            builder.header(name, value);
+        builder.header(name, value);
     }
     let body = pipe_to_threadpool(req.payload().map_err(|e| e.compat()));
     let std_req = builder.body(body).unwrap();
@@ -26,21 +25,28 @@ fn handle_webdav(httpreq: &HttpRequest<DavHandler>) -> Box<Future<Item = HttpRes
     let std_resp = spawn_on_threadpool(future::lazy(move || davhandler.handle(std_req)));
 
     // transform the standard http response into an Actix HttpResponse.
-    std_resp.and_then(|resp| {
-        let (parts, body) = resp.into_parts();
-        let http::response::Parts{ status, version, mut headers, .. } = parts;
-        let mut resp = HttpResponse::build(status);
-        for (name, values) in headers.drain() {
-            for value in values.into_iter() {
-                resp.header(name.clone(), value);
+    std_resp
+        .and_then(|resp| {
+            let (parts, body) = resp.into_parts();
+            let http::response::Parts {
+                status,
+                version,
+                mut headers,
+                ..
+            } = parts;
+            let mut resp = HttpResponse::build(status);
+            for (name, values) in headers.drain() {
+                for value in values.into_iter() {
+                    resp.header(name.clone(), value);
+                }
             }
-        }
-        Ok(resp
-            .version(version)
-            .streaming(pipe_from_threadpool(body).map_err(|e| Error::from(e)))
-            .into()
-        )
-    }).map_err(|e| e.into()).responder()
+            Ok(resp
+                .version(version)
+                .streaming(pipe_from_threadpool(body).map_err(|e| Error::from(e)))
+                .into())
+        })
+        .map_err(|e| e.into())
+        .responder()
 }
 
 fn main() {
@@ -53,13 +59,10 @@ fn main() {
     let dav_server = DavHandler::new(None, LocalFs::new(dir, false, false), Some(FakeLs::new()));
 
     println!("Serving {} on {}", dir, addr);
-    server::new(move || {
-        App::with_state(dav_server.clone())
-            .default_resource(|r| r.f(handle_webdav))
-    })
-    .bind(addr)
-    .expect("Can not bind to listen port")
-    .run();
+    server::new(move || App::with_state(dav_server.clone()).default_resource(|r| r.f(handle_webdav)))
+        .bind(addr)
+        .expect("Can not bind to listen port")
+        .run();
 }
 
 // From https://actix.rs/actix/actix/ :
@@ -79,11 +82,11 @@ mod threadpool_helper {
     use std::cell::RefCell;
     use std::sync::Mutex;
 
-    use futures01::{future, Future, Stream};
     use futures01::sync::{mpsc, oneshot, oneshot::SpawnHandle};
+    use futures01::{future, Future, Stream};
     use lazy_static::lazy_static;
-    use tokio_threadpool;
     use tokio_current_thread::TaskExecutor;
+    use tokio_threadpool;
 
     // G_SENDER holds a global tokio_threadpool handle.
     lazy_static! {
@@ -112,16 +115,15 @@ mod threadpool_helper {
         T_SENDER.with(move |sender| oneshot::spawn(future, &*sender.borrow()))
     }
 
-    pub fn pipe_to_threadpool<I, E, S>(strm: S) -> impl Stream<Item=I, Error=E>
-        where I: 'static,
-              E: std::error::Error + 'static,
-              S: Stream<Item=I, Error=E> + 'static,
+    pub fn pipe_to_threadpool<I, E, S>(strm: S) -> impl Stream<Item = I, Error = E>
+    where
+        I: 'static,
+        E: std::error::Error + 'static,
+        S: Stream<Item = I, Error = E> + 'static,
     {
         let (tx, rx) = mpsc::channel(1);
         let fwd = strm
-            .then(|res| {
-                future::ok::<_, mpsc::SendError<_>>(res)
-            })
+            .then(|res| future::ok::<_, mpsc::SendError<_>>(res))
             .forward(tx)
             .map(|_| ())
             .map_err(|_| ());
@@ -130,16 +132,15 @@ mod threadpool_helper {
         rx.then(|res| future::result(res.unwrap()))
     }
 
-    pub fn pipe_from_threadpool<I, E, S>(strm: S) -> impl Stream<Item=I, Error=E>
-        where I: 'static + Send,
-              E: std::error::Error + 'static + Send,
-              S: Stream<Item=I, Error=E> + 'static + Send,
+    pub fn pipe_from_threadpool<I, E, S>(strm: S) -> impl Stream<Item = I, Error = E>
+    where
+        I: 'static + Send,
+        E: std::error::Error + 'static + Send,
+        S: Stream<Item = I, Error = E> + 'static + Send,
     {
         let (tx, rx) = mpsc::channel(1);
         let fwd = strm
-            .then(|res| {
-                future::ok::<_, mpsc::SendError<_>>(res)
-            })
+            .then(|res| future::ok::<_, mpsc::SendError<_>>(res))
             .forward(tx)
             .map(|_| ())
             .map_err(|_| ());
@@ -157,4 +158,3 @@ mod threadpool_helper {
         pool
     }
 }
-

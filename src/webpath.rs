@@ -347,11 +347,7 @@ impl WebPath {
 
     /// Count the number of segments the path has. "/" has 0.
     pub fn num_segments(&self) -> usize {
-        self
-            .path
-            .split(|&c| c == b'/')
-            .filter(|e| e.len() > 0)
-            .count()
+        self.path.split(|&c| c == b'/').filter(|e| e.len() > 0).count()
     }
 
     /// Add a segment to the end of the path.

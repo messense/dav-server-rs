@@ -21,7 +21,7 @@ use crate::handle_lock::{list_lockdiscovery, list_supportedlock};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
 use crate::typed_headers::HeaderMapExt;
-use crate::util::{empty_body, dav_xml_error, systemtime_to_httpdate, systemtime_to_rfc3339};
+use crate::util::{dav_xml_error, empty_body, systemtime_to_httpdate, systemtime_to_rfc3339};
 use crate::webpath::*;
 use crate::{BoxedByteStream, DavInner, DavResult};
 
@@ -169,8 +169,7 @@ impl DavInner {
         if xmldata.len() > 0 {
             root = match Element::parse(Cursor::new(xmldata)) {
                 Ok(t) => {
-                    if t.name == "propfind" &&
-                        t.namespace.as_ref().map(|s| s.as_str()) == Some("DAV:") {
+                    if t.name == "propfind" && t.namespace.as_ref().map(|s| s.as_str()) == Some("DAV:") {
                         Some(t)
                     } else {
                         return Err(DavError::XmlParseError.into());
@@ -233,7 +232,7 @@ impl DavInner {
     {
         async move {
             let readdir_meta = match self.hide_symlinks {
-                Some(true)|None => ReadDirMeta::DataSymlink,
+                Some(true) | None => ReadDirMeta::DataSymlink,
                 Some(false) => ReadDirMeta::Data,
             };
             let mut entries = match await!(self.fs.read_dir(path, readdir_meta)) {
@@ -592,8 +591,7 @@ impl PropWriter {
         self.tx = Some(tx)
     }
 
-    fn build_elem<T>(&self, content: bool, pfx: &str, e: &Element, text: T)
-        -> DavResult<StatusElement>
+    fn build_elem<T>(&self, content: bool, pfx: &str, e: &Element, text: T) -> DavResult<StatusElement>
     where T: Into<String> {
         let t = if content {
             let t = text.into();
@@ -605,14 +603,14 @@ impl PropWriter {
         } else {
             None
         };
-        let elem = Element{
-            prefix: Some(pfx.to_string()),
-            namespace: None,
+        let elem = Element {
+            prefix:     Some(pfx.to_string()),
+            namespace:  None,
             namespaces: None,
-            name: e.name.clone(),
+            name:       e.name.clone(),
             attributes: HashMap::new(),
-            children: Vec::new(),
-            text: t,
+            children:   Vec::new(),
+            text:       t,
         };
         Ok(StatusElement {
             status:  StatusCode::OK,

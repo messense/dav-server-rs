@@ -1,11 +1,10 @@
-use std::path::{PathBuf,Path};
 use std::ffi::OsStr;
-use std::os::unix::ffi::OsStrExt;
 use std::io::ErrorKind;
+use std::os::unix::ffi::OsStrExt;
+use std::path::{Path, PathBuf};
 
 // Do a case-insensitive path lookup.
 pub(crate) fn resolve<'a>(base: impl Into<PathBuf>, path: &[u8], case_insensitive: bool) -> PathBuf {
-
     let base = base.into();
     let mut path = Path::new(OsStr::from_bytes(path));
 
@@ -72,7 +71,6 @@ pub(crate) fn resolve<'a>(base: impl Into<PathBuf>, path: &[u8], case_insensitiv
 
 // lookup a filename in a directory in a case insensitive way.
 fn lookup(mut path: PathBuf, seg: &OsStr, no_init_check: bool) -> (PathBuf, bool) {
-
     // does it exist as-is?
     let mut path2 = path.clone();
     path2.push(seg);
@@ -81,7 +79,7 @@ fn lookup(mut path: PathBuf, seg: &OsStr, no_init_check: bool) -> (PathBuf, bool
             Ok(_) => return (path2, false),
             Err(ref e) if e.kind() != ErrorKind::NotFound => {
                 // stop on errors other than "NotFound".
-                return (path2, true)
+                return (path2, true);
             },
             Err(_) => {},
         }
@@ -115,4 +113,3 @@ fn lookup(mut path: PathBuf, seg: &OsStr, no_init_check: bool) -> (PathBuf, bool
     }
     (path2, true)
 }
-

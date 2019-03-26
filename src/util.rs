@@ -117,11 +117,10 @@ pub(crate) fn single_body(body: impl Into<Bytes>) -> BoxedByteStream {
 }
 
 pub(crate) fn dav_xml_error(body: &str) -> BoxedByteStream {
-    let xml = format!("{}\n{}\n{}\n{}\n",
-        r#"<?xml version="1.0" encoding="utf-8" ?>"#,
-        r#"<D:error xmlns:D="DAV:">"#,
-        body,
-        r#"</D:error>"#);
+    let xml = format!(
+        "{}\n{}\n{}\n{}\n",
+        r#"<?xml version="1.0" encoding="utf-8" ?>"#, r#"<D:error xmlns:D="DAV:">"#, body, r#"</D:error>"#
+    );
     single_body(xml)
 }
 

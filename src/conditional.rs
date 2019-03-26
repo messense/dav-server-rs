@@ -28,13 +28,17 @@ pub(crate) fn ifrange_match(
 ) -> bool
 {
     match hdr {
-        &davheaders::IfRange::Date(ref d) => match date {
-            Some(date) => round_time(date) == round_time(*d),
-            None => false,
+        &davheaders::IfRange::Date(ref d) => {
+            match date {
+                Some(date) => round_time(date) == round_time(*d),
+                None => false,
+            }
         },
-        &davheaders::IfRange::EntityTag(ref t) => match tag {
-            Some(tag) => t == tag,
-            None => false,
+        &davheaders::IfRange::EntityTag(ref t) => {
+            match tag {
+                Some(tag) => t == tag,
+                None => false,
+            }
         },
     }
 }
@@ -42,9 +46,11 @@ pub(crate) fn ifrange_match(
 pub(crate) fn etaglist_match(tags: &davheaders::ETagList, tag: Option<&typed_headers::EntityTag>) -> bool {
     match tags {
         &davheaders::ETagList::Star => true,
-        &davheaders::ETagList::Tags(ref t) => match tag {
-            Some(tag) => t.iter().any(|x| x == tag),
-            None => false,
+        &davheaders::ETagList::Tags(ref t) => {
+            match tag {
+                Some(tag) => t.iter().any(|x| x == tag),
+                None => false,
+            }
         },
     }
 }
