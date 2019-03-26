@@ -12,13 +12,11 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::DirBuilderExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-#[cfg(target_os = "linux")]
-use std::os::linux::fs::MetadataExt;
 
 use futures::{Future,FutureExt,Stream,future};
 use futures::compat::Future01CompatExt;
@@ -63,6 +61,7 @@ pub struct LocalFs {
 struct LocalFsInner {
     basedir: PathBuf,
     public:  bool,
+    case_insensitive: bool,
     fs_access_guard:    Option<Box<Fn() -> Box<Any> + Send + Sync + 'static>>,
 }
 
@@ -90,14 +89,19 @@ struct LocalFsDirEntry {
 }
 
 impl LocalFs {
-    /// Create a new LocalFs DavFileSystem, serving "base". If "public" is
-    /// set to true, all files and directories created will be
-    /// publically readable (mode 644/755), otherwise they will
-    /// be private (mode 600/700). Umask stil overrides this.
-    pub fn new<P: AsRef<Path>>(base: P, public: bool) -> Box<LocalFs> {
+    /// Create a new LocalFs DavFileSystem, serving "base".
+    ///
+    /// If "public" is set to true, all files and directories created will be
+    /// publically readable (mode 644/755), otherwise they will be private
+    /// (mode 600/700). Umask stil overrides this.
+    ///
+    /// If "case_insensitive" is set to true, all filesystem lookups will
+    /// be case insensitive. Note that this has a _lot_ of overhead!
+    pub fn new<P: AsRef<Path>>(base: P, public: bool, case_insensitive: bool) -> Box<LocalFs> {
         let inner = LocalFsInner {
             basedir: base.as_ref().to_path_buf(),
             public:  public,
+            case_insensitive:  case_insensitive,
             fs_access_guard: None,
         };
         Box::new({ LocalFs{ inner: Arc::new(inner) } })
@@ -105,17 +109,22 @@ impl LocalFs {
 
     // Like new() but pass in a fs_access_guard hook.
     #[doc(hidden)]
-    pub fn new_with_fs_access_guard<P: AsRef<Path>>(base: P, public: bool, fs_access_guard: Option<Box<Fn() -> Box<Any> + Send + Sync + 'static>>) -> Box<LocalFs> {
+    pub fn new_with_fs_access_guard<P: AsRef<Path>>(base: P, public: bool, case_insensitive: bool, fs_access_guard: Option<Box<Fn() -> Box<Any> + Send + Sync + 'static>>) -> Box<LocalFs> {
         let inner = LocalFsInner {
             basedir: base.as_ref().to_path_buf(),
             public:  public,
+            case_insensitive: case_insensitive,
             fs_access_guard: fs_access_guard,
         };
         Box::new({ LocalFs{ inner: Arc::new(inner) } })
     }
 
-    fn fspath(&self, path: &WebPath) -> PathBuf {
+    fn fspath_dbg(&self, path: &WebPath) -> PathBuf {
         path.as_pathbuf_with_prefix(&self.inner.basedir)
+    }
+
+    fn fspath(&self, path: &WebPath) -> PathBuf {
+        crate::fspath::resolve(&self.inner.basedir, path.as_bytes(), self.inner.case_insensitive)
     }
 
     // Futures 0.3 blocking() adapter, also run the before/after hooks.
@@ -164,7 +173,7 @@ impl DavFileSystem for LocalFs {
     // read_dir is a bit more involved - but not much - than a simple wrapper,
     // because it returns a stream.
     fn read_dir<'a>(&'a self, path: &'a WebPath, meta: ReadDirMeta) -> FsFuture<Pin<Box<Stream<Item=Box<DavDirEntry>> + Send>>> {
-        debug!("FS: read_dir {:?}", self.fspath(path));
+        debug!("FS: read_dir {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             match std::fs::read_dir(self.fspath(path)) {
                 Ok(iterator) => {
@@ -182,7 +191,7 @@ impl DavFileSystem for LocalFs {
     }
 
     fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<DavFile>> {
-        debug!("FS: open {:?}", self.fspath(path));
+        debug!("FS: open {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             let res = std::fs::OpenOptions::new()
                 .read(options.read)
@@ -201,7 +210,7 @@ impl DavFileSystem for LocalFs {
     }
 
     fn create_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
-        debug!("FS: create_dir {:?}", self.fspath(path));
+        debug!("FS: create_dir {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             std::fs::DirBuilder::new()
                 .mode(if self.inner.public { 0o755 } else { 0o700 })
@@ -211,28 +220,28 @@ impl DavFileSystem for LocalFs {
     }
 
     fn remove_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
-        debug!("FS: remove_dir {:?}", self.fspath(path));
+        debug!("FS: remove_dir {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             std::fs::remove_dir(self.fspath(path)).map_err(|e| e.into())
         }).boxed()
     }
 
     fn remove_file<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
-        debug!("FS: remove_file {:?}", self.fspath(path));
+        debug!("FS: remove_file {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             std::fs::remove_file(self.fspath(path)).map_err(|e| e.into())
         }).boxed()
     }
 
     fn rename<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
-        debug!("FS: rename {:?} {:?}", self.fspath(from), self.fspath(to));
+        debug!("FS: rename {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
         self.blocking(move || {
             std::fs::rename(self.fspath(from), self.fspath(to)).map_err(|e| e.into())
         }).boxed()
     }
 
     fn copy<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
-        debug!("FS: copy {:?} {:?}", self.fspath(from), self.fspath(to));
+        debug!("FS: copy {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
         self.blocking(move || {
             if let Err(e) = std::fs::copy(self.fspath(from), self.fspath(to)) {
                 debug!("copy failed: {:?}", e);
@@ -414,9 +423,8 @@ impl DavMetaData for LocalFsMetaData {
         self.0.accessed().map_err(|e| e.into())
     }
 
-    // #[cfg(target_os = "linux")]
     fn status_changed(&self) -> FsResult<SystemTime> {
-        Ok(UNIX_EPOCH + Duration::new(self.0.st_ctime() as u64, 0))
+        Ok(UNIX_EPOCH + Duration::new(self.0.ctime() as u64, 0))
     }
 
     fn is_dir(&self) -> bool {
@@ -441,9 +449,9 @@ impl DavMetaData for LocalFsMetaData {
         let t = modified.duration_since(UNIX_EPOCH).ok()?;
         let t = t.as_secs() * 1000000 + t.subsec_nanos() as u64 / 1000;
         if self.is_file() {
-            Some(format!("{:x}-{:x}-{:x}", self.0.st_ino(), self.0.len(), t))
+            Some(format!("{:x}-{:x}-{:x}", self.0.ino(), self.0.len(), t))
         } else {
-            Some(format!("{:x}-{:x}", self.0.st_ino(), t))
+            Some(format!("{:x}-{:x}", self.0.ino(), t))
         }
     }
 }
