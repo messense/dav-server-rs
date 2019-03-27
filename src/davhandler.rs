@@ -273,9 +273,21 @@ impl DavInner {
                     debug!("== END REQUEST result {:?}", err);
                     let mut resp = Response::builder();
                     if is_ms && err.statuscode() == StatusCode::NOT_FOUND {
+                        // This is an attempt to convince Windows to not
+                        // cache a 404 NOT_FOUND for 30-60 seconds.
+                        //
+                        // That is a problem since windows caches the NOT_FOUND in a
+                        // case-insensitive way. So if "www" does not exist, but "WWW" does,
+                        // and you do a "dir www" and then a "dir WWW" the second one
+                        // will fail.
+                        //
+                        // Ofcourse the below is not sufficient. Fixes welcome.
                         resp.header("Cache-Control", "no-store, no-cache, must-revalidate");
                         resp.header("Progma", "no-cache");
+                        resp.header("Expires", "0");
+                        resp.header("Vary", "*");
                     }
+                    resp.header("Content-Length", "0");
                     resp.status(err.statuscode());
                     if err.must_close() {
                         resp.header("connection", "close");

@@ -73,8 +73,6 @@ const MS_ALLPROP_STR: &'static [&'static str] = &[
     "D:lockdiscovery",
     "D:resourcetype",
     "D:supportedlock",
-    "D:quota-available-bytes",
-    "D:quota-used-bytes",
     "M:Win32CreationTime",
     "M:Win32FileAttributes",
     "M:Win32LastAccessTime",
@@ -141,10 +139,9 @@ impl DavInner {
 
         let mut res = Response::new(empty_body());
 
-        let cc = "no-store, no-cache, must-revalidate".parse().unwrap();
-        let pg = "no-cache".parse().unwrap();
-        res.headers_mut().insert("Cache-Control", cc);
-        res.headers_mut().insert("Pragma", pg);
+        let nc: http::header::HeaderValue = "no-cache".parse().unwrap();
+        res.headers_mut().insert("Cache-Control", nc.clone());
+        res.headers_mut().insert("Pragma", nc);
 
         let depth = match req.headers().typed_get::<davheaders::Depth>() {
             Some(davheaders::Depth::Infinity) | None => {
