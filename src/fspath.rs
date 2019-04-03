@@ -9,16 +9,13 @@ use lru::LruCache;
 use parking_lot::Mutex;
 
 lazy_static! {
-    static ref CACHE: Arc<Cache> = Arc::new(Cache::new(1024));
+    static ref CACHE: Arc<Cache> = Arc::new(Cache::new(4096));
 }
 
 // Do a case-insensitive path lookup.
 pub(crate) fn resolve<'a>(base: impl Into<PathBuf>, path: &[u8], case_insensitive: bool) -> PathBuf {
     let base = base.into();
     let mut path = Path::new(OsStr::from_bytes(path));
-
-    // deref in advance: first lazy_static, then Arc.
-    let cache = &*(&*CACHE);
 
     // make "path" relative.
     while path.starts_with("/") {
@@ -47,6 +44,9 @@ pub(crate) fn resolve<'a>(base: impl Into<PathBuf>, path: &[u8], case_insensitiv
         Some(p) => p,
         None => return fullpath,
     };
+
+    // deref in advance: first lazy_static, then Arc.
+    let cache = &*(&*CACHE);
 
     // In the cache?
     if let Some((path, _)) = cache.get(&fullpath) {
