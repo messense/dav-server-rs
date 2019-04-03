@@ -31,6 +31,8 @@ url = "1.7.2"
 uuid = { version = "0.7.2", features = ["v4"] }
 xml-rs = "0.8.0"
 xmltree = "0.8.0"
+parking_lot = "0.7.1"
+lru = "0.1.13"
 
 [dev-dependencies]
 actix = "0.7.9"
