@@ -44,7 +44,7 @@ const PROPNAME_STR: &'static [&'static str] = &[
     "D:quota-available-bytes",
     "D:quota-used-bytes",
     "A:executable",
-    "M:Win32LastAccessTime",
+    "Z:Win32LastAccessTime",
 ];
 
 // properties returned by PROPFIND <allprop/> or empty body.
@@ -73,10 +73,10 @@ const MS_ALLPROP_STR: &'static [&'static str] = &[
     "D:lockdiscovery",
     "D:resourcetype",
     "D:supportedlock",
-    "M:Win32CreationTime",
-    "M:Win32FileAttributes",
-    "M:Win32LastAccessTime",
-    "M:Win32LastModifiedTime",
+    "Z:Win32CreationTime",
+    "Z:Win32FileAttributes",
+    "Z:Win32LastAccessTime",
+    "Z:Win32LastModifiedTime",
 ];
 
 lazy_static! {
@@ -119,7 +119,7 @@ fn init_staticprop(p: &[&str]) -> Vec<Element> {
         e.namespace = match e.prefix.as_ref().map(|x| x.as_str()) {
             Some("D") => Some(NS_DAV_URI.to_string()),
             Some("A") => Some(NS_APACHE_URI.to_string()),
-            Some("M") => Some(NS_MS_URI.to_string()),
+            Some("Z") => Some(NS_MS_URI.to_string()),
             _ => None,
         };
         v.push(e);
@@ -566,7 +566,7 @@ impl PropWriter {
                 ev = ev.ns("A", NS_APACHE_URI);
             }
             if m {
-                ev = ev.ns("M", NS_MS_URI);
+                ev = ev.ns("Z", NS_MS_URI);
             }
         }
         emitter.write(ev)?;
@@ -778,7 +778,7 @@ impl PropWriter {
                     }
                 },
                 Some(NS_MS_URI) => {
-                    pfx = "M";
+                    pfx = "Z";
                     match prop.name.as_str() {
                         "Win32CreationTime" => {
                             if let Ok(time) = meta.created() {
