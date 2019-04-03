@@ -135,11 +135,15 @@ impl crate::DavInner {
                 }
             } else {
                 // normal request, send entire file.
-                res.headers_mut()
-                    .typed_insert(typed_headers::AcceptRanges(vec![typed_headers::RangeUnit::Bytes]));
                 *res.status_mut() = StatusCode::OK;
                 ranges.push(Range { start: 0, count: len });
             }
+
+            // Apache always adds an Accept-Ranges header, even with partial
+            // responses where it should be pretty obvious. So something somewhere
+            // probably depends on that.
+            res.headers_mut()
+                .typed_insert(typed_headers::AcceptRanges(vec![typed_headers::RangeUnit::Bytes]));
 
             // set content-length and start if we're not doing multipart.
             let content_type = path.get_mime_type_str();
