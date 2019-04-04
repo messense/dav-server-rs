@@ -39,7 +39,7 @@ impl Server {
     pub fn new(directory: String, memls: bool, auth: bool) -> Self {
         let memls: Option<Box<DavLockSystem>> = if memls { Some(memls::MemLs::new()) } else { None };
         let dh = if directory != "" {
-            let fs = localfs::LocalFs::new(directory, true, false);
+            let fs = localfs::LocalFs::new(directory, true, false, false);
             DavHandler::new(None, fs, memls)
         } else {
             let fs = memfs::MemFs::new();

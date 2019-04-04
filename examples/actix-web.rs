@@ -56,7 +56,7 @@ fn main() {
     let dir = "/tmp";
     let addr = "127.0.0.1:4918";
 
-    let dav_server = DavHandler::new(None, LocalFs::new(dir, false, false), Some(FakeLs::new()));
+    let dav_server = DavHandler::new(None, LocalFs::new(dir, false, false, false), Some(FakeLs::new()));
 
     println!("Serving {} on {}", dir, addr);
     server::new(move || App::with_state(dav_server.clone()).default_resource(|r| r.f(handle_webdav)))

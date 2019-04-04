@@ -8,7 +8,7 @@ fn main() {
     let dir = "/tmp";
     let addr = ([127, 0, 0, 1], 4918).into();
 
-    let dav_server = DavHandler::new(None, LocalFs::new(dir, false, false), Some(FakeLs::new()));
+    let dav_server = DavHandler::new(None, LocalFs::new(dir, false, false, false), Some(FakeLs::new()));
     let make_service = move || {
         let dav_server = dav_server.clone();
         hyper::service::service_fn(move |req: hyper::Request<hyper::Body>| {

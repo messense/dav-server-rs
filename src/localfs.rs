@@ -100,11 +100,11 @@ impl LocalFs {
     ///
     /// If "case_insensitive" is set to true, all filesystem lookups will
     /// be case insensitive. Note that this has a _lot_ of overhead!
-    pub fn new<P: AsRef<Path>>(base: P, public: bool, case_insensitive: bool) -> Box<LocalFs> {
+    pub fn new<P: AsRef<Path>>(base: P, public: bool, case_insensitive: bool, macos: bool) -> Box<LocalFs> {
         let inner = LocalFsInner {
             basedir:          base.as_ref().to_path_buf(),
             public:           public,
-            macos:            true,
+            macos:            macos,
             case_insensitive: case_insensitive,
             fs_access_guard:  None,
         };
@@ -121,13 +121,14 @@ impl LocalFs {
         base: P,
         public: bool,
         case_insensitive: bool,
+        macos: bool,
         fs_access_guard: Option<Box<Fn() -> Box<Any> + Send + Sync + 'static>>,
     ) -> Box<LocalFs>
     {
         let inner = LocalFsInner {
             basedir:          base.as_ref().to_path_buf(),
             public:           public,
-            macos:            true,
+            macos:            macos,
             case_insensitive: case_insensitive,
             fs_access_guard:  fs_access_guard,
         };
