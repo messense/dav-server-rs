@@ -165,6 +165,18 @@ impl crate::DavInner {
 
                 let multipart = ranges.len() > 1;
                 for range in ranges {
+
+                    debug!("handle_get: start = {}, count = {}", range.start, range.count);
+                    if curpos != range.start {
+                        // this should never fail, but if it does, just skip this range
+                        // and try the next one.
+                        if let Err(_e) = await!(file.seek(std::io::SeekFrom::Start(range.start))) {
+                            debug!("handle_get: failed to seek to {}: {:?}", range.start, _e);
+                            continue;
+                        }
+                        curpos = range.start;
+                    }
+
                     if multipart {
                         let mut hdrs = Vec::new();
                         let _ = write!(hdrs, "{}", BOUNDARY_START);
@@ -178,17 +190,6 @@ impl crate::DavInner {
                         let _ = writeln!(hdrs, "Content-Type: {}", content_type);
                         let _ = writeln!(hdrs, "");
                         await!(tx.send(Bytes::from(hdrs)));
-                    }
-
-                    debug!("handle_get: start = {}, count = {}", range.start, range.count);
-                    if curpos != range.start {
-                        // this should never fail, but if it does, just skip this range
-                        // and try the next one.
-                        if let Err(_e) = await!(file.seek(std::io::SeekFrom::Start(range.start))) {
-                            debug!("handle_get: failed to seek to {}: {:?}", range.start, _e);
-                            continue;
-                        }
-                        curpos = range.start;
                     }
 
                     let mut count = range.count;
