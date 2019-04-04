@@ -24,8 +24,8 @@ use futures::{future, Future, FutureExt, Stream};
 use libc;
 
 use crate::fs::*;
-use crate::webpath::WebPath;
 use crate::localfs_macos::NegCacheBuilder;
+use crate::webpath::WebPath;
 
 // Run some code via tokio_threadpool::blocking(), returns Future 0.3
 //
@@ -362,7 +362,7 @@ impl Stream for LocalFsReadDir {
                                 nb.finish();
                             }
                             break;
-                        }
+                        },
                     }
                 }
             });

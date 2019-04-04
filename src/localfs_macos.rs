@@ -27,27 +27,28 @@ lazy_static! {
 // Negative cache entry.
 struct NegEntry {
     // Time the entry in the cache was created.
-    time:               SystemTime,
+    time: SystemTime,
     // Modification time of the parent directory.
     // If that changed the entry is invalid.
-    parent_modtime:     SystemTime,
+    parent_modtime: SystemTime,
 }
 
 // Negative cache.
 struct NegCache {
-    cache:      Mutex<LruCache<PathBuf, NegEntry>>,
+    cache: Mutex<LruCache<PathBuf, NegEntry>>,
 }
 
 impl NegCache {
     // return a new instance.
     fn new(size: usize) -> NegCache {
-        NegCache{ cache: Mutex::new(LruCache::new(size)) }
+        NegCache {
+            cache: Mutex::new(LruCache::new(size)),
+        }
     }
 
     // Lookup an entry in the cache, and validate it.
     // If it's invalid remove it from the cache and return false.
     fn check(&self, path: &PathBuf) -> bool {
-
         // Lookup.
         let mut cache = self.cache.lock();
         let e = match cache.get(path) {
@@ -85,16 +86,16 @@ impl NegCache {
 // Storage for the entries of one dir while we're collecting them.
 #[derive(Default)]
 pub(crate) struct NegCacheBuilder {
-    dir:        PathBuf,
-    entries:    HashSet<OsString>,
+    dir:     PathBuf,
+    entries: HashSet<OsString>,
 }
 
 impl NegCacheBuilder {
     // return a new instance.
     pub fn start(dir: PathBuf) -> NegCacheBuilder {
         NegCacheBuilder {
-            dir:        dir,
-            entries:    HashSet::new(),
+            dir:     dir,
+            entries: HashSet::new(),
         }
     }
 
@@ -124,7 +125,6 @@ impl NegCacheBuilder {
         let mut namebuf = Vec::new();
 
         for e in self.entries.iter() {
-
             // skip if file starts with "._"
             let f = e.as_bytes();
             if f.starts_with(b"._") || f == b"." || f == b".." {
@@ -158,23 +158,22 @@ impl NegCacheBuilder {
 #[derive(Debug, Clone)]
 struct EmptyMetaData;
 impl DavMetaData for EmptyMetaData {
-        fn len(&self) -> u64 {
-            0
-        }
-        fn is_dir(&self) -> bool {
-            false
-        }
-        fn modified(&self) -> FsResult<SystemTime> {
-            // Tue May 30 04:00:00 CEST 2000
-            Ok(UNIX_EPOCH + Duration::new(959652000, 0))
-        }
-        fn created(&self) -> FsResult<SystemTime> {
-            self.modified()
-        }
+    fn len(&self) -> u64 {
+        0
+    }
+    fn is_dir(&self) -> bool {
+        false
+    }
+    fn modified(&self) -> FsResult<SystemTime> {
+        // Tue May 30 04:00:00 CEST 2000
+        Ok(UNIX_EPOCH + Duration::new(959652000, 0))
+    }
+    fn created(&self) -> FsResult<SystemTime> {
+        self.modified()
+    }
 }
 
 impl LocalFs {
-
     // Is this a virtualfile ?
     #[inline]
     pub(crate) fn is_virtual(&self, path: &WebPath) -> Option<Box<DavMetaData>> {
@@ -186,7 +185,7 @@ impl LocalFs {
             b"/.ql_disablethumbnails" => {},
             _ => return None,
         }
-        Some(Box::new(EmptyMetaData{}))
+        Some(Box::new(EmptyMetaData {}))
     }
 
     // This file can never exist.
@@ -226,4 +225,3 @@ impl LocalFs {
         }
     }
 }
-

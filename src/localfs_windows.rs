@@ -7,7 +7,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::ErrorKind;
 use std::os::unix::ffi::OsStrExt;
-use std::path::{PathBuf,Path};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use lru::LruCache;
@@ -119,7 +119,6 @@ pub(crate) fn resolve<'a>(base: impl Into<PathBuf>, path: &[u8], case_insensitiv
 
 // lookup a filename in a directory in a case insensitive way.
 fn lookup(mut path: PathBuf, seg: &OsStr, no_init_check: bool) -> (PathBuf, bool) {
-
     // does it exist as-is?
     let mut path2 = path.clone();
     path2.push(seg);
@@ -128,7 +127,7 @@ fn lookup(mut path: PathBuf, seg: &OsStr, no_init_check: bool) -> (PathBuf, bool
             Ok(_) => return (path2, false),
             Err(ref e) if e.kind() != ErrorKind::NotFound => {
                 // stop on errors other than "NotFound".
-                return (path2, true)
+                return (path2, true);
             },
             Err(_) => {},
         }
@@ -165,13 +164,13 @@ fn lookup(mut path: PathBuf, seg: &OsStr, no_init_check: bool) -> (PathBuf, bool
 
 // The cache stores a mapping of lowercased path -> actual path.
 pub struct Cache {
-    cache:      Mutex<LruCache<PathBuf, Entry>>,
+    cache: Mutex<LruCache<PathBuf, Entry>>,
 }
 
 #[derive(Clone)]
 struct Entry {
     // Full case-sensitive pathname.
-    path:   PathBuf,
+    path: PathBuf,
 }
 
 // helper
@@ -185,14 +184,16 @@ fn pathbuf_to_lowercase(path: PathBuf) -> PathBuf {
 
 impl Cache {
     pub fn new(size: usize) -> Cache {
-        Cache{ cache: Mutex::new(LruCache::new(size)) }
+        Cache {
+            cache: Mutex::new(LruCache::new(size)),
+        }
     }
 
     // Insert an entry into the cache.
     pub fn insert(&self, path: &Path) {
         let lc_path = pathbuf_to_lowercase(PathBuf::from(path));
         let e = Entry {
-            path:   PathBuf::from(path),
+            path: PathBuf::from(path),
         };
         let mut cache = self.cache.lock();
         cache.put(lc_path, e);
@@ -215,9 +216,8 @@ impl Cache {
                 let mut cache = self.cache.lock();
                 cache.pop(&lc_path);
                 None
-            }
-            Ok(m) => Some((e.path, m))
+            },
+            Ok(m) => Some((e.path, m)),
         }
     }
 }
-
