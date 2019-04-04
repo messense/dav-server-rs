@@ -25,6 +25,7 @@ use libc;
 
 use crate::fs::*;
 use crate::webpath::WebPath;
+use crate::localfs_macos::NegCacheBuilder;
 
 // Run some code via tokio_threadpool::blocking(), returns Future 0.3
 //
@@ -54,25 +55,27 @@ struct LocalFsMetaData(std::fs::Metadata);
 /// Local Filesystem implementation.
 #[derive(Clone)]
 pub struct LocalFs {
-    inner: Arc<LocalFsInner>,
+    pub(crate) inner: Arc<LocalFsInner>,
 }
 
 // inner struct.
-struct LocalFsInner {
-    basedir:          PathBuf,
-    public:           bool,
-    case_insensitive: bool,
-    fs_access_guard:  Option<Box<Fn() -> Box<Any> + Send + Sync + 'static>>,
+pub(crate) struct LocalFsInner {
+    pub basedir:          PathBuf,
+    pub public:           bool,
+    pub case_insensitive: bool,
+    pub macos:            bool,
+    pub fs_access_guard:  Option<Box<Fn() -> Box<Any> + Send + Sync + 'static>>,
 }
 
 #[derive(Debug)]
 struct LocalFsFile(std::fs::File);
 
 struct LocalFsReadDir {
-    fs:       LocalFs,
-    do_meta:  ReadDirMeta,
-    buffer:   VecDeque<std::io::Result<LocalFsDirEntry>>,
-    iterator: std::fs::ReadDir,
+    fs:        LocalFs,
+    do_meta:   ReadDirMeta,
+    buffer:    VecDeque<std::io::Result<LocalFsDirEntry>>,
+    dir_cache: Option<NegCacheBuilder>,
+    iterator:  std::fs::ReadDir,
 }
 
 // a DirEntry either already has the metadata available, or a handle
@@ -101,6 +104,7 @@ impl LocalFs {
         let inner = LocalFsInner {
             basedir:          base.as_ref().to_path_buf(),
             public:           public,
+            macos:            true,
             case_insensitive: case_insensitive,
             fs_access_guard:  None,
         };
@@ -123,6 +127,7 @@ impl LocalFs {
         let inner = LocalFsInner {
             basedir:          base.as_ref().to_path_buf(),
             public:           public,
+            macos:            true,
             case_insensitive: case_insensitive,
             fs_access_guard:  fs_access_guard,
         };
@@ -138,7 +143,7 @@ impl LocalFs {
     }
 
     fn fspath(&self, path: &WebPath) -> PathBuf {
-        crate::fspath::resolve(&self.inner.basedir, path.as_bytes(), self.inner.case_insensitive)
+        crate::localfs_windows::resolve(&self.inner.basedir, path.as_bytes(), self.inner.case_insensitive)
     }
 
     // Futures 0.3 blocking() adapter, also run the before/after hooks.
@@ -169,9 +174,16 @@ impl LocalFs {
 // This implementation is basically a bunch of boilerplate to
 // wrap the std::fs call in self.blocking() calls.
 impl DavFileSystem for LocalFs {
-    fn metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
+    fn metadata<'a>(&'a self, webpath: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
         self.blocking(move || {
-            match std::fs::metadata(self.fspath(path)) {
+            if let Some(meta) = self.is_virtual(webpath) {
+                return Ok(meta);
+            }
+            let path = self.fspath(webpath);
+            if self.is_notfound(&path) {
+                return Err(FsError::NotFound);
+            }
+            match std::fs::metadata(path) {
                 Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<DavMetaData>),
                 Err(e) => Err(e.into()),
             }
@@ -179,9 +191,16 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn symlink_metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
+    fn symlink_metadata<'a>(&'a self, webpath: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
         self.blocking(move || {
-            match std::fs::symlink_metadata(self.fspath(path)) {
+            if let Some(meta) = self.is_virtual(webpath) {
+                return Ok(meta);
+            }
+            let path = self.fspath(webpath);
+            if self.is_notfound(&path) {
+                return Err(FsError::NotFound);
+            }
+            match std::fs::symlink_metadata(path) {
                 Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<DavMetaData>),
                 Err(e) => Err(e.into()),
             }
@@ -193,19 +212,21 @@ impl DavFileSystem for LocalFs {
     // because it returns a stream.
     fn read_dir<'a>(
         &'a self,
-        path: &'a WebPath,
+        webpath: &'a WebPath,
         meta: ReadDirMeta,
     ) -> FsFuture<Pin<Box<Stream<Item = Box<DavDirEntry>> + Send>>>
     {
-        debug!("FS: read_dir {:?}", self.fspath_dbg(path));
+        debug!("FS: read_dir {:?}", self.fspath_dbg(webpath));
         self.blocking(move || {
-            match std::fs::read_dir(self.fspath(path)) {
+            let path = self.fspath(webpath);
+            match std::fs::read_dir(&path) {
                 Ok(iterator) => {
                     let strm = LocalFsReadDir {
-                        fs:       self.clone(),
-                        do_meta:  meta,
-                        buffer:   VecDeque::new(),
-                        iterator: iterator,
+                        fs:        self.clone(),
+                        do_meta:   meta,
+                        buffer:    VecDeque::new(),
+                        dir_cache: self.dir_cache_builder(path),
+                        iterator:  iterator,
                     };
                     Ok(Box::pin(strm) as Pin<Box<Stream<Item = Box<DavDirEntry>> + Send>>)
                 },
@@ -218,6 +239,9 @@ impl DavFileSystem for LocalFs {
     fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<DavFile>> {
         debug!("FS: open {:?}", self.fspath_dbg(path));
         self.blocking(move || {
+            if self.is_forbidden(path) {
+                return Err(FsError::Forbidden);
+            }
             let res = std::fs::OpenOptions::new()
                 .read(options.read)
                 .write(options.write)
@@ -238,6 +262,9 @@ impl DavFileSystem for LocalFs {
     fn create_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
         debug!("FS: create_dir {:?}", self.fspath_dbg(path));
         self.blocking(move || {
+            if self.is_forbidden(path) {
+                return Err(FsError::Forbidden);
+            }
             std::fs::DirBuilder::new()
                 .mode(if self.inner.public { 0o755 } else { 0o700 })
                 .create(self.fspath(path))
@@ -254,19 +281,32 @@ impl DavFileSystem for LocalFs {
 
     fn remove_file<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
         debug!("FS: remove_file {:?}", self.fspath_dbg(path));
-        self.blocking(move || std::fs::remove_file(self.fspath(path)).map_err(|e| e.into()))
-            .boxed()
+        self.blocking(move || {
+            if self.is_forbidden(path) {
+                return Err(FsError::Forbidden);
+            }
+            std::fs::remove_file(self.fspath(path)).map_err(|e| e.into())
+        })
+        .boxed()
     }
 
     fn rename<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
         debug!("FS: rename {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
-        self.blocking(move || std::fs::rename(self.fspath(from), self.fspath(to)).map_err(|e| e.into()))
-            .boxed()
+        self.blocking(move || {
+            if self.is_forbidden(from) || self.is_forbidden(to) {
+                return Err(FsError::Forbidden);
+            }
+            std::fs::rename(self.fspath(from), self.fspath(to)).map_err(|e| e.into())
+        })
+        .boxed()
     }
 
     fn copy<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
         debug!("FS: copy {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
         self.blocking(move || {
+            if self.is_forbidden(from) || self.is_forbidden(to) {
+                return Err(FsError::Forbidden);
+            }
             if let Err(e) = std::fs::copy(self.fspath(from), self.fspath(to)) {
                 debug!("copy failed: {:?}", e);
                 return Err(e.into());
@@ -303,6 +343,9 @@ impl Stream for LocalFsReadDir {
                                 ReadDirMeta::DataSymlink => Meta::Data(entry.metadata()),
                                 ReadDirMeta::None => Meta::Fs(self.fs.clone()),
                             };
+                            if let Some(ref mut nb) = self.dir_cache {
+                                nb.add(entry.file_name());
+                            }
                             let d = LocalFsDirEntry {
                                 meta:  meta,
                                 entry: entry,
@@ -313,7 +356,12 @@ impl Stream for LocalFsReadDir {
                             self.buffer.push_back(Err(e));
                             break;
                         },
-                        None => break,
+                        None => {
+                            if let Some(ref mut nb) = self.dir_cache {
+                                nb.finish();
+                            }
+                            break;
+                        }
                     }
                 }
             });

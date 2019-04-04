@@ -1,3 +1,8 @@
+// Optimizations for windows and the windows webdav mini-redirector.
+//
+// The main thing here is case-insensitive path lookups,
+// and caching that.
+//
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::ErrorKind;
