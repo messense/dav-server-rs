@@ -11,6 +11,7 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use lru::LruCache;
@@ -20,8 +21,12 @@ use crate::fs::*;
 use crate::localfs::LocalFs;
 use crate::webpath::WebPath;
 
+const NEG_CACHE_ENTRIES: usize = 4096;
+const NEG_CACHE_MAX_AGE: u64 = 60;
+const NEG_CACHE_SLEEP_MS: u64 = 10037;
+
 lazy_static! {
-    static ref NEG_CACHE: Arc<NegCache> = Arc::new(NegCache::new(4096));
+    static ref NEG_CACHE: Arc<NegCache> = Arc::new(NegCache::new(NEG_CACHE_ENTRIES));
 }
 
 // Negative cache entry.
@@ -41,6 +46,32 @@ struct NegCache {
 impl NegCache {
     // return a new instance.
     fn new(size: usize) -> NegCache {
+        thread::spawn(move || {
+            loop {
+                // House keeping. Every 10 seconds, remove entries older than
+                // CACHE_MAX_AGE seconds from the LRU cache.
+                thread::sleep(Duration::from_millis(NEG_CACHE_SLEEP_MS));
+                {
+                    let mut cache = NEG_CACHE.cache.lock();
+                    let now = SystemTime::now();
+                    while let Some((_k, e)) = cache.peek_lru() {
+                        if let Ok(age) = now.duration_since(e.time) {
+                            debug!("NegCache: purge check {:?}", _k);
+                            if age.as_secs() <= NEG_CACHE_MAX_AGE {
+                                break;
+                            }
+                            if let Some((_k, _)) = cache.pop_lru() {
+                                debug!("NegCache: purging {:?} (age {})", _k, age.as_secs());
+                            } else {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
         NegCache {
             cache: Mutex::new(LruCache::new(size)),
         }
