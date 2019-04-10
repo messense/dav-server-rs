@@ -37,8 +37,10 @@ We always return a 404 Not Found for a PROPSTAT of any `.localized` file.
 Furthermore, we disallow moving, removing etc of those files. The files
 do not show up in a PROPSTAT of the rootdirectory.
 
-If a PROPFIND with `Depth: 1` is done on a directory, we check for every
-file in the directory if a corresponding `._` file exists. If _not_, we
-add the `._` file to a negative cache. If we receive a PROPSTAT for such
-a file within a few seconds, we return 404 Not Found.
+If a PROPFIND with `Depth: 1` is done on a directory, we add the
+directory pathname to an LRU cache, and the pathname of each file of
+which the name starts with `._`. Since we then know which `._` files
+exist, it is easy to return a fast 404 for PROPSTAT request for `._`
+files that do not exist. The cache is kept consistent by checking
+the timestamp on the parent directory, and a timeout.
 

@@ -24,7 +24,7 @@ use futures::{future, Future, FutureExt, Stream};
 use libc;
 
 use crate::fs::*;
-use crate::localfs_macos::NegCacheBuilder;
+use crate::localfs_macos::DUCacheBuilder;
 use crate::webpath::WebPath;
 
 // Run some code via tokio_threadpool::blocking(), returns Future 0.3
@@ -74,7 +74,7 @@ struct LocalFsReadDir {
     fs:        LocalFs,
     do_meta:   ReadDirMeta,
     buffer:    VecDeque<std::io::Result<LocalFsDirEntry>>,
-    dir_cache: Option<NegCacheBuilder>,
+    dir_cache: Option<DUCacheBuilder>,
     iterator:  std::fs::ReadDir,
 }
 

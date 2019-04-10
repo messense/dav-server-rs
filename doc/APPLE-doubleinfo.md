@@ -13,8 +13,12 @@ which is the contents of the ".\_file" (if it would be present) in base64.
 It appears to only do this when the appledoubleinfo data is completely
 basic and is 82 bytes of size.
 
-This prevents the webdav clients from launching an additional PROPSTAT
+This prevents the webdav clients from launching an additional PROPFIND
 request for every file prefixed with ".\_".
+
+Note that you cannot add an <appledoubleheader> propery to a PROPSTAT
+element of a "file" itself, that's ignored, alas. macOS only accepts
+it on ".\_" files.
 
 There is not much information about this, but an Apple engineer mentioned it in
 https://lists.apple.com/archives/filesystem-dev/2009/Feb/msg00013.html
