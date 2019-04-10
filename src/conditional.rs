@@ -43,9 +43,9 @@ pub(crate) fn ifrange_match(
     }
 }
 
-pub(crate) fn etaglist_match(tags: &davheaders::ETagList, tag: Option<&typed_headers::EntityTag>) -> bool {
+pub(crate) fn etaglist_match(tags: &davheaders::ETagList, exists: bool, tag: Option<&typed_headers::EntityTag>) -> bool {
     match tags {
-        &davheaders::ETagList::Star => true,
+        &davheaders::ETagList::Star => exists,
         &davheaders::ETagList::Tags(ref t) => {
             match tag {
                 Some(tag) => t.iter().any(|x| x == tag),
@@ -61,7 +61,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
 
     if let Some(r) = req.headers().typed_get::<davheaders::IfMatch>() {
         let etag = meta.and_then(|m| m.etag()).map(|t| EntityTag::new(false, t));
-        if !etaglist_match(&r.0, etag.as_ref()) {
+        if !etaglist_match(&r.0, meta.is_some(), etag.as_ref()) {
             debug!("precondition fail: If-Match {:?}", r);
             return Some(StatusCode::PRECONDITION_FAILED);
         }
@@ -79,7 +79,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<DavMetaData>>) -> O
 
     if let Some(r) = req.headers().typed_get::<davheaders::IfNoneMatch>() {
         let etag = meta.and_then(|m| m.etag()).map(|t| EntityTag::new(false, t));
-        if etaglist_match(&r.0, etag.as_ref()) {
+        if etaglist_match(&r.0, meta.is_some(), etag.as_ref()) {
             debug!("precondition fail: If-None-Match {:?}", r);
             if req.method() == &Method::GET || req.method() == &Method::HEAD {
                 return Some(StatusCode::NOT_MODIFIED);
