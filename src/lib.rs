@@ -7,7 +7,7 @@
 //! backend, so it can be used as a HTTP or WEBDAV fileserver.
 //!
 //! NOTE: this crate uses futures 0.3 + async/await code internally, so it
-//! only works on Rust nightly (currently rustc 1.34.0-nightly (00aae71f5 2019-02-25)).
+//! only works on Rust nightly (currently rustc 1.35.0-nightly (4c27fb19b 2019-03-25)).
 //! The external interface is futures 0.1 based though (might add 0.3 as well).
 //!
 //! ## Interface.
@@ -25,8 +25,8 @@
 //!
 //! ## Implemented standards.
 //!
-//! Currently passes the "basic", "copymove", "props", "locks" and "http"
-//! checks of the Webdav Litmus Test testsuite. That's all of the base
+//! Currently [passes the "basic", "copymove", "props", "locks" and "http"
+//! checks][README_litmus] of the Webdav Litmus Test testsuite. That's all of the base
 //! [RFC4918] webdav specification.
 //!
 //! The litmus test suite also has tests for RFC3744 "acl" and "principal",
@@ -106,6 +106,7 @@
 //! [`MemFs`]: memfs/index.html
 //! [`LocalFs`]: localfs/index.html
 //! [`FakeLs`]: fakels/index.html
+//! [README_litmus]: https://github.xs4all.net/mikevs/webdav-handler-rs/blob/master/README.litmus-test.md
 //! [hyper_example]: https://github.xs4all.net/mikevs/webdav-handler-rs/blob/master/examples/hyper.rs
 //! [actix_web_example]: https://github.xs4all.net/mikevs/webdav-handler-rs/blob/master/examples/actix-web.rs
 //! [PartialPut]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
