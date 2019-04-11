@@ -23,12 +23,9 @@ use crate::fs::*;
 use crate::localfs::LocalFs;
 use crate::webpath::WebPath;
 
-//const DU_CACHE_ENTRIES: usize = 4096;
-//const DU_CACHE_MAX_AGE: u64 = 60;
-//const DU_CACHE_SLEEP_MS: u64 = 10037;
 const DU_CACHE_ENTRIES: usize = 4096;
-const DU_CACHE_MAX_AGE: u64 = 5;
-const DU_CACHE_SLEEP_MS: u64 = 2000;
+const DU_CACHE_MAX_AGE: u64 = 60;
+const DU_CACHE_SLEEP_MS: u64 = 10037;
 
 lazy_static! {
     static ref DU_CACHE: Arc<DUCache> = Arc::new(DUCache::new(DU_CACHE_ENTRIES));
