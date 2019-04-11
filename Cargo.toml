@@ -1,9 +1,22 @@
 [package]
 name = "webdav-handler"
+
+# When releasing to crates.io:
+# - Update html_root_url in src/lib.rs
+# - Update CHANGELOG.md.
+# - Run ./generate-readme
+# - Create git tag webdav-handler-0.x.y
 version = "0.1.0"
+
+readme = "README.md"
+documentation = "https://docs.rs/webdav-handler"
+repository = "https://github.com/miquels/webdav-handler-rs"
+homepage = "https://github.com/iquels/webdav-handler-rs"
 authors = ["Miquel van Smoorenburg <mikevs@xs4all.net>"]
 edition = "2018"
 license = "Apache-2.0"
+keywords = ["webdav"]
+categories = ["web-programming"]
 
 [lib]
 name = "webdav_handler"

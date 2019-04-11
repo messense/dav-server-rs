@@ -1,0 +1,13 @@
+#! /bin/sh
+
+VERSION=$(sed -ne 's!^version *= *"\(.*\)".*!\1!p' Cargo.toml)
+DOCS="https://docs.rs/webdav-handler/$VERSION"
+
+if ! fgrep "$VERSION" src/lib.rs >/dev/null
+then
+	echo "WARNING: html_root_url in src/lib.rs out of date"
+fi
+
+cargo readme |
+	sed -e 's!^\(.*\]: \)\(.*\.html\)$!\1'"$DOCS"'/\2!' > README.md
+

@@ -98,16 +98,16 @@ fn main() {
     hyper::rt::run(server);
 }
 ```
-[DavHandler]: struct.DavHandler.html
-[DavFileSystem]: fs/struct.DavFileSystem.html
-[DavLockSystem]: ls/struct.DavLockSystem.html
-[DavProp]: fs/struct.DavProp.html
+[DavHandler]: https://docs.rs/webdav-handler/0.1.0/struct.DavHandler.html
+[DavFileSystem]: https://docs.rs/webdav-handler/0.1.0/fs/struct.DavFileSystem.html
+[DavLockSystem]: https://docs.rs/webdav-handler/0.1.0/ls/struct.DavLockSystem.html
+[DavProp]: https://docs.rs/webdav-handler/0.1.0/fs/struct.DavProp.html
 [`WebDav`]: https://tools.ietf.org/html/rfc4918
 [RFC4918]: https://tools.ietf.org/html/rfc4918
-[`MemLs`]: memls/index.html
-[`MemFs`]: memfs/index.html
-[`LocalFs`]: localfs/index.html
-[`FakeLs`]: fakels/index.html
+[`MemLs`]: https://docs.rs/webdav-handler/0.1.0/memls/index.html
+[`MemFs`]: https://docs.rs/webdav-handler/0.1.0/memfs/index.html
+[`LocalFs`]: https://docs.rs/webdav-handler/0.1.0/localfs/index.html
+[`FakeLs`]: https://docs.rs/webdav-handler/0.1.0/fakels/index.html
 [README_litmus]: https://github.xs4all.net/mikevs/webdav-handler-rs/blob/master/README.litmus-test.md
 [hyper_example]: https://github.xs4all.net/mikevs/webdav-handler-rs/blob/master/examples/hyper.rs
 [actix_web_example]: https://github.xs4all.net/mikevs/webdav-handler-rs/blob/master/examples/actix-web.rs
@@ -131,3 +131,9 @@ RUST_LOG=webdav_handler=debug cargo run --example sample-litmus-server
 
 This will start a server on port 4918, serving an in-memory filesystem.
 For other options, run `cargo run --example sample-litmus-server -- --help`
+
+### Copyright and License.
+
+ * © 2018, 2019 XS4ALL Internet bv
+ * © 2018, 2019 Miquel van Smoorenburg
+ * [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0)
