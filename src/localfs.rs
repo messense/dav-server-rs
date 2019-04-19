@@ -325,7 +325,7 @@ impl Stream for LocalFsReadDir {
 
     fn poll_next(
         mut self: Pin<&mut Self>,
-        waker: &futures::task::Waker,
+        cx: &mut futures::task::Context<'_>,
     ) -> futures::task::Poll<Option<Self::Item>>
     {
         use futures::task::Poll;
@@ -367,7 +367,7 @@ impl Stream for LocalFsReadDir {
                     }
                 }
             });
-            match Pin::new(&mut fut).poll(waker) {
+            match Pin::new(&mut fut).poll(cx) {
                 Poll::Ready(_) => {},
                 Poll::Pending => return Poll::Pending,
             }

@@ -52,7 +52,7 @@ use futures01::Stream as Stream01;
 
 use futures::compat::Compat as Compat03As01;
 use futures::task::Poll as Poll03;
-use futures::task::Waker;
+use futures::task::Context;
 use futures::Future as Future03;
 use futures::Stream as Stream03;
 
@@ -77,7 +77,7 @@ impl<E> SenderFuture<E> {
 impl Future03 for SenderFuture {
     type Output = ();
 
-    fn poll(mut self: Pin<&mut Self>, _waker: &Waker) -> Poll03<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll03<Self::Output> {
         if self.state {
             Poll03::Ready(())
         } else {
@@ -185,10 +185,10 @@ impl<I, E> Stream01 for CoroStream<I, E> {
 impl<I, E: Unpin> Stream03 for CoroStream<I, E> {
     type Item = Result<I, E>;
 
-    fn poll_next(mut self: Pin<&mut Self>, waker: &Waker) -> Poll03<Option<Result<I, E>>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll03<Option<Result<I, E>>> {
         let pollres = {
             let fut = self.fut.as_mut().unwrap();
-            fut.as_mut().poll(waker)
+            fut.as_mut().poll(cx)
         };
         match pollres {
             // If the future returned Poll::Ready, that signals the end of the stream.
