@@ -124,8 +124,6 @@ extern crate hyperx;
 extern crate log;
 #[macro_use]
 extern crate lazy_static;
-#[macro_use]
-extern crate percent_encoding;
 
 mod conditional;
 pub mod corostream;

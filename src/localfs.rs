@@ -148,7 +148,8 @@ impl LocalFs {
     }
 
     // Futures 0.3 blocking() adapter, also run the before/after hooks.
-    fn blocking<'a, F, T>(&'a self, func: F) -> impl Future<Output = T> + 'a
+    #[doc(hidden)]
+    pub fn blocking<'a, F, T>(&'a self, func: F) -> impl Future<Output = T> + 'a
     where
         F: FnOnce() -> T + 'a,
         T: 'a,
