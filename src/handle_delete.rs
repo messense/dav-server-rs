@@ -1,9 +1,6 @@
-//
-// This uses recursive async functions. that's really funky ...
-// see https://github.com/rust-lang/rust/issues/53690#issuecomment-457993865
-//
+use std::pin::Pin;
 
-use futures::{future::FutureObj, Future, StreamExt};
+use futures::{Future, StreamExt};
 use http::{Request, Response, StatusCode};
 
 use crate::conditional::if_match_get_tokens;
@@ -87,8 +84,15 @@ impl crate::DavInner {
 
                 // do the actual work. If this fails with a non-fs related error,
                 // return immediately.
-                let f = FutureObj::new(Box::pin(self.delete_items(&mut res, depth, meta, &npath)));
-                if let Err(e) = await!(f) {
+                //
+                // Recursion. Need to erase type, otherwise you get:
+                //   ) -> impl Future<Output = DavResult<()>> + Send + 'a
+                //        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expands to self-referential type
+                // see https://github.com/rust-lang/rust/issues/53690#issuecomment-457993865
+                let fut_obj : Pin<Box<Future<Output = _> + Send>> = Box::pin(
+                    self.delete_items(&mut res, depth, meta, &npath)
+                );
+                if let Err(e) = await!(fut_obj) {
                     match e {
                         DavError::Status(_) => {
                             result = Err(e);

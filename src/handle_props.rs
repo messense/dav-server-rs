@@ -1,8 +1,9 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{self, Cursor};
+use std::pin::Pin;
 
-use futures::{future::FutureObj, Future, StreamExt};
+use futures::{Future, StreamExt};
 use http::{Request, Response, StatusCode};
 
 use crate::xmltree_ext::*;
@@ -261,9 +262,10 @@ impl DavInner {
                 await!(propwriter.write_props(&npath, meta))?;
                 await!(propwriter.flush())?;
                 if depth == davheaders::Depth::Infinity && is_dir {
-                    await!(FutureObj::new(Box::pin(
+                    let fut_obj : Pin<Box<Future<Output = _> + Send>> = Box::pin(
                         self.propfind_directory(&npath, depth, propwriter)
-                    )))?;
+                    );
+                    await!(fut_obj)?;
                 }
             }
             Ok(())
