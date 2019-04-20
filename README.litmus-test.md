@@ -17,7 +17,7 @@ assumes that it is using basic authentication, so you must run the server
 with the `--auth` flag.
 ```
 cd webdav-handler-rs
-cargo run --example sample-litmus-server -- --auth
+cargo run --example sample-litmus-server -- --memfs --auth
 ```
 
 You do not have to install the litmus binary, it's possible to run the tests
