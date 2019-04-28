@@ -116,7 +116,7 @@
 //! [hyper]: https://hyper.rs/
 //! [actix-web]: https://actix.rs/
 //!
-#![feature(async_await, await_macro, futures_api)]
+#![feature(async_await, await_macro)]
 
 #[macro_use]
 extern crate hyperx;
