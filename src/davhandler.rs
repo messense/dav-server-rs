@@ -9,7 +9,7 @@ use std::sync::Arc;
 use bytes;
 
 use futures::compat::Stream01CompatExt;
-use futures::future::{FutureExt, TryFutureExt};
+use futures::future::TryFutureExt;
 use futures::stream::StreamExt;
 use futures01;
 
@@ -250,7 +250,7 @@ impl DavInner {
         ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
-        async move {
+        let fut = async move {
             let (req, body) = {
                 let (parts, body) = req.into_parts();
                 (Request::from_parts(parts, ()), body)
@@ -296,9 +296,8 @@ impl DavInner {
                     Ok(resp)
                 },
             }
-        }
-            .boxed()
-            .compat()
+        };
+        Box::pin(fut).compat()
     }
 
     // internal dispatcher part 2.
