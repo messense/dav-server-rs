@@ -716,7 +716,7 @@ impl PropWriter {
                         },
                         "getlastmodified" => {
                             if let Ok(time) = meta.modified() {
-                                let tm = format!("{}", systemtime_to_httpdate(time));
+                                let tm = systemtime_to_httpdate(time);
                                 return self.build_elem(docontent, pfx, prop, tm);
                             }
                         },
@@ -782,7 +782,7 @@ impl PropWriter {
                     match prop.name.as_str() {
                         "Win32CreationTime" => {
                             if let Ok(time) = meta.created() {
-                                let tm = format!("{}", systemtime_to_httpdate(time));
+                                let tm = systemtime_to_httpdate(time);
                                 return self.build_elem(docontent, pfx, prop, tm);
                             }
                             // use ctime instead - apache seems to do this.
@@ -793,19 +793,19 @@ impl PropWriter {
                                         time = mtime;
                                     }
                                 }
-                                let tm = format!("{}", systemtime_to_httpdate(time));
+                                let tm = systemtime_to_httpdate(time);
                                 return self.build_elem(docontent, pfx, prop, tm);
                             }
                         },
                         "Win32LastAccessTime" => {
                             if let Ok(time) = meta.accessed() {
-                                let tm = format!("{}", systemtime_to_httpdate(time));
+                                let tm = systemtime_to_httpdate(time);
                                 return self.build_elem(docontent, pfx, prop, tm);
                             }
                         },
                         "Win32LastModifiedTime" => {
                             if let Ok(time) = meta.modified() {
-                                let tm = format!("{}", systemtime_to_httpdate(time));
+                                let tm = systemtime_to_httpdate(time);
                                 return self.build_elem(docontent, pfx, prop, tm);
                             }
                         },
