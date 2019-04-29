@@ -1,8 +1,7 @@
 use futures::Future;
+use headers::HeaderMapExt;
 use http::{Request, Response};
 
-use crate::davheaders;
-use crate::typed_headers::{self, HeaderMapExt};
 use crate::util::{dav_method, empty_body, Method};
 use crate::{BoxedByteStream, DavResult};
 
@@ -16,13 +15,14 @@ impl crate::DavInner {
             let mut res = Response::new(empty_body());
 
             let h = res.headers_mut();
-            if self.ls.is_some() {
-                h.typed_insert(davheaders::DAV("1,2,3,sabredav-partialupdate".to_string()));
+            let dav = if self.ls.is_some() {
+                "1,2,3,sabredav-partialupdate"
             } else {
-                h.typed_insert(davheaders::DAV("1,3,sabredav-partialupdate".to_string()));
-            }
-            h.typed_insert(davheaders::MSAuthorVia("DAV".to_string()));
-            h.typed_insert(typed_headers::ContentLength(0));
+                "1,3,sabredav-partialupdate"
+            };
+            h.insert("DAV", dav.parse().unwrap());
+            h.insert("MS-Author-Via", "DAV".parse().unwrap());
+            h.typed_insert(headers::ContentLength(0));
 
             // Helper to add method to array if method is in fact
             // allowed. If the current method is not OPTIONS, leave

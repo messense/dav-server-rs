@@ -4,13 +4,13 @@ use std::io;
 use std::marker::Unpin;
 
 use futures::{Future, Stream, StreamExt};
+use headers::HeaderMapExt;
 use http::StatusCode as SC;
 use http::{self, Request, Response};
 
 use crate::conditional::if_match_get_tokens;
 use crate::davheaders;
 use crate::fs::*;
-use crate::typed_headers::{self, HeaderMapExt};
 use crate::util::empty_body;
 use crate::{BoxedByteStream, DavError, DavResult};
 
@@ -74,7 +74,7 @@ impl crate::DavInner {
             oo.create = true;
             oo.truncate = true;
 
-            if let Some(n) = req.headers().typed_get::<typed_headers::ContentLength>() {
+            if let Some(n) = req.headers().typed_get::<headers::ContentLength>() {
                 count = n.0;
                 have_count = true;
             }
@@ -83,7 +83,7 @@ impl crate::DavInner {
 
             // close connection on error.
             let mut res = Response::new(empty_body());
-            res.headers_mut().typed_insert(typed_headers::Connection::close());
+            res.headers_mut().typed_insert(headers::Connection::close());
 
             // SabreDAV style PATCH?
             if req.method() == &http::Method::PATCH {
@@ -128,21 +128,21 @@ impl crate::DavInner {
             }
 
             // Apache-style Content-Range header?
-            if let Some(x) = req.headers().typed_get::<davheaders::ContentRange>() {
-                let b = x.0;
-                let e = x.1;
+            if let Some(range) = req.headers().typed_get::<headers::ContentRange>() {
+                if let Some((b, e)) = range.bytes_range() {
 
-                if have_count {
-                    if e - b + 1 != count {
-                        return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
+                    if have_count {
+                        if e - b + 1 != count {
+                            return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
+                        }
+                    } else {
+                        count = e - b + 1;
+                        have_count = true;
                     }
-                } else {
-                    count = e - b + 1;
-                    have_count = true;
+                    start = b;
+                    do_range = true;
+                    oo.truncate = false;
                 }
-                start = b;
-                do_range = true;
-                oo.truncate = false;
             }
 
             // check the If and If-* headers.
@@ -197,8 +197,7 @@ impl crate::DavInner {
                 }
             }
 
-            let bytes = vec![typed_headers::RangeUnit::Bytes];
-            res.headers_mut().typed_insert(typed_headers::AcceptRanges(bytes));
+            res.headers_mut().typed_insert(headers::AcceptRanges::bytes());
 
 
             // loop, read body, write to file.
@@ -238,7 +237,7 @@ impl crate::DavInner {
             *res.status_mut() = match meta {
                 Ok(_) => SC::NO_CONTENT,
                 Err(_) => {
-                    res.headers_mut().typed_insert(typed_headers::ContentLength(0));
+                    res.headers_mut().typed_insert(headers::ContentLength(0));
                     SC::CREATED
                 },
             };
@@ -247,13 +246,12 @@ impl crate::DavInner {
             res.headers_mut().remove(http::header::CONNECTION);
 
             if let Ok(m) = await!(file.metadata()) {
-                if let Some(tag) = m.etag() {
-                    let etag = typed_headers::EntityTag::new(false, tag);
-                    res.headers_mut().typed_insert(typed_headers::ETag(etag));
+                if let Some(etag) = davheaders::ETag::from_meta(&m) {
+                    res.headers_mut().typed_insert(etag);
                 }
                 if let Ok(modified) = m.modified() {
                     res.headers_mut()
-                        .typed_insert(typed_headers::LastModified(modified.into()));
+                        .typed_insert(headers::LastModified::from(modified));
                 }
             }
             Ok(res)

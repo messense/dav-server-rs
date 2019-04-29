@@ -2,17 +2,17 @@ use std::cmp;
 use std::io::Cursor;
 use std::time::Duration;
 
+use headers::HeaderMapExt;
 use http::StatusCode as SC;
 use http::{Request, Response};
 use xmltree::{self, Element};
 
 use crate::conditional::{dav_if_match, if_match};
-use crate::davheaders::{self, DavTimeout, Depth, Timeout};
+use crate::davheaders::{self, DavTimeout};
 use crate::errors::*;
 use crate::fs::{FsError, OpenOptions};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
-use crate::typed_headers::HeaderMapExt;
 use crate::util::{empty_body, single_body};
 use crate::webpath::WebPath;
 use crate::xmltree_ext::{self, ElementExt};
@@ -68,9 +68,9 @@ impl crate::DavInner {
         }
 
         // handle Depth:
-        let deep = match req.headers().typed_get::<Depth>() {
-            Some(Depth::Infinity) | None => true,
-            Some(Depth::Zero) => false,
+        let deep = match req.headers().typed_get::<davheaders::Depth>() {
+            Some(davheaders::Depth::Infinity) | None => true,
+            Some(davheaders::Depth::Zero) => false,
             _ => return Err(SC::BAD_REQUEST.into()),
         };
 
@@ -167,8 +167,8 @@ impl crate::DavInner {
         }
 
         // output result
-        res.headers_mut()
-            .typed_insert(davheaders::LockToken("<".to_string() + &lock.token + ">"));
+        let lt = format!("<{}>", lock.token);
+        res.headers_mut().typed_insert(davheaders::LockToken(lt));
         if let None = meta {
             *res.status_mut() = SC::CREATED;
         } else {
@@ -265,7 +265,7 @@ fn get_timeout(req: &Request<()>, refresh: bool, shared: bool) -> Option<Duratio
     } else {
         Duration::new(600, 0)
     };
-    match req.headers().typed_get::<Timeout>() {
+    match req.headers().typed_get::<davheaders::Timeout>() {
         Some(davheaders::Timeout(ref vec)) if vec.len() > 0 => {
             match vec[0] {
                 DavTimeout::Infinite => {

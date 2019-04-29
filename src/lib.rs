@@ -119,8 +119,6 @@
 #![feature(async_await, await_macro)]
 
 #[macro_use]
-extern crate hyperx;
-#[macro_use]
 extern crate log;
 #[macro_use]
 extern crate lazy_static;
@@ -142,9 +140,6 @@ mod multierror;
 mod tree;
 mod util;
 mod xmltree_ext;
-
-#[doc(hidden)]
-pub mod typed_headers;
 
 pub mod fakels;
 pub mod fs;

@@ -1,10 +1,10 @@
 use futures::Future;
+use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
 use crate::conditional::*;
 use crate::davheaders;
 use crate::fs::*;
-use crate::typed_headers::HeaderMapExt;
 use crate::util::empty_body;
 use crate::{BoxedByteStream, DavError, DavResult};
 

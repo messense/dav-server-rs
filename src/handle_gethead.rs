@@ -2,6 +2,7 @@ use std::cmp;
 use std::io::Write;
 
 use futures::{Future, StreamExt};
+use headers::HeaderMapExt;
 use htmlescape;
 use http::{status::StatusCode, Request, Response};
 use time;
@@ -13,7 +14,6 @@ use crate::corostream::CoroStream;
 use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
-use crate::typed_headers::{self, ByteRangeSpec, HeaderMapExt};
 use crate::util::{empty_body, systemtime_to_timespec};
 use crate::{BoxedByteStream, Method};
 
@@ -52,7 +52,7 @@ impl crate::DavInner {
             }
             let len = meta.len();
             let mut curpos = 0u64;
-            let file_etag = meta.etag().map(|tag| typed_headers::EntityTag::new(false, tag));
+            let file_etag = davheaders::ETag::from_meta(&meta);
 
             let mut ranges = Vec::new();
             let do_range = match req.headers().typed_get::<davheaders::IfRange>() {
@@ -62,26 +62,23 @@ impl crate::DavInner {
 
             // see if we want to get one or more ranges.
             if do_range {
-                if let Some(r) = req.headers().typed_get::<typed_headers::Range>() {
+                if let Some(r) = req.headers().typed_get::<headers::Range>() {
                     debug!("handle_gethead: range header {:?}", r);
-                    match r {
-                        typed_headers::Range::Bytes(ref byteranges) => {
-                            for range in byteranges {
-                                let (start, mut count) = match range {
-                                    &ByteRangeSpec::FromTo(s, e) => (s, e - s + 1),
-                                    &ByteRangeSpec::AllFrom(s) => (s, len - s),
-                                    &ByteRangeSpec::Last(n) => (len - n, n),
-                                };
-                                if start >= len {
-                                    return Err(DavError::Status(StatusCode::RANGE_NOT_SATISFIABLE));
-                                }
-                                if start + count > len {
-                                    count = len - start;
-                                }
-                                ranges.push(Range { start, count });
-                            }
-                        },
-                        _ => {},
+                    use std::ops::Bound::*;
+                    for range in r.iter() {
+                        let (start, mut count) = match range {
+                            (Included(s), Included(e)) => (s, e - s + 1),
+                            (Included(s), Unbounded) => (s, len - s),
+                            (Unbounded, Included(n)) => (len - n, n),
+                            _ => return Err(DavError::Status(StatusCode::RANGE_NOT_SATISFIABLE)),
+                        };
+                        if start >= len {
+                            return Err(DavError::Status(StatusCode::RANGE_NOT_SATISFIABLE));
+                        }
+                        if start + count > len {
+                            count = len - start;
+                        }
+                        ranges.push(Range { start, count });
                     }
                 }
             }
@@ -91,10 +88,10 @@ impl crate::DavInner {
             // set Last-Modified and ETag headers.
             if let Ok(modified) = meta.modified() {
                 res.headers_mut()
-                    .typed_insert(typed_headers::LastModified(modified.into()));
+                    .typed_insert(headers::LastModified::from(modified));
             }
             if let Some(etag) = file_etag {
-                res.headers_mut().typed_insert(typed_headers::ETag(etag));
+                res.headers_mut().typed_insert(etag);
             }
 
             // handle the if-headers.
@@ -142,16 +139,15 @@ impl crate::DavInner {
             // Apache always adds an Accept-Ranges header, even with partial
             // responses where it should be pretty obvious. So something somewhere
             // probably depends on that.
-            res.headers_mut()
-                .typed_insert(typed_headers::AcceptRanges(vec![typed_headers::RangeUnit::Bytes]));
+            res.headers_mut().typed_insert(headers::AcceptRanges::bytes());
 
             // set content-length and start if we're not doing multipart.
             let content_type = path.get_mime_type_str();
             if ranges.len() <= 1 {
                 res.headers_mut()
-                    .insert("Content-Type", content_type.parse().unwrap());
+                    .typed_insert(davheaders::ContentType(content_type.to_owned()));
                 res.headers_mut()
-                    .typed_insert(typed_headers::ContentLength(ranges[0].count));
+                    .typed_insert(headers::ContentLength(ranges[0].count));
             }
 
             if head {
@@ -240,7 +236,7 @@ impl crate::DavInner {
                 path.add_slash();
                 res.headers_mut()
                     .insert("Location", path.as_utf8_string_with_prefix().parse().unwrap());
-                res.headers_mut().typed_insert(typed_headers::ContentLength(0));
+                res.headers_mut().typed_insert(headers::ContentLength(0));
                 *res.status_mut() = StatusCode::FOUND;
                 return Ok(res);
             }

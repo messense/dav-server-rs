@@ -1,9 +1,11 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::io::{self, Cursor};
 use std::pin::Pin;
 
 use futures::{Future, StreamExt};
+use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
 use crate::xmltree_ext::*;
@@ -21,7 +23,6 @@ use crate::fs::*;
 use crate::handle_lock::{list_lockdiscovery, list_supportedlock};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
-use crate::typed_headers::HeaderMapExt;
 use crate::util::{dav_xml_error, empty_body, systemtime_to_httpdate, systemtime_to_rfc3339};
 use crate::webpath::*;
 use crate::{BoxedByteStream, DavInner, DavResult};
@@ -140,15 +141,14 @@ impl DavInner {
 
         let mut res = Response::new(empty_body());
 
-        let nc: http::header::HeaderValue = "no-cache".parse().unwrap();
-        res.headers_mut().insert("Cache-Control", nc.clone());
-        res.headers_mut().insert("Pragma", nc);
+        res.headers_mut().typed_insert(headers::CacheControl::new().with_no_cache());
+        res.headers_mut().typed_insert(headers::Pragma::no_cache());
 
         let depth = match req.headers().typed_get::<davheaders::Depth>() {
             Some(davheaders::Depth::Infinity) | None => {
-                if let None = req.headers().typed_get::<davheaders::XLitmus>() {
-                    let contenttype = "application/xml; charset=utf-8".parse().unwrap();
-                    res.headers_mut().insert("content-type", contenttype);
+                if req.headers().typed_get::<davheaders::XLitmus>().is_none() {
+                    let ct = "application/xml; charset=utf-8".to_owned();
+                    res.headers_mut().typed_insert(davheaders::ContentType(ct));
                     *res.status_mut() = StatusCode::FORBIDDEN;
                     *res.body_mut() = dav_xml_error("<D:propfind-finite-depth/>");
                     return Ok(res);
@@ -283,12 +283,10 @@ impl DavInner {
                         if prop.text.is_none() || prop.children.len() > 0 {
                             return StatusCode::CONFLICT;
                         }
-                        // only here to make "litmus" happy, really...
+                        // FIXME only here to make "litmus" happy, really...
                         if let Some(ref s) = prop.text {
-                            use crate::typed_headers::{ContentLanguage, Header, Raw};
-                            match ContentLanguage::parse_header(&Raw::from(s.as_str())) {
-                                Ok(ContentLanguage(ref v)) if v.len() > 0 => {},
-                                _ => return StatusCode::CONFLICT,
+                            if davheaders::ContentLanguage::try_from(s.as_str()).is_err() {
+                               return StatusCode::CONFLICT;
                             }
                         }
                         if can_deadprop {

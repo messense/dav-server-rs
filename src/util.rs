@@ -6,10 +6,10 @@ use bytes::{self, Bytes};
 use futures::stream::TryStreamExt;
 use futures01;
 
+use headers::Header;
 use http::Method as httpMethod;
 
 use crate::errors::DavError;
-use crate::typed_headers;
 use crate::{BoxedByteStream, DavResult};
 
 /// HTTP Methods supported by DavHandler.
@@ -136,8 +136,11 @@ pub(crate) fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {
     }
 }
 
-pub(crate) fn systemtime_to_httpdate(t: SystemTime) -> typed_headers::HttpDate {
-    typed_headers::HttpDate::from(t)
+pub(crate) fn systemtime_to_httpdate(t: SystemTime) -> String {
+    let d = headers::Date::from(t);
+    let mut v = Vec::new();
+    d.encode(&mut v);
+    v[0].to_str().unwrap().to_owned()
 }
 
 pub(crate) fn systemtime_to_rfc3339(t: SystemTime) -> String {

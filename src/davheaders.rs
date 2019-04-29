@@ -1,23 +1,93 @@
-use std::fmt::{self, Write};
+
+use std::convert::TryFrom;
+use std::fmt::Display;
 use std::str::FromStr;
 
+use headers::Header;
+use http::header::{HeaderName, HeaderValue};
+use lazy_static::lazy_static;
 use regex::Regex;
 use url;
 
-use crate::typed_headers::{self, EntityTag, Header, RawLike};
-
-header! { (WWWAuthenticate, "WWW-Authenticate") => [String] }
-header! { (DAV, "DAV") => [String] }
-header! { (MSAuthorVia, "MS-Author-Via") => [String] }
-header! { (ContentType, "Content-Type") => [String] }
-header! { (LockToken, "Lock-Token") => [String] }
-header! { (XLitmus, "X-Litmus") => [String] }
-header! { (ContentLocation, "Content-Location") => [String] }
+use crate::fs::DavMetaData;
 
 lazy_static! {
     static ref RE_URL: Regex = Regex::new(r"https?://[^/]*([^#?]+).*$").unwrap();
+    pub static ref DEPTH: HeaderName = HeaderName::from_static("depth");
+    pub static ref TIMEOUT: HeaderName = HeaderName::from_static("timeout");
+    pub static ref OVERWRITE: HeaderName = HeaderName::from_static("overwrite");
+    pub static ref DESTINATION: HeaderName = HeaderName::from_static("destination");
+    pub static ref ETAG: HeaderName = HeaderName::from_static("etag");
+    pub static ref IF_RANGE: HeaderName = HeaderName::from_static("if-range");
+    pub static ref IF_MATCH: HeaderName = HeaderName::from_static("if-match");
+    pub static ref IF_NONE_MATCH: HeaderName = HeaderName::from_static("if-none-match");
+    pub static ref X_UPDATE_RANGE: HeaderName = HeaderName::from_static("x-update-range");
+    pub static ref IF: HeaderName = HeaderName::from_static("if");
+    pub static ref CONTENT_LANGUAGE: HeaderName = HeaderName::from_static("content-language");
 }
 
+// helper. 
+fn one<'i, I>(values: &mut I) -> Result<&'i HeaderValue, headers::Error>
+where
+    I: Iterator<Item = &'i HeaderValue>,
+{
+    let v = values.next().ok_or_else(invalid)?;
+    if values.next().is_some() {
+        Err(invalid())
+    } else {
+        Ok(v)
+    }
+}
+
+// helper
+fn invalid() -> headers::Error {
+    headers::Error::invalid()
+}
+
+// helper
+fn map_invalid(_e: impl std::error::Error) -> headers::Error {
+    headers::Error::invalid()
+}
+
+macro_rules! header {
+    ($tname:ident, $hname:ident, $sname:expr) => (
+
+        lazy_static! {
+            pub static ref $hname: HeaderName = HeaderName::from_static($sname);
+        }
+
+        #[derive(Debug, Clone, PartialEq)]
+        pub struct $tname(pub String);
+
+        impl Header for $tname {
+            fn name() -> &'static HeaderName {
+                &$hname
+            }
+
+            fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+            where
+                I: Iterator<Item = &'i HeaderValue>,
+            {
+                one(values)?.to_str().map(|x| $tname(x.to_owned())).map_err(map_invalid)
+            }
+
+            fn encode<E>(&self, values: &mut E)
+            where
+                E: Extend<HeaderValue>,
+            {
+                let value = HeaderValue::from_str(&self.0).unwrap();
+                values.extend(std::iter::once(value))
+            }
+        }
+    )
+}
+
+header!(ContentType, CONTENT_TYPE, "content-type");
+header!(ContentLocation, CONTENT_LOCATION, "content-location");
+header!(LockToken, LOCK_TOKEN, "lock-token");
+header!(XLitmus, X_LITMUS, "x-litmus");
+
+/// Depth: header.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Depth {
     Zero,
@@ -26,29 +96,86 @@ pub enum Depth {
 }
 
 impl Header for Depth {
-    fn header_name() -> &'static str {
-        "Depth"
+    fn name() -> &'static HeaderName {
+        &DEPTH
     }
 
-    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<Depth> {
-        if let Some(line) = raw.one() {
-            match line {
-                b"0" => return Ok(Depth::Zero),
-                b"1" => return Ok(Depth::One),
-                b"infinity" | b"Infinity" => return Ok(Depth::Infinity),
-                _ => {},
-            }
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        let value = one(values)?;
+        match value.as_bytes() {
+            b"0" => Ok(Depth::Zero),
+            b"1" => Ok(Depth::One),
+            b"infinity" | b"Infinity" => Ok(Depth::Infinity),
+            _ => Err(invalid()),
         }
-        Err(typed_headers::Error::Header)
     }
 
-    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
         let value = match *self {
             Depth::Zero => "0",
             Depth::One => "1",
             Depth::Infinity => "Infinity",
         };
-        f.fmt_line(&value)
+        values.extend(std::iter::once(HeaderValue::from_static(value)));
+    }
+}
+
+/// Content-Language header.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContentLanguage(headers::Vary);
+
+impl ContentLanguage {
+    #[allow(dead_code)]
+    pub fn iter_langs(&self) -> impl Iterator<Item = &str> {
+        self.0.iter_strs()
+    }
+}
+
+impl TryFrom<&str> for ContentLanguage {
+    type Error = headers::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let value = HeaderValue::from_str(value).map_err(map_invalid)?;
+        let mut values = std::iter::once(&value);
+        ContentLanguage::decode(&mut values)
+    }
+}
+
+impl Header for ContentLanguage {
+    fn name() -> &'static HeaderName {
+        &CONTENT_LANGUAGE
+    }
+
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        let h = match headers::Vary::decode(values) {
+            Err(e) => return Err(e),
+            Ok(h) => h,
+        };
+        for lang in h.iter_strs() {
+            let lang = lang.as_bytes();
+            // **VERY** rudimentary check ...
+            let ok = lang.len() == 2 || (lang.len() > 4 && lang[2] == b'-');
+            if !ok {
+                return Err(invalid());
+            }
+        }
+        Ok(ContentLanguage(h))
+    }
+
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
+        self.0.encode(values)
     }
 }
 
@@ -62,34 +189,41 @@ pub enum DavTimeout {
 pub struct Timeout(pub Vec<DavTimeout>);
 
 impl Header for Timeout {
-    fn header_name() -> &'static str {
-        "Timeout"
+    fn name() -> &'static HeaderName {
+        &TIMEOUT
     }
 
-    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<Timeout> {
-        if let Some(line) = raw.one() {
-            let mut v = Vec::new();
-            let words = std::str::from_utf8(line)?.split(|c| c == ',');
-            for word in words {
-                let w = match word {
-                    "Infinite" => DavTimeout::Infinite,
-                    _ if word.starts_with("Second-") => {
-                        let num = &word[7..];
-                        match num.parse::<u32>() {
-                            Err(_) => return Err(typed_headers::Error::Header),
-                            Ok(n) => DavTimeout::Seconds(n),
-                        }
-                    },
-                    _ => return Err(typed_headers::Error::Header),
-                };
-                v.push(w);
-            }
-            return Ok(Timeout(v));
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        let value = one(values)?;
+        let mut v = Vec::new();
+        let words = value
+            .to_str()
+            .map_err(map_invalid)?
+            .split(|c| c == ',');
+        for word in words {
+            let w = match word {
+                "Infinite" => DavTimeout::Infinite,
+                _ if word.starts_with("Second-") => {
+                    let num = &word[7..];
+                    match num.parse::<u32>() {
+                        Err(_) => return Err(invalid()),
+                        Ok(n) => DavTimeout::Seconds(n),
+                    }
+                },
+                _ => return Err(invalid()),
+            };
+            v.push(w);
         }
-        Err(typed_headers::Error::Header)
+        return Ok(Timeout(v));
     }
 
-    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
         let mut first = false;
         let mut value = String::new();
         for s in &self.0 {
@@ -98,11 +232,11 @@ impl Header for Timeout {
             }
             first = false;
             match s {
-                &DavTimeout::Seconds(n) => write!(&mut value, "Second-{}", n)?,
+                &DavTimeout::Seconds(n) => value.push_str(&format!("Second-{}", n)),
                 &DavTimeout::Infinite => value.push_str("Infinite"),
             }
         }
-        f.fmt_line(&value)
+        values.extend(std::iter::once(HeaderValue::from_str(&value).unwrap()));
     }
 }
 
@@ -110,33 +244,31 @@ impl Header for Timeout {
 pub struct Destination(pub String);
 
 impl Header for Destination {
-    fn header_name() -> &'static str {
-        "Destination"
+    fn name() -> &'static HeaderName {
+        &DESTINATION
     }
 
-    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<Destination> {
-        if let Some(line) = raw.one() {
-            let s = match std::str::from_utf8(line) {
-                Ok(s) => s,
-                Err(_) => return Err(typed_headers::Error::Header),
-            };
-            if s.starts_with("/") {
-                return Ok(Destination(s.to_string()));
-            }
-            match RE_URL.captures(s) {
-                Some(caps) => {
-                    if let Some(path) = caps.get(1) {
-                        return Ok(Destination(path.as_str().to_string()));
-                    }
-                },
-                _ => {},
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        let s = one(values)?.to_str().map_err(map_invalid)?;
+        if s.starts_with("/") {
+            return Ok(Destination(s.to_string()));
+        }
+        if let Some(caps) = RE_URL.captures(s) {
+            if let Some(path) = caps.get(1) {
+                return Ok(Destination(path.as_str().to_string()));
             }
         }
-        Err(typed_headers::Error::Header)
+        Err(invalid())
     }
 
-    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
-        f.fmt_line(&self.0)
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
+        values.extend(std::iter::once(HeaderValue::from_str(&self.0).unwrap()));
     }
 }
 
@@ -144,69 +276,175 @@ impl Header for Destination {
 pub struct Overwrite(pub bool);
 
 impl Header for Overwrite {
-    fn header_name() -> &'static str {
-        "Overwrite"
+    fn name() -> &'static HeaderName {
+        &OVERWRITE
     }
 
-    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<Overwrite> {
-        if let Some(line) = raw.one() {
-            match line {
-                b"F" => return Ok(Overwrite(false)),
-                b"T" => return Ok(Overwrite(true)),
-                _ => {},
-            }
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        let line = one(values)?;
+        match line.as_bytes() {
+            b"F" => Ok(Overwrite(false)),
+            b"T" => Ok(Overwrite(true)),
+            _ => Err(invalid()),
         }
-        Err(typed_headers::Error::Header)
     }
 
-    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
         let value = match self.0 {
             true => "T",
             false => "F",
         };
-        f.fmt_line(&value)
+        values.extend(std::iter::once(HeaderValue::from_static(value)));
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ETag {
+    tag:    String,
+    weak:   bool,
+}
+
+impl ETag {
+    #[allow(dead_code)]
+    pub fn new(weak:  bool, t: impl Into<String>) -> Result<ETag, headers::Error> {
+        let t = t.into();
+        if t.contains("\"") {
+            Err(invalid())
+        } else {
+            let w = if weak { "W/" } else { "" };
+            Ok(ETag{
+                tag:    format!("{}\"{}\"", w, t),
+                weak:   weak,
+            })
+        }
+    }
+
+    pub fn from_meta(meta: impl AsRef<DavMetaData>) -> Option<ETag> {
+        let tag = meta.as_ref().etag()?;
+        Some(ETag{
+            tag:    format!("\"{}\"", tag),
+            weak:   false,
+        })
+    }
+
+    #[allow(dead_code)]
+    pub fn is_weak(&self) -> bool {
+        self.weak
+    }
+}
+
+impl FromStr for ETag {
+    type Err = headers::Error;
+
+    fn from_str(t: &str) -> Result<Self, Self::Err> {
+        let (weak, s) = if t.starts_with("W/") {
+            (true, &t[2..])
+        } else {
+            (false, t)
+        };
+        if s.starts_with("\"") && s.ends_with("\"") && !s[1..s.len()-1].contains("\"") {
+            Ok(ETag{
+                tag:    t.to_owned(),
+                weak:   weak,
+            })
+        } else {
+            Err(invalid())
+        }
+    }
+}
+
+impl TryFrom<&HeaderValue> for ETag {
+    type Error = headers::Error;
+
+    fn try_from(value: &HeaderValue) -> Result<Self, Self::Error> {
+        let s = value.to_str().map_err(map_invalid)?;
+        ETag::from_str(s)
+    }
+}
+
+impl Display for ETag {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "\"{}\"", self.tag)
+    }
+}
+
+impl PartialEq for ETag {
+    fn eq(&self, other: &Self) -> bool {
+        !self.weak && !other.weak && self.tag == other.tag
+    }
+}
+
+impl Header for ETag {
+    fn name() -> &'static HeaderName {
+        &ETAG
+    }
+
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        let value = one(values)?;
+        ETag::try_from(value)
+    }
+
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
+        values.extend(std::iter::once(HeaderValue::from_str(&self.tag).unwrap()));
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IfRange {
-    EntityTag(typed_headers::EntityTag),
-    Date(typed_headers::HttpDate),
+    ETag(ETag),
+    Date(headers::Date),
 }
 
 impl Header for IfRange {
-    fn header_name() -> &'static str {
-        "If-Range"
+    fn name() -> &'static HeaderName {
+        &IF_RANGE
     }
 
-    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<IfRange> {
-        if let Some(line) = raw.one() {
-            let s = match std::str::from_utf8(line) {
-                Ok(s) => s,
-                Err(e) => Err(e)?,
-            };
-            if let Ok(tm) = typed_headers::HttpDate::from_str(s) {
-                return Ok(IfRange::Date(tm));
-            }
-            if let Ok(et) = typed_headers::EntityTag::from_str(s) {
-                return Ok(IfRange::EntityTag(et));
-            }
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        let value = one(values)?;
+
+        let mut iter = std::iter::once(value);
+        if let Ok(tm) = headers::Date::decode(&mut iter) {
+            return Ok(IfRange::Date(tm));
         }
-        Err(typed_headers::Error::Header)
+
+        let mut iter = std::iter::once(value);
+        if let Ok(et) = ETag::decode(&mut iter) {
+            return Ok(IfRange::ETag(et));
+        }
+
+        Err(invalid())
     }
 
-    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
-        let value = match self {
-            &IfRange::Date(ref d) => format!("{}", d),
-            &IfRange::EntityTag(ref t) => t.tag().to_string(),
-        };
-        f.fmt_line(&value)
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
+        match self {
+            &IfRange::Date(ref d) => d.encode(values),
+            &IfRange::ETag(ref t) => t.encode(values),
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ETagList {
-    Tags(Vec<typed_headers::EntityTag>),
+    Tags(Vec<ETag>),
     Star,
 }
 
@@ -216,56 +454,70 @@ pub struct IfMatch(pub ETagList);
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfNoneMatch(pub ETagList);
 
-fn parse_etag_list<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<ETagList> {
-    if let Some(line) = raw.one() {
-        let s = std::str::from_utf8(line)?;
-        if s.trim() == "*" {
-            return Ok(ETagList::Star);
-        }
-        let mut v = Vec::new();
-        for t in s.split(',') {
-            if let Ok(t) = typed_headers::EntityTag::from_str(t.trim()) {
-                v.push(t);
-            }
-        }
-        return Ok(ETagList::Tags(v));
+fn decode_etaglist<'i, I>(values: &mut I) -> Result<ETagList, headers::Error>
+where
+    I: Iterator<Item = &'i HeaderValue>,
+{
+    let s = one(values)?.to_str().map_err(map_invalid)?;
+    if s.trim() == "*" {
+        return Ok(ETagList::Star);
     }
-    Err(typed_headers::Error::Header)?
+    let mut v = Vec::new();
+    for t in s.split(',') {
+        let t = ETag::from_str(t.trim())?;
+         v.push(t);
+    }
+    return Ok(ETagList::Tags(v));
 }
 
-fn fmt_etaglist(m: &ETagList, f: &mut typed_headers::Formatter) -> fmt::Result {
+fn encode_etaglist<E>(m: &ETagList, values: &mut E)
+where
+    E: Extend<HeaderValue>,
+{
     let value = match m {
         &ETagList::Star => "*".to_string(),
-        &ETagList::Tags(ref t) => t.iter().map(|t| t.tag()).collect::<Vec<&str>>().join(", "),
+        &ETagList::Tags(ref t) => t.iter().map(|t| t.tag.as_str()).collect::<Vec<&str>>().join(", "),
     };
-    f.fmt_line(&value)
+    values.extend(std::iter::once(HeaderValue::from_str(&value).unwrap()));
 }
 
 impl Header for IfMatch {
-    fn header_name() -> &'static str {
-        "If-Match"
+    fn name() -> &'static HeaderName {
+        &IF_MATCH
     }
 
-    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<IfMatch> {
-        Ok(IfMatch(parse_etag_list(raw)?))
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        Ok(IfMatch(decode_etaglist(values)?))
     }
 
-    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
-        fmt_etaglist(&self.0, f)
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
+        encode_etaglist(&self.0, values)
     }
 }
 
 impl Header for IfNoneMatch {
-    fn header_name() -> &'static str {
-        "If-None-Match"
+    fn name() -> &'static HeaderName {
+        &IF_NONE_MATCH
     }
 
-    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<IfNoneMatch> {
-        Ok(IfNoneMatch(parse_etag_list(raw)?))
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        Ok(IfNoneMatch(decode_etaglist(values)?))
     }
 
-    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
-        fmt_etaglist(&self.0, f)
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
+        encode_etaglist(&self.0, values)
     }
 }
 
@@ -278,96 +530,65 @@ pub enum XUpdateRange {
 }
 
 impl Header for XUpdateRange {
-    fn header_name() -> &'static str {
-        "X-Update-Range"
+    fn name() -> &'static HeaderName {
+        &X_UPDATE_RANGE
     }
 
-    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<XUpdateRange> {
-        let line = raw.one().ok_or(typed_headers::Error::Header)?;
-        let mut s = std::str::from_utf8(line)?.trim();
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        let mut s = one(values)?.to_str().map_err(map_invalid)?;
         if s == "append" {
             return Ok(XUpdateRange::Append);
         }
         if !s.starts_with("bytes=") {
-            Err(typed_headers::Error::Header)?;
+            return Err(invalid());
         }
         s = &s[6..];
 
         let nums = s.split("-").collect::<Vec<&str>>();
         if nums.len() != 2 {
-            Err(typed_headers::Error::Header)?;
+            return Err(invalid());
         }
         if nums[0] != "" && nums[1] != "" {
             return Ok(XUpdateRange::FromTo(
                 (nums[0])
                     .parse::<u64>()
-                    .map_err(|_| typed_headers::Error::Header)?,
+                    .map_err(map_invalid)?,
                 (nums[1])
                     .parse::<u64>()
-                    .map_err(|_| typed_headers::Error::Header)?,
+                    .map_err(map_invalid)?,
             ));
         }
         if nums[0] != "" {
             return Ok(XUpdateRange::AllFrom(
                 (nums[0])
                     .parse::<u64>()
-                    .map_err(|_| typed_headers::Error::Header)?,
+                    .map_err(map_invalid)?,
             ));
         }
         if nums[1] != "" {
             return Ok(XUpdateRange::Last(
                 (nums[1])
                     .parse::<u64>()
-                    .map_err(|_| typed_headers::Error::Header)?,
+                    .map_err(map_invalid)?,
             ));
         }
-        return Err(typed_headers::Error::Header);
+        return Err(invalid())
     }
 
-    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
         let value = match self {
             &XUpdateRange::Append => "append".to_string(),
             &XUpdateRange::FromTo(b, e) => format!("{}-{}", b, e),
             &XUpdateRange::AllFrom(b) => format!("{}-", b),
             &XUpdateRange::Last(e) => format!("-{}", e),
         };
-        f.fmt_line(&value)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ContentRange(pub u64, pub u64);
-
-impl Header for ContentRange {
-    fn header_name() -> &'static str {
-        "Content-Range"
-    }
-
-    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<ContentRange> {
-        let line = raw.one().ok_or(typed_headers::Error::Header)?;
-        let mut s = std::str::from_utf8(line)?.trim();
-        if !s.starts_with("bytes") {
-            Err(typed_headers::Error::Header)?;
-        }
-        s = &s[6..];
-
-        let noslash = s.split("/").collect::<Vec<&str>>();
-        let nums = noslash[0].split("-").collect::<Vec<&str>>();
-        if nums.len() != 2 {
-            Err(typed_headers::Error::Header)?;
-        }
-        return Ok(ContentRange(
-            (nums[0])
-                .parse::<u64>()
-                .map_err(|_| typed_headers::Error::Header)?,
-            (nums[1])
-                .parse::<u64>()
-                .map_err(|_| typed_headers::Error::Header)?,
-        ));
-    }
-
-    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
-        f.fmt_line(&format!("{}-{}", self.0, self.1))
+        values.extend(std::iter::once(HeaderValue::from_str(&value).unwrap()));
     }
 }
 
@@ -395,7 +616,7 @@ impl IfList {
     }
 }
 
-// Single Condition is [NOT] State-Token | EntityTag
+// Single Condition is [NOT] State-Token | ETag
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfCondition {
     pub not:  bool,
@@ -404,7 +625,7 @@ pub struct IfCondition {
 #[derive(Debug, Clone, PartialEq)]
 pub enum IfItem {
     StateToken(String),
-    ETag(EntityTag),
+    ETag(ETag),
 }
 
 // Below stuff is for the parser state.
@@ -415,7 +636,7 @@ enum IfToken {
     Not,
     Word(String),
     Pointy(String),
-    ETag(EntityTag),
+    ETag(ETag),
     End,
 }
 
@@ -444,12 +665,12 @@ fn trim_left<'a>(mut out: &'a [u8]) -> &'a [u8] {
 }
 
 // parse one token.
-fn scan_until(buf: &[u8], c: u8) -> typed_headers::Result<(&[u8], &[u8])> {
+fn scan_until(buf: &[u8], c: u8) -> Result<(&[u8], &[u8]), headers::Error> {
     let mut i = 1;
     let mut quote = false;
     while quote || buf[i] != c {
         if buf.is_empty() || is_whitespace(buf[i]) {
-            return Err(typed_headers::Error::Header);
+            return Err(invalid());
         }
         if buf[i] == b'"' {
             quote = !quote;
@@ -460,11 +681,11 @@ fn scan_until(buf: &[u8], c: u8) -> typed_headers::Result<(&[u8], &[u8])> {
 }
 
 // scan one word.
-fn scan_word(buf: &[u8]) -> typed_headers::Result<(&[u8], &[u8])> {
+fn scan_word(buf: &[u8]) -> Result<(&[u8], &[u8]), headers::Error> {
     for (i, &c) in buf.iter().enumerate() {
         if is_whitespace(c) || is_special(c) || c < 32 {
             if i == 0 {
-                return Err(typed_headers::Error::Header);
+                return Err(invalid());
             }
             return Ok((&buf[..i], &buf[i..]));
         }
@@ -473,7 +694,7 @@ fn scan_word(buf: &[u8]) -> typed_headers::Result<(&[u8], &[u8])> {
 }
 
 // get next token.
-fn get_token<'a>(buf: &'a [u8]) -> typed_headers::Result<(IfToken, &'a [u8])> {
+fn get_token<'a>(buf: &'a [u8]) -> Result<(IfToken, &'a [u8]), headers::Error> {
     let buf = trim_left(buf);
     if buf.is_empty() {
         return Ok((IfToken::End, buf));
@@ -484,20 +705,20 @@ fn get_token<'a>(buf: &'a [u8]) -> typed_headers::Result<(IfToken, &'a [u8])> {
         b'N' if buf.starts_with(b"Not") => Ok((IfToken::Not, &buf[3..])),
         b'<' => {
             let (tok, rest) = scan_until(buf, b'>')?;
-            let s = std::string::String::from_utf8(tok.to_vec())?;
+            let s = std::string::String::from_utf8(tok.to_vec()).map_err(map_invalid)?;
             Ok((IfToken::Pointy(s), rest))
         },
         b'[' => {
             let (tok, rest) = scan_until(buf, b']')?;
-            let s = std::str::from_utf8(tok)?;
-            Ok((IfToken::ETag(EntityTag::from_str(s)?), rest))
+            let s = std::str::from_utf8(tok).map_err(map_invalid)?;
+            Ok((IfToken::ETag(ETag::from_str(s)?), rest))
         },
         _ => {
             let (tok, rest) = scan_word(buf)?;
             if tok == b"Not" {
                 Ok((IfToken::Not, rest))
             } else {
-                let s = std::string::String::from_utf8(tok.to_vec())?;
+                let s = std::string::String::from_utf8(tok.to_vec()).map_err(map_invalid)?;
                 Ok((IfToken::Word(s), rest))
             }
         },
@@ -505,17 +726,20 @@ fn get_token<'a>(buf: &'a [u8]) -> typed_headers::Result<(IfToken, &'a [u8])> {
 }
 
 impl Header for If {
-    fn header_name() -> &'static str {
-        "If"
+    fn name() -> &'static HeaderName {
+        &IF
     }
 
-    fn parse_header<'a, T: RawLike<'a>>(raw: &'a T) -> typed_headers::Result<If> {
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         // one big state machine.
         let mut if_lists = If(Vec::new());
         let mut cur_list = IfList::new();
 
         let mut state = IfState::Start;
-        let mut input = raw.one().ok_or(typed_headers::Error::Header)?;
+        let mut input = one(values)?.as_bytes();
 
         loop {
             let (tok, rest) = get_token(input)?;
@@ -525,7 +749,7 @@ impl Header for If {
                     match tok {
                         IfToken::ListOpen => IfState::List,
                         IfToken::Pointy(url) => {
-                            let u = url::Url::parse(&url).map_err(|_| typed_headers::Error::Header)?;
+                            let u = url::Url::parse(&url).map_err(map_invalid)?;
                             cur_list.resource_tag = Some(u);
                             IfState::RTag
                         },
@@ -580,29 +804,48 @@ impl Header for If {
                         _ => IfState::Bad,
                     }
                 },
-                IfState::Bad => return Err(typed_headers::Error::Header),
+                IfState::Bad => return Err(invalid()),
             };
         }
         Ok(if_lists)
     }
 
-    fn fmt_header(&self, f: &mut typed_headers::Formatter) -> fmt::Result {
-        f.fmt_line(&format!("[If header]"))
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
+        let value = "[If header]";
+        values.extend(std::iter::once(HeaderValue::from_static(value)));
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn if_header() {
-        use super::*;
         // Note that some implementations (golang net/x/webdav) also
         // accept a "plain  word" as StateToken, instead of only
         // a Coded-Url (<...>). We allow that as well, but I have
         // no idea if we need to (or should!).
-        let val = r#"  <http://x.yz/> ([W/"etag"] Not <DAV:nope> )
-            (Not<urn:x>[W/"bla"] plain:word:123) "#;
-        let hdr = If::parse_header(&typed_headers::Raw::from(val));
+        //let val = r#"  <http://x.yz/> ([W/"etag"] Not <DAV:nope> )
+        //    (Not<urn:x>[W/"bla"] plain:word:123) "#;
+        let val = r#"  <http://x.yz/> ([W/"etag"] Not <DAV:nope> ) (Not<urn:x>[W/"bla"] plain:word:123) "#;
+        let hdrval = HeaderValue::from_static(val);
+        let mut iter = std::iter::once(&hdrval);
+        let hdr = If::decode(&mut iter);
         assert!(hdr.is_ok());
+    }
+
+    #[test]
+    fn etag_header() {
+        let t1 = ETag::from_str(r#"W/"12345""#).unwrap();
+        let t2 = ETag::from_str(r#"W/"12345""#).unwrap();
+        let t3 = ETag::from_str(r#""12346""#).unwrap();
+        let t4 = ETag::from_str(r#""12346""#).unwrap();
+        assert!(t1 != t2);
+        assert!(t2 != t3);
+        assert!(t3 == t4);
     }
 }

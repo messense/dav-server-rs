@@ -18,12 +18,12 @@ use hyper;
 
 use futures01 as futures;
 use futures01::{future::Future, stream::Stream};
+use headers::{Authorization, authorization::Basic, HeaderMapExt};
 
 use webdav_handler::{
     localfs,
     ls::DavLockSystem,
     memfs, memls,
-    typed_headers::{Authorization, Basic, HeaderMapExt},
     DavConfig, DavHandler,
 };
 
@@ -52,7 +52,7 @@ impl Server {
         let user = if self.auth {
             // we want the client to authenticate.
             match req.headers().typed_get::<Authorization<Basic>>() {
-                Some(Authorization(basic)) => Some(basic.username.to_string()),
+                Some(Authorization(basic)) => Some(basic.username().to_string()),
                 None => {
                     // return a 401 reply.
                     let body = futures::stream::once(Ok(Bytes::from("please auth")));

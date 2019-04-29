@@ -1,6 +1,7 @@
 use std::pin::Pin;
 
 use futures::{Future, StreamExt};
+use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
 use crate::conditional::if_match_get_tokens;
@@ -9,7 +10,6 @@ use crate::davheaders::Depth;
 use crate::errors::*;
 use crate::fs::*;
 use crate::multierror::{multi_error, MultiError};
-use crate::typed_headers::HeaderMapExt;
 use crate::webpath::WebPath;
 use crate::{BoxedByteStream, DavResult};
 
