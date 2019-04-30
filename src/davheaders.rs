@@ -454,20 +454,33 @@ pub struct IfMatch(pub ETagList);
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfNoneMatch(pub ETagList);
 
+// Decode a list of etags. This is not entirely correct, we should
+// actually use a real parser. E.g. we don't handle comma's in
+// etags correctly - but we never generated those anyway.
 fn decode_etaglist<'i, I>(values: &mut I) -> Result<ETagList, headers::Error>
 where
     I: Iterator<Item = &'i HeaderValue>,
 {
-    let s = one(values)?.to_str().map_err(map_invalid)?;
-    if s.trim() == "*" {
-        return Ok(ETagList::Star);
-    }
     let mut v = Vec::new();
-    for t in s.split(',') {
-        let t = ETag::from_str(t.trim())?;
-         v.push(t);
+    let mut count = 0usize;
+    for value in values {
+        let s = value.to_str().map_err(map_invalid)?;
+        if s.trim() == "*" {
+            return Ok(ETagList::Star);
+        }
+        for t in s.split(',') {
+            // Simply skip misformed etags, they will never match.
+            if let Ok(t) = ETag::from_str(t.trim()) {
+                v.push(t);
+            }
+        }
+        count += 1;
     }
-    return Ok(ETagList::Tags(v));
+    if count != 0 {
+        Ok(ETagList::Tags(v))
+    } else {
+        Err(invalid())
+    }
 }
 
 fn encode_etaglist<E>(m: &ETagList, values: &mut E)

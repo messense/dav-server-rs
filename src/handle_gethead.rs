@@ -55,35 +55,14 @@ impl crate::DavInner {
             let file_etag = davheaders::ETag::from_meta(&meta);
 
             let mut ranges = Vec::new();
-            let do_range = match req.headers().typed_get::<davheaders::IfRange>() {
-                Some(r) => conditional::ifrange_match(&r, file_etag.as_ref(), meta.modified().ok()),
-                None => true,
+            let mut do_range = match req.headers().typed_try_get::<davheaders::IfRange>() {
+                Ok(Some(r)) => conditional::ifrange_match(&r, file_etag.as_ref(), meta.modified().ok()),
+                Ok(None) => true,
+                Err(_) => false,
             };
 
-            // see if we want to get one or more ranges.
-            if do_range {
-                if let Some(r) = req.headers().typed_get::<headers::Range>() {
-                    debug!("handle_gethead: range header {:?}", r);
-                    use std::ops::Bound::*;
-                    for range in r.iter() {
-                        let (start, mut count) = match range {
-                            (Included(s), Included(e)) => (s, e - s + 1),
-                            (Included(s), Unbounded) => (s, len - s),
-                            (Unbounded, Included(n)) => (len - n, n),
-                            _ => return Err(DavError::Status(StatusCode::RANGE_NOT_SATISFIABLE)),
-                        };
-                        if start >= len {
-                            return Err(DavError::Status(StatusCode::RANGE_NOT_SATISFIABLE));
-                        }
-                        if start + count > len {
-                            count = len - start;
-                        }
-                        ranges.push(Range { start, count });
-                    }
-                }
-            }
-
             let mut res = Response::new(empty_body());
+            let mut no_body = false;
 
             // set Last-Modified and ETag headers.
             if let Ok(modified) = meta.modified() {
@@ -94,6 +73,11 @@ impl crate::DavInner {
                 res.headers_mut().typed_insert(etag);
             }
 
+            // Apache always adds an Accept-Ranges header, even with partial
+            // responses where it should be pretty obvious. So something somewhere
+            // probably depends on that.
+            res.headers_mut().typed_insert(headers::AcceptRanges::bytes());
+
             // handle the if-headers.
             if let Some(s) = await!(conditional::if_match(
                 &req,
@@ -102,7 +86,37 @@ impl crate::DavInner {
                 &self.ls,
                 &path
             )) {
-                return Err(DavError::Status(s));
+                *res.status_mut() = s;
+                no_body = true;
+                do_range = false;
+            }
+
+            // see if we want to get one or more ranges.
+            if do_range {
+                if let Some(r) = req.headers().typed_get::<headers::Range>() {
+                    debug!("handle_gethead: range header {:?}", r);
+                    use std::ops::Bound::*;
+                    for range in r.iter() {
+                        let (start, mut count, valid) = match range {
+                            (Included(s), Included(e)) if e >= s => (s, e - s + 1, true),
+                            (Included(s), Unbounded) if s <= len => (s, len - s, true),
+                            (Unbounded, Included(n)) if n <= len => (len - n, n, true),
+                            _ => (0, 0, false),
+                        };
+                        if !valid || start >= len {
+                            let r = format!("bytes */{}", len);
+                            res.headers_mut().insert("Content-Range", r.parse().unwrap());
+                            *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
+                            ranges.clear();
+                            no_body = true;
+                            break;
+                        }
+                        if start + count > len {
+                            count = len - start;
+                        }
+                        ranges.push(Range { start, count });
+                    }
+                }
             }
 
             if ranges.len() > 0 {
@@ -111,8 +125,12 @@ impl crate::DavInner {
                     let r = format!("bytes */{}", len);
                     res.headers_mut().insert("Content-Range", r.parse().unwrap());
                     *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
-                    return Ok(res);
+                    ranges.clear();
+                    no_body = true;
                 }
+            }
+
+            if ranges.len() > 0 {
                 curpos = ranges[0].start;
 
                 *res.status_mut() = StatusCode::PARTIAL_CONTENT;
@@ -132,25 +150,21 @@ impl crate::DavInner {
                 }
             } else {
                 // normal request, send entire file.
-                *res.status_mut() = StatusCode::OK;
                 ranges.push(Range { start: 0, count: len });
             }
-
-            // Apache always adds an Accept-Ranges header, even with partial
-            // responses where it should be pretty obvious. So something somewhere
-            // probably depends on that.
-            res.headers_mut().typed_insert(headers::AcceptRanges::bytes());
 
             // set content-length and start if we're not doing multipart.
             let content_type = path.get_mime_type_str();
             if ranges.len() <= 1 {
                 res.headers_mut()
                     .typed_insert(davheaders::ContentType(content_type.to_owned()));
+                let notmod = res.status() == StatusCode::NOT_MODIFIED;
+                let len = if head || !no_body || notmod { ranges[0].count } else { 0 };
                 res.headers_mut()
-                    .typed_insert(headers::ContentLength(ranges[0].count));
+                    .typed_insert(headers::ContentLength(len));
             }
 
-            if head {
+            if head || no_body {
                 return Ok(res);
             }
 
