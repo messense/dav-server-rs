@@ -5,7 +5,7 @@ name = "webdav-handler"
 # - Update html_root_url in src/lib.rs
 # - Update CHANGELOG.md.
 # - Run ./generate-readme
-# - Create git tag webdav-handler-0.x.y
+# - Create git tag v0.x.y
 version = "0.1.0"
 
 readme = "README.md"
