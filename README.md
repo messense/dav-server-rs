@@ -10,9 +10,8 @@ the types from the `http` crate. It comes complete with a async filesystem
 backend, so it can be used as a HTTP or WEBDAV fileserver.
 
 NOTE: this crate uses futures 0.3 + async/await code internally, so it
-only works on Rust nightly. The `rust-toolchain` file currently has
-it pinned to nightly-2019-04-07. The external interface is futures 0.1 based
-though (might add 0.3 as well).
+only works on Rust nightly (currently rustc 1.36.0-nightly (938d4ffe1 2019-04-27)).
+The external interface is futures 0.1 based though (might add 0.3 as well).
 
 ### Interface.
 
@@ -109,9 +108,9 @@ fn main() {
 [`MemFs`]: https://docs.rs/webdav-handler/0.1.0/memfs/index.html
 [`LocalFs`]: https://docs.rs/webdav-handler/0.1.0/localfs/index.html
 [`FakeLs`]: https://docs.rs/webdav-handler/0.1.0/fakels/index.html
-[README_litmus]: https://github.xs4all.net/mikevs/webdav-handler-rs/blob/master/README.litmus-test.md
-[hyper_example]: https://github.xs4all.net/mikevs/webdav-handler-rs/blob/master/examples/hyper.rs
-[actix_web_example]: https://github.xs4all.net/mikevs/webdav-handler-rs/blob/master/examples/actix-web.rs
+[README_litmus]: https://github.com/miquels/webdav-handler-rs/blob/master/README.litmus-test.md
+[hyper_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/hyper.rs
+[actix_web_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/actix-web.rs
 [PartialPut]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
 [PUT]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
 [PATCH]: https://github.com/miquels/webdavfs/blob/master/SABREDAV-partialupdate.md
