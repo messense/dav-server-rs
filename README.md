@@ -1,13 +1,17 @@
-
 # webdav-handler
+
+[![Apache-2.0 licensed](https://img.shields.io/badge/license-Apache2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0.txt)
+[![crates.io](https://meritbadge.herokuapp.com/webdav-handler)](https://crates.io/crates/webdav-handler)
+[![Released API docs](https://docs.rs/webdav-handler/badge.svg)](https://docs.rs/webdav-handler)
 
 ### Generic async HTTP/WEBDAV handler
 
 [`Webdav`] ([RFC4918]) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
 
 This crate implements a futures/stream based webdav handler for Rust, using
-the types from the `http` crate. It comes complete with a async filesystem
-backend, so it can be used as a HTTP or WEBDAV fileserver.
+the types from the `http` crate. It comes complete with an async filesystem
+backend, so it can be used as a WEBDAV filesystem server, or just as a
+feature-complete HTTP server.
 
 NOTE: this crate uses futures 0.3 + async/await code internally, so it
 only works on Rust nightly (currently rustc 1.36.0-nightly (938d4ffe1 2019-04-27)).
@@ -99,8 +103,8 @@ fn main() {
 }
 ```
 [DavHandler]: https://docs.rs/webdav-handler/0.1.0/struct.DavHandler.html
-[DavFileSystem]: https://docs.rs/webdav-handler/0.1.0/fs/struct.DavFileSystem.html
-[DavLockSystem]: https://docs.rs/webdav-handler/0.1.0/ls/struct.DavLockSystem.html
+[DavFileSystem]: https://docs.rs/webdav-handler/0.1.0/fs/index.html
+[DavLockSystem]: https://docs.rs/webdav-handler/0.1.0/ls/index.html
 [DavProp]: https://docs.rs/webdav-handler/0.1.0/fs/struct.DavProp.html
 [`WebDav`]: https://tools.ietf.org/html/rfc4918
 [RFC4918]: https://tools.ietf.org/html/rfc4918
