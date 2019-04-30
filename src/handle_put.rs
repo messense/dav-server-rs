@@ -128,21 +128,25 @@ impl crate::DavInner {
             }
 
             // Apache-style Content-Range header?
-            if let Some(range) = req.headers().typed_get::<headers::ContentRange>() {
-                if let Some((b, e)) = range.bytes_range() {
+            match req.headers().typed_try_get::<headers::ContentRange>() {
+                Ok(Some(range)) => {
+                    if let Some((b, e)) = range.bytes_range() {
 
-                    if have_count {
-                        if e - b + 1 != count {
-                            return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
+                        if have_count {
+                            if e - b + 1 != count {
+                                return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
+                            }
+                        } else {
+                            count = e - b + 1;
+                            have_count = true;
                         }
-                    } else {
-                        count = e - b + 1;
-                        have_count = true;
+                        start = b;
+                        do_range = true;
+                        oo.truncate = false;
                     }
-                    start = b;
-                    do_range = true;
-                    oo.truncate = false;
-                }
+                },
+                Ok(None) => {},
+                Err(_) => return Err(DavError::StatusClose(SC::BAD_REQUEST)),
             }
 
             // check the If and If-* headers.
