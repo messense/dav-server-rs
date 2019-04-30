@@ -4,8 +4,9 @@
 //! [`Webdav`] ([RFC4918]) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
 //!
 //! This crate implements a futures/stream based webdav handler for Rust, using
-//! the types from the `http` crate. It comes complete with a async filesystem
-//! backend, so it can be used as a HTTP or WEBDAV fileserver.
+//! the types from the `http` crate. It comes complete with an async filesystem
+//! backend, so it can be used as a WEBDAV filesystem server, or just as a
+//! feature-complete HTTP server.
 //!
 //! NOTE: this crate uses futures 0.3 + async/await code internally, so it
 //! only works on Rust nightly (currently rustc 1.36.0-nightly (938d4ffe1 2019-04-27)).
@@ -98,8 +99,8 @@
 //! }
 //! ```
 //! [DavHandler]: struct.DavHandler.html
-//! [DavFileSystem]: fs/struct.DavFileSystem.html
-//! [DavLockSystem]: ls/struct.DavLockSystem.html
+//! [DavFileSystem]: fs/index.html
+//! [DavLockSystem]: ls/index.html
 //! [DavProp]: fs/struct.DavProp.html
 //! [`WebDav`]: https://tools.ietf.org/html/rfc4918
 //! [RFC4918]: https://tools.ietf.org/html/rfc4918
