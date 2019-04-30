@@ -15,9 +15,9 @@
 //!
 //! It has an interface similar to the Go x/net/webdav package:
 //!
-//! - the library contains an [HTTP handler](DavHandler)
-//! - you supply a [filesystem](DavFileSystem) for backend storage, which can optionally
-//!   implement reading/writing [DAV properties](DavProp).
+//! - the library contains an [HTTP handler][DavHandler]
+//! - you supply a [filesystem][DavFileSystem] for backend storage, which can optionally
+//!   implement reading/writing [DAV properties][DavProp].
 //! - you can supply a [locksystem][DavLockSystem] that handles the webdav locks
 //!
 //! With some glue code, this handler can be used from HTTP server
