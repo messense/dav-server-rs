@@ -6,13 +6,13 @@ name = "webdav-handler"
 # - Update CHANGELOG.md.
 # - Run ./generate-readme
 # - Create git tag v0.x.y
-version = "0.1.0"
+version = "0.1.1"
 
 readme = "README.md"
 description = "handler for the HTTP and Webdav protocols with filesystem backend"
 documentation = "https://docs.rs/webdav-handler"
 repository = "https://github.com/miquels/webdav-handler-rs"
-homepage = "https://github.com/iquels/webdav-handler-rs"
+homepage = "https://github.com/miquels/webdav-handler-rs"
 authors = ["Miquel van Smoorenburg <mike@langeraar.net>"]
 edition = "2018"
 license = "Apache-2.0"

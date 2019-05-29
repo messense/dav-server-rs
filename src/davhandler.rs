@@ -190,7 +190,7 @@ impl DavInner {
     // helper.
     pub(crate) async fn has_parent<'a>(&'a self, path: &'a WebPath) -> bool {
         let p = path.parent();
-        await!(self.fs.metadata(&p)).map(|m| m.is_dir()).unwrap_or(false)
+        self.fs.metadata(&p).await.map(|m| m.is_dir()).unwrap_or(false)
     }
 
     // helper.
@@ -228,7 +228,7 @@ impl DavInner {
     {
         let mut body = futures::compat::Compat01As03::new(body);
         let mut data = Vec::new();
-        while let Some(res) = await!(body.next()) {
+        while let Some(res) = body.next().await {
             let chunk = res.map_err(|_| {
                 DavError::IoError(io::Error::new(io::ErrorKind::UnexpectedEof, "UnexpectedEof"))
             })?;
@@ -263,7 +263,7 @@ impl DavInner {
                 .unwrap_or(false);
 
             // Turn any DavError results into a HTTP error response.
-            match await!(self.handle2(req, body)) {
+            match self.handle2(req, body).await {
                 Ok(resp) => {
                     debug!("== END REQUEST result OK");
                     Ok(resp)
@@ -340,7 +340,7 @@ impl DavInner {
         // other handlers either expected no body, or a pre-read Vec<u8>.
         let (body_strm, body_data) = match method {
             Method::Put | Method::Patch => (Some(body), Vec::new()),
-            _ => (None, await!(self.read_request(body, 65536))?),
+            _ => (None, self.read_request(body, 65536).await?),
         };
 
         // Not all methods accept a body.
@@ -356,16 +356,16 @@ impl DavInner {
         debug!("== START REQUEST {:?} {}", method, path);
 
         let res = match method {
-            Method::Options => await!(self.handle_options(req)),
-            Method::PropFind => await!(self.handle_propfind(req, body_data)),
-            Method::PropPatch => await!(self.handle_proppatch(req, body_data)),
-            Method::MkCol => await!(self.handle_mkcol(req)),
-            Method::Delete => await!(self.handle_delete(req)),
-            Method::Lock => await!(self.handle_lock(req, body_data)),
-            Method::Unlock => await!(self.handle_unlock(req)),
-            Method::Head | Method::Get => await!(self.handle_get(req)),
-            Method::Put | Method::Patch => await!(self.handle_put(req, body_strm.unwrap().compat())),
-            Method::Copy | Method::Move => await!(self.handle_copymove(req, method)),
+            Method::Options => self.handle_options(req).await,
+            Method::PropFind => self.handle_propfind(req, body_data).await,
+            Method::PropPatch => self.handle_proppatch(req, body_data).await,
+            Method::MkCol => self.handle_mkcol(req).await,
+            Method::Delete => self.handle_delete(req).await,
+            Method::Lock => self.handle_lock(req, body_data).await,
+            Method::Unlock => self.handle_unlock(req).await,
+            Method::Head | Method::Get => self.handle_get(req).await,
+            Method::Put | Method::Patch => self.handle_put(req, body_strm.unwrap().compat()).await,
+            Method::Copy | Method::Move => self.handle_copymove(req, method).await,
         };
         res
     }

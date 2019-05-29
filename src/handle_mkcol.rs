@@ -16,16 +16,16 @@ impl crate::DavInner {
     {
         async move {
             let mut path = self.path(&req);
-            let meta = await!(self.fs.metadata(&path));
+            let meta = self.fs.metadata(&path).await;
 
             // check the If and If-* headers.
-            let res = await!(if_match_get_tokens(
+            let res = if_match_get_tokens(
                 &req,
                 meta.as_ref().ok(),
                 &self.fs,
                 &self.ls,
                 &path
-            ));
+            ).await;
             let tokens = match res {
                 Ok(t) => t,
                 Err(s) => return Err(DavError::Status(s)),
@@ -42,7 +42,7 @@ impl crate::DavInner {
 
             let mut res = Response::new(empty_body());
 
-            match await!(self.fs.create_dir(&path)) {
+            match self.fs.create_dir(&path).await {
                 // RFC 4918 9.3.1 MKCOL Status Codes.
                 Err(FsError::Exists) => return Err(DavError::Status(StatusCode::METHOD_NOT_ALLOWED)),
                 Err(FsError::NotFound) => return Err(DavError::Status(StatusCode::CONFLICT)),

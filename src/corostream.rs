@@ -3,22 +3,22 @@
 //! Example:
 //!
 //! ```rust text
-//! #![feature(async_await, await_macro, futures_api)]
-//! use futures::{future, Future, Stream, StreamExt};
+//! #![feature(async_await)]
+//! use futures::StreamExt;
 //! use futures::executor::block_on;
 //! # use webdav_handler::corostream;
 //! use corostream::CoroStream;
 //!
 //! let mut strm = CoroStream::<u8, std::io::Error>::new(async move |mut tx| {
 //!     for i in 0u8..10 {
-//!         await!(tx.send(i));
+//!         tx.send(i).await;
 //!     }
 //!     Ok(())
 //! });
 //!
 //! let fut = async {
 //!     let mut count = 0;
-//!     while let Some(item) = await!(strm.next()) {
+//!     while let Some(item) = strm.next().await {
 //!         println!("{:?}", item);
 //!         count += 1;
 //!     }

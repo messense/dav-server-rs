@@ -400,7 +400,7 @@ impl LocalFsDirEntry {
             },
             Meta::Data(Err(ref e)) => Err(e.into()),
             Meta::Fs(ref fs) => {
-                let ft = await!(fs.blocking(move || self.entry.metadata()))?.file_type();
+                let ft = fs.blocking(move || self.entry.metadata()).await?.file_type();
                 Ok(match is {
                     Is::File => ft.is_file(),
                     Is::Dir => ft.is_dir(),

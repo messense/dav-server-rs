@@ -40,7 +40,7 @@ impl crate::DavInner {
             };
 
             let path = self.path(&req);
-            let meta = await!(self.fs.metadata(&path));
+            let meta = self.fs.metadata(&path).await;
             let is_unmapped = meta.is_err();
             let is_file = meta.and_then(|m| Ok(m.is_file())).unwrap_or_default();
             let is_star = path.is_star() && method == Method::Options;

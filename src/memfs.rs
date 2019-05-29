@@ -391,7 +391,7 @@ impl DavFile for MemFsFile {
     fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<()> {
         Box::pin(
             async move {
-                await!(self.write_bytes(buf))?;
+                self.write_bytes(buf).await?;
                 Ok(())
             },
         )

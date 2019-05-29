@@ -35,7 +35,7 @@ impl crate::DavInner {
 
         // path and meta
         let mut path = self.path(&req);
-        let meta = match await!(self.fs.metadata(&path)) {
+        let meta = match self.fs.metadata(&path).await {
             Ok(meta) => Some(self.fixpath(&mut res, &mut path, meta)),
             Err(_) => None,
         };
@@ -43,7 +43,7 @@ impl crate::DavInner {
         // lock refresh?
         if xmldata.len() == 0 {
             // get locktoken
-            let (_, tokens) = await!(dav_if_match(&req, &self.fs, &self.ls, &path));
+            let (_, tokens) = dav_if_match(&req, &self.fs, &self.ls, &path).await;
             if tokens.len() != 1 {
                 return Err(SC::BAD_REQUEST.into());
             }
@@ -75,7 +75,7 @@ impl crate::DavInner {
         };
 
         // handle the if-headers.
-        if let Some(s) = await!(if_match(&req, meta.as_ref(), &self.fs, &self.ls, &path)) {
+        if let Some(s) = if_match(&req, meta.as_ref(), &self.fs, &self.ls, &path).await {
             return Err(s.into());
         }
 
@@ -148,7 +148,7 @@ impl crate::DavInner {
 
         // try to create file if it doesn't exist.
         if let None = meta {
-            match await!(self.fs.open(&path, oo)) {
+            match self.fs.open(&path, oo).await {
                 Ok(_) => {},
                 Err(FsError::NotFound) | Err(FsError::Exists) => {
                     let s = if !oo.create || oo.create_new {
@@ -202,7 +202,7 @@ impl crate::DavInner {
         let mut res = Response::new(empty_body());
 
         let mut path = self.path(&req);
-        if let Ok(meta) = await!(self.fs.metadata(&path)) {
+        if let Ok(meta) = self.fs.metadata(&path).await {
             self.fixpath(&mut res, &mut path, meta);
         }
 

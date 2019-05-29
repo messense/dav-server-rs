@@ -16,7 +16,7 @@ use crate::{BoxedByteStream, DavResult};
 // map_err helper.
 async fn add_status<'a>(m_err: &'a mut MultiError, path: &'a WebPath, e: FsError) -> DavError {
     let status = DavError::FsError(e).statuscode();
-    if let Err(x) = await!(m_err.add_status(path, status)) {
+    if let Err(x) = m_err.add_status(path, status).await {
         return x.into();
     }
     DavError::Status(status)
@@ -29,7 +29,7 @@ async fn dir_status<'a>(res: &'a mut MultiError, path: &'a WebPath, e: FsError) 
         FsError::Exists => StatusCode::CONFLICT,
         e => DavError::FsError(e).statuscode(),
     };
-    if let Err(x) = await!(res.add_status(path, status)) {
+    if let Err(x) = res.add_status(path, status).await {
         return x.into();
     }
     DavError::Status(status)
@@ -47,33 +47,33 @@ impl crate::DavInner {
         async move {
             if !meta.is_dir() {
                 debug!("delete_items (file) {} {:?}", path, depth);
-                return match await!(self.fs.remove_file(path)) {
+                return match self.fs.remove_file(path).await {
                     Ok(x) => Ok(x),
-                    Err(e) => Err(await!(add_status(&mut res, path, e))),
+                    Err(e) => Err(add_status(&mut res, path, e).await),
                 };
             }
             if depth == Depth::Zero {
                 debug!("delete_items (dir) {} {:?}", path, depth);
-                return match await!(self.fs.remove_dir(path)) {
+                return match self.fs.remove_dir(path).await {
                     Ok(x) => Ok(x),
-                    Err(e) => Err(await!(add_status(&mut res, path, e))),
+                    Err(e) => Err(add_status(&mut res, path, e).await),
                 };
             }
 
             // walk over all entries.
-            let mut entries = match await!(self.fs.read_dir(path, ReadDirMeta::DataSymlink)) {
+            let mut entries = match self.fs.read_dir(path, ReadDirMeta::DataSymlink).await {
                 Ok(x) => Ok(x),
-                Err(e) => Err(await!(add_status(&mut res, path, e))),
+                Err(e) => Err(add_status(&mut res, path, e).await),
             }?;
 
             let mut result = Ok(());
-            while let Some(dirent) = await!(entries.next()) {
+            while let Some(dirent) = entries.next().await {
                 // if metadata() fails, skip to next entry.
                 // NOTE: dirent.metadata == symlink_metadata (!)
-                let meta = match await!(dirent.metadata()) {
+                let meta = match dirent.metadata().await {
                     Ok(m) => m,
                     Err(e) => {
-                        result = Err(await!(add_status(&mut res, path, e)));
+                        result = Err(add_status(&mut res, path, e).await);
                         continue;
                     },
                 };
@@ -92,7 +92,7 @@ impl crate::DavInner {
                 let fut_obj : Pin<Box<Future<Output = _> + Send>> = Box::pin(
                     self.delete_items(&mut res, depth, meta, &npath)
                 );
-                if let Err(e) = await!(fut_obj) {
+                if let Err(e) = fut_obj.await {
                     match e {
                         DavError::Status(_) => {
                             result = Err(e);
@@ -107,9 +107,9 @@ impl crate::DavInner {
             // and do not try to remove the directory.
             result?;
 
-            match await!(self.fs.remove_dir(path)) {
+            match self.fs.remove_dir(path).await {
                 Ok(x) => Ok(x),
-                Err(e) => Err(await!(dir_status(&mut res, path, e))),
+                Err(e) => Err(dir_status(&mut res, path, e).await),
             }
         }
     }
@@ -124,16 +124,16 @@ impl crate::DavInner {
         };
 
         let mut path = self.path(&req);
-        let meta = await!(self.fs.symlink_metadata(&path))?;
+        let meta = self.fs.symlink_metadata(&path).await?;
         if meta.is_symlink() {
-            if let Ok(m2) = await!(self.fs.metadata(&path)) {
+            if let Ok(m2) = self.fs.metadata(&path).await {
                 path.add_slash_if(m2.is_dir());
             }
         }
         path.add_slash_if(meta.is_dir());
 
         // check the If and If-* headers.
-        let tokens_res = await!(if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path));
+        let tokens_res = if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path).await;
         let tokens = match tokens_res {
             Ok(t) => t,
             Err(s) => return Err(DavError::Status(s)),
@@ -158,17 +158,17 @@ impl crate::DavInner {
 
             // now delete the path recursively.
             let fut = self.delete_items(&mut multierror, depth, meta, &path);
-            if let Ok(()) = await!(fut) {
+            if let Ok(()) = fut.await {
                 // Done. Now delete the path in the locksystem as well.
                 // Should really do this per resource, in case the delete partially fails. See TODO.pm
                 if let Some(ref locksystem) = self.ls {
                     locksystem.delete(&path).ok();
                 }
-                let _ = await!(multierror.add_status(&path, StatusCode::NO_CONTENT));
+                let _ = multierror.add_status(&path, StatusCode::NO_CONTENT).await;
             }
             Ok(())
         });
 
-        await!(multi_error(req_path, items))
+        multi_error(req_path, items).await
     }
 }

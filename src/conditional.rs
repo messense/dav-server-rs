@@ -174,7 +174,7 @@ pub(crate) async fn dav_if_match<'a>(
                         // invalid location, so always false.
                         false
                     } else {
-                        match await!(fs.metadata(p)) {
+                        match fs.metadata(p).await {
                             Ok(meta) => {
                                 // exists and may have metadata ..
                                 if let Some(mtag) = ETag::from_meta(meta) {
@@ -216,7 +216,7 @@ pub(crate) async fn if_match<'a>(
     path: &'a WebPath,
 ) -> Option<StatusCode>
 {
-    match await!(dav_if_match(req, fs, ls, path)) {
+    match dav_if_match(req, fs, ls, path).await {
         (true, _) => {},
         (false, _) => return Some(StatusCode::PRECONDITION_FAILED),
     }
@@ -235,7 +235,7 @@ pub(crate) async fn if_match_get_tokens<'a>(
     if let Some(code) = http_if_match(req, meta) {
         return Err(code);
     }
-    match await!(dav_if_match(req, fs, ls, path)) {
+    match dav_if_match(req, fs, ls, path).await {
         (true, v) => Ok(v),
         (false, _) => Err(StatusCode::PRECONDITION_FAILED),
     }

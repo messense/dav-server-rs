@@ -160,7 +160,7 @@ impl DavInner {
 
         // path and meta
         let mut path = self.path(&req);
-        let meta = await!(self.fs.metadata(&path))?;
+        let meta = self.fs.metadata(&path).await?;
         let meta = self.fixpath(&mut res, &mut path, meta);
 
         let mut root = None;
@@ -207,13 +207,13 @@ impl DavInner {
         *res.body_mut() = Box::new(CoroStream::new(async move |tx| {
             pw.set_tx(tx);
             let is_dir = meta.is_dir();
-            await!(pw.write_props(&path, meta))?;
-            await!(pw.flush())?;
+            pw.write_props(&path, meta).await?;
+            pw.flush().await?;
 
             if is_dir && depth != davheaders::Depth::Zero {
-                let _ = await!(self.propfind_directory(&path, depth, &mut pw));
+                let _ = self.propfind_directory(&path, depth, &mut pw).await;
             }
-            await!(pw.close())?;
+            pw.close().await?;
 
             Ok(())
         }));
@@ -233,7 +233,7 @@ impl DavInner {
                 Some(true) | None => ReadDirMeta::DataSymlink,
                 Some(false) => ReadDirMeta::Data,
             };
-            let mut entries = match await!(self.fs.read_dir(path, readdir_meta)) {
+            let mut entries = match self.fs.read_dir(path, readdir_meta).await {
                 Ok(entries) => entries,
                 Err(e) => {
                     // if we cannot read_dir, just skip it.
@@ -242,10 +242,10 @@ impl DavInner {
                 },
             };
 
-            while let Some(dirent) = await!(entries.next()) {
+            while let Some(dirent) = entries.next().await {
                 let mut npath = path.clone();
                 npath.push_segment(&dirent.name());
-                let meta = match await!(dirent.metadata()) {
+                let meta = match dirent.metadata().await {
                     Ok(meta) => meta,
                     Err(e) => {
                         debug!("metadata error on {}. Skipping {:?}", npath, e);
@@ -259,13 +259,13 @@ impl DavInner {
                     npath.add_slash();
                 }
                 let is_dir = meta.is_dir();
-                await!(propwriter.write_props(&npath, meta))?;
-                await!(propwriter.flush())?;
+                propwriter.write_props(&npath, meta).await?;
+                propwriter.flush().await?;
                 if depth == davheaders::Depth::Infinity && is_dir {
                     let fut_obj : Pin<Box<Future<Output = _> + Send>> = Box::pin(
                         self.propfind_directory(&npath, depth, propwriter)
                     );
-                    await!(fut_obj)?;
+                    fut_obj.await?;
                 }
             }
             Ok(())
@@ -381,11 +381,11 @@ impl DavInner {
 
         // file must exist.
         let mut path = self.path(&req);
-        let meta = await!(self.fs.metadata(&path))?;
+        let meta = self.fs.metadata(&path).await?;
         let meta = self.fixpath(&mut res, &mut path, meta);
 
         // check the If and If-* headers.
-        let tokens = match await!(if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path)) {
+        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path).await {
             Ok(t) => t,
             Err(s) => return Err(s.into()),
         };
@@ -411,7 +411,7 @@ impl DavInner {
         let mut set = Vec::new();
         let mut rem = Vec::new();
         let mut ret = Vec::new();
-        let can_deadprop = await!(self.fs.have_props(&path));
+        let can_deadprop = self.fs.have_props(&path).await;
 
         // walk over the element tree and feed "set" and "remove" items to
         // the liveprop_set/liveprop_remove functions. If skipped by those,
@@ -463,7 +463,7 @@ impl DavInner {
             // moment. if it does, we should roll back the earlier
             // made changes to live props, but come on, we're not
             // builing a transaction engine here.
-            let deadret = await!(self.fs.patch_props(&path, set, rem))?;
+            let deadret = self.fs.patch_props(&path, set, rem).await?;
             ret.extend(deadret.into_iter());
         }
 
@@ -482,7 +482,7 @@ impl DavInner {
         *res.body_mut() = Box::new(CoroStream::new(async move |tx| {
             pw.set_tx(tx);
             pw.write_propresponse(&path, hm)?;
-            await!(pw.close())?;
+            pw.close().await?;
             Ok::<_, io::Error>(())
         }));
 
@@ -626,7 +626,7 @@ impl PropWriter {
             // do lookup only once.
             match qc.q_state {
                 0 => {
-                    match await!(self.fs.get_quota()) {
+                    match self.fs.get_quota().await {
                         Err(e) => {
                             qc.q_state = 1;
                             return Err(e);
@@ -745,13 +745,13 @@ impl PropWriter {
                         },
                         "quota-available-bytes" => {
                             let mut qc = qc;
-                            if let Ok((_, Some(avail))) = await!(self.get_quota(&mut qc, path, meta)) {
+                            if let Ok((_, Some(avail))) = self.get_quota(&mut qc, path, meta).await {
                                 return self.build_elem(docontent, pfx, prop, avail.to_string());
                             }
                         },
                         "quota-used-bytes" => {
                             let mut qc = qc;
-                            if let Ok((used, _)) = await!(self.get_quota(&mut qc, path, meta)) {
+                            if let Ok((used, _)) = self.get_quota(&mut qc, path, meta).await {
                                 let used = if self.useragent.contains("WebDAVFS") {
                                     // Need this on OSX, otherwise the value is off
                                     // by a factor of 10 or so .. ?!?!!?
@@ -836,10 +836,10 @@ impl PropWriter {
                 },
             }
 
-            if try_deadprop && self.name == "prop" && await!(self.fs.have_props(path)) {
+            if try_deadprop && self.name == "prop" && self.fs.have_props(path).await {
                 // asking for a specific property.
                 let dprop = element_to_davprop(prop);
-                if let Ok(xml) = await!(self.fs.get_prop(path, dprop)) {
+                if let Ok(xml) = self.fs.get_prop(path, dprop).await {
                     if let Ok(e) = Element::parse(Cursor::new(xml)) {
                         return Ok(StatusElement {
                             status:  StatusCode::OK,
@@ -875,7 +875,7 @@ impl PropWriter {
             let mut qc = self.q_cache;
             for p in &self.props {
                 let meta = meta.clone();
-                let res = await!(self.build_prop(p, path, meta, &mut qc, do_content))?;
+                let res = self.build_prop(p, path, meta, &mut qc, do_content).await?;
                 if res.status == StatusCode::OK || (self.name != "propname" && self.name != "allprop") {
                     add_sc_elem(&mut props, res.status, res.element);
                 }
@@ -883,8 +883,8 @@ impl PropWriter {
             self.q_cache = qc;
 
             // and list the dead properties as well.
-            if (self.name == "propname" || self.name == "allprop") && await!(self.fs.have_props(path)) {
-                if let Ok(v) = await!(self.fs.get_props(path, do_content)) {
+            if (self.name == "propname" || self.name == "allprop") && self.fs.have_props(path).await {
+                if let Ok(v) = self.fs.get_props(path, do_content).await {
                     v.into_iter()
                         .map(davprop_to_element)
                         .for_each(|e| add_sc_elem(&mut props, StatusCode::OK, e));
@@ -928,13 +928,13 @@ impl PropWriter {
 
     pub async fn flush(&mut self) -> DavResult<()> {
         let b = self.buffer.take()?;
-        await!(self.tx.as_mut().unwrap().send(b));
+        self.tx.as_mut().unwrap().send(b).await;
         Ok(())
     }
 
     pub async fn close(&mut self) -> DavResult<()> {
         let _ = self.emitter.write(XmlWEvent::end_element());
-        await!(self.flush())
+        self.flush().await
     }
 }
 

@@ -39,14 +39,14 @@ impl crate::DavInner {
         async move {
             // check if it's a directory.
             let head = req.method() == &http::Method::HEAD;
-            let meta = await!(self.fs.metadata(&path))?;
+            let meta = self.fs.metadata(&path).await?;
             if meta.is_dir() {
-                return await!(self.handle_dirlist(req, head));
+                return self.handle_dirlist(req, head).await;
             }
 
             // double check, is it a regular file.
-            let mut file = await!(self.fs.open(&path, OpenOptions::read()))?;
-            let meta = await!(file.metadata())?;
+            let mut file = self.fs.open(&path, OpenOptions::read()).await?;
+            let meta = file.metadata().await?;
             if !meta.is_file() {
                 return Err(DavError::Status(StatusCode::METHOD_NOT_ALLOWED));
             }
@@ -79,13 +79,13 @@ impl crate::DavInner {
             res.headers_mut().typed_insert(headers::AcceptRanges::bytes());
 
             // handle the if-headers.
-            if let Some(s) = await!(conditional::if_match(
+            if let Some(s) = conditional::if_match(
                 &req,
                 Some(&meta),
                 &self.fs,
                 &self.ls,
                 &path
-            )) {
+            ).await {
                 *res.status_mut() = s;
                 no_body = true;
                 do_range = false;
@@ -121,7 +121,7 @@ impl crate::DavInner {
 
             if ranges.len() > 0 {
                 // seek to beginning of the first range.
-                if let Err(_) = await!(file.seek(std::io::SeekFrom::Start(ranges[0].start))) {
+                if let Err(_) = file.seek(std::io::SeekFrom::Start(ranges[0].start)).await {
                     let r = format!("bytes */{}", len);
                     res.headers_mut().insert("Content-Range", r.parse().unwrap());
                     *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
@@ -180,7 +180,7 @@ impl crate::DavInner {
                     if curpos != range.start {
                         // this should never fail, but if it does, just skip this range
                         // and try the next one.
-                        if let Err(_e) = await!(file.seek(std::io::SeekFrom::Start(range.start))) {
+                        if let Err(_e) = file.seek(std::io::SeekFrom::Start(range.start)).await {
                             debug!("handle_get: failed to seek to {}: {:?}", range.start, _e);
                             continue;
                         }
@@ -199,14 +199,14 @@ impl crate::DavInner {
                         );
                         let _ = writeln!(hdrs, "Content-Type: {}", content_type);
                         let _ = writeln!(hdrs, "");
-                        await!(tx.send(Bytes::from(hdrs)));
+                        tx.send(Bytes::from(hdrs)).await;
                     }
 
                     let mut count = range.count;
                     while count > 0 {
                         let data;
                         let blen = cmp::min(count, READ_BUF_SIZE as u64) as usize;
-                        let mut n = await!(file.read_bytes(&mut buffer[..blen]))?;
+                        let mut n = file.read_bytes(&mut buffer[..blen]).await?;
                         if n == 0 {
                             // this is a cop out. if the file got truncated, just
                             // return zero bytes instead of file content.
@@ -218,11 +218,11 @@ impl crate::DavInner {
                         count -= n as u64;
                         curpos += n as u64;
                         debug!("sending {} bytes", data.len());
-                        await!(tx.send(Bytes::from(data)));
+                        tx.send(Bytes::from(data)).await;
                     }
                 }
                 if multipart {
-                    await!(tx.send(Bytes::from(BOUNDARY_END)));
+                    tx.send(Bytes::from(BOUNDARY_END)).await;
                 }
                 Ok::<(), std::io::Error>(())
             }));
@@ -264,7 +264,7 @@ impl crate::DavInner {
             }
 
             // read directory or bail.
-            let mut entries = await!(self.fs.read_dir(&path, ReadDirMeta::Data))?;
+            let mut entries = self.fs.read_dir(&path, ReadDirMeta::Data).await?;
 
             // start output
             res.headers_mut()
@@ -284,14 +284,14 @@ impl crate::DavInner {
                 }
 
                 let mut dirents: Vec<Dirent> = Vec::new();
-                while let Some(dirent) = await!(entries.next()) {
+                while let Some(dirent) = entries.next().await {
                     let mut name = dirent.name();
                     if name.starts_with(b".") {
                         continue;
                     }
                     let mut npath = path.clone();
                     npath.push_segment(&name);
-                    if let Ok(meta) = await!(dirent.metadata()) {
+                    if let Ok(meta) = dirent.metadata().await {
                         if meta.is_dir() {
                             name.push(b'/');
                             npath.add_slash();
@@ -343,7 +343,7 @@ impl crate::DavInner {
                 w.push_str("<th>Name</th><th>Last modified</th><th>Size</th>");
                 w.push_str("<tr><th colspan=\"3\"><hr></th></tr>");
                 w.push_str("<tr><td><a href=\"..\">Parent Directory</a></td><td>&nbsp;</td><td class=\"mono\" align=\"right\">[DIR]</td></tr>");
-                await!(tx.send(Bytes::from(w)));
+                tx.send(Bytes::from(w)).await;
 
                 for dirent in &dirents {
                     let modified = match dirent.meta.modified() {
@@ -367,13 +367,13 @@ impl crate::DavInner {
                     let name = htmlescape::encode_minimal(&dirent.name);
                     let s = format!("<tr><td><a href=\"{}\">{}</a></td><td class=\"mono\">{}</td><td class=\"mono\" align=\"right\">{}</td></tr>",
                              dirent.path, name, modified, size);
-                    await!(tx.send(Bytes::from(s)));
+                    tx.send(Bytes::from(s)).await;
                 }
 
                 let mut w = String::new();
                 w.push_str("<tr><th colspan=\"3\"><hr></th></tr>");
                 w.push_str("</table></body></html>");
-                await!(tx.send(Bytes::from(w)));
+                tx.send(Bytes::from(w)).await;
 
                 Ok::<_, std::io::Error>(())
             }));

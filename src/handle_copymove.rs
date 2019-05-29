@@ -22,7 +22,7 @@ async fn add_status<'a>(
 ) -> DavResult<()>
 {
     let daverror = e.into();
-    if let Err(x) = await!(m_err.add_status(path, daverror.statuscode())) {
+    if let Err(x) = m_err.add_status(path, daverror.statuscode()).await {
         return Err(x.into());
     }
     Err(daverror)
@@ -46,18 +46,18 @@ impl crate::DavInner {
             }
 
             // source must exist.
-            let meta = match await!(self.fs.metadata(source)) {
-                Err(e) => return await!(add_status(&mut multierror, source, e)),
+            let meta = match self.fs.metadata(source).await {
+                Err(e) => return add_status(&mut multierror, source, e).await,
                 Ok(m) => m,
             };
 
             // if it's a file we can overwrite it.
             if !meta.is_dir() {
-                return match await!(self.fs.copy(source, dest)) {
+                return match self.fs.copy(source, dest).await {
                     Ok(_) => Ok(()),
                     Err(e) => {
                         debug!("do_copy: self.fs.copy error: {:?}", e);
-                        await!(add_status(&mut multierror, source, e))
+                        add_status(&mut multierror, source, e).await
                     },
                 };
             }
@@ -65,10 +65,10 @@ impl crate::DavInner {
             // Copying a directory onto an existing directory with Depth 0
             // is not an error. It means "only copy properties" (which
             // we do not do yet).
-            if let Err(e) = await!(self.fs.create_dir(dest)) {
+            if let Err(e) = self.fs.create_dir(dest).await {
                 if depth != Depth::Zero || e != FsError::Exists {
                     debug!("do_copy: self.fs.create_dir({}) error: {:?}", dest, e);
-                    return await!(add_status(&mut multierror, dest, e));
+                    return add_status(&mut multierror, dest, e).await;
                 }
             }
 
@@ -77,22 +77,22 @@ impl crate::DavInner {
                 return Ok(());
             }
 
-            let mut entries = match await!(self.fs.read_dir(source, ReadDirMeta::DataSymlink)) {
+            let mut entries = match self.fs.read_dir(source, ReadDirMeta::DataSymlink).await {
                 Ok(entries) => entries,
                 Err(e) => {
                     debug!("do_copy: self.fs.read_dir error: {:?}", e);
-                    return await!(add_status(&mut multierror, source, e));
+                    return add_status(&mut multierror, source, e).await;
                 },
             };
 
             // If we encounter errors, just print them, and keep going.
             // Last seen error is returned from function.
             let mut retval = Ok::<_, DavError>(());
-            while let Some(dirent) = await!(entries.next()) {
+            while let Some(dirent) = entries.next().await {
                 // NOTE: dirent.metadata() behaves like symlink_metadata()
-                let meta = match await!(dirent.metadata()) {
+                let meta = match dirent.metadata().await {
                     Ok(meta) => meta,
-                    Err(e) => return await!(add_status(&mut multierror, source, e)),
+                    Err(e) => return add_status(&mut multierror, source, e).await,
                 };
                 let name = dirent.name();
                 let mut nsrc = source.clone();
@@ -108,7 +108,7 @@ impl crate::DavInner {
                 let fut_obj : Pin<Box<Future<Output = _> + Send>> = Box::pin(
                     self.do_copy(&nsrc, topdest, &ndest, depth, multierror)
                 );
-                if let Err(e) = await!(fut_obj) {
+                if let Err(e) = fut_obj.await {
                     retval = Err(e);
                 }
             }
@@ -137,8 +137,8 @@ impl crate::DavInner {
         mut multierror: &'a mut MultiError,
     ) -> DavResult<()>
     {
-        if let Err(e) = await!(self.fs.rename(source, dest)) {
-            await!(add_status(&mut multierror, &source, e))
+        if let Err(e) = self.fs.rename(source, dest).await {
+            add_status(&mut multierror, &source, e).await
         } else {
             Ok(())
         }
@@ -171,29 +171,29 @@ impl crate::DavInner {
         // is a symlink, we want to move the symlink, not what it points to.
         let mut path = self.path(&req);
         let meta = if method == Method::Move {
-            let meta = await!(self.fs.symlink_metadata(&path))?;
+            let meta = self.fs.symlink_metadata(&path).await?;
             if meta.is_symlink() {
-                let m2 = await!(self.fs.metadata(&path))?;
+                let m2 = self.fs.metadata(&path).await?;
                 path.add_slash_if(m2.is_dir());
             }
             meta
         } else {
-            await!(self.fs.metadata(&path))?
+            self.fs.metadata(&path).await?
         };
         path.add_slash_if(meta.is_dir());
 
         // parent of the destination must exist.
-        if !await!(self.has_parent(&dest)) {
+        if !self.has_parent(&dest).await {
             return Err(StatusCode::CONFLICT.into());
         }
 
         // for the destination, also check if it's a symlink. If we are going
         // to remove it first, we want to remove the link, not what it points to.
-        let (dest_is_file, dmeta) = match await!(self.fs.symlink_metadata(&dest)) {
+        let (dest_is_file, dmeta) = match self.fs.symlink_metadata(&dest).await {
             Ok(meta) => {
                 let mut is_file = false;
                 if meta.is_symlink() {
-                    if let Ok(m) = await!(self.fs.metadata(&dest)) {
+                    if let Ok(m) = self.fs.metadata(&dest).await {
                         is_file = m.is_file();
                     }
                 }
@@ -217,7 +217,7 @@ impl crate::DavInner {
         }
 
         // check If and If-* headers for source URL
-        let tokens = match await!(if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path)) {
+        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path).await {
             Ok(t) => t,
             Err(s) => return Err(s.into()),
         };
@@ -249,7 +249,7 @@ impl crate::DavInner {
             if overwrite && exists && depth != Depth::Zero && !dest_is_file {
                 debug!("handle_copymove: deleting destination {}", dest);
                 if let Err(_) =
-                    await!(self.delete_items(&mut multierror, Depth::Infinity, dmeta.unwrap(), &dest))
+                    self.delete_items(&mut multierror, Depth::Infinity, dmeta.unwrap(), &dest).await
                 {
                     return Ok(());
                 }
@@ -261,17 +261,17 @@ impl crate::DavInner {
 
             // COPY or MOVE.
             if method == Method::Copy {
-                if let Ok(_) = await!(self.do_copy(&path, &dest, &dest, depth, &mut multierror)) {
+                if let Ok(_) = self.do_copy(&path, &dest, &dest, depth, &mut multierror).await {
                     let s = if exists {
                         StatusCode::NO_CONTENT
                     } else {
                         StatusCode::CREATED
                     };
-                    let _ = await!(multierror.add_status(&path, s));
+                    let _ = multierror.add_status(&path, s).await;
                 }
             } else {
                 // move and if successful, remove locks at old location.
-                if let Ok(_) = await!(self.do_move(&path, &dest, &mut multierror)) {
+                if let Ok(_) = self.do_move(&path, &dest, &mut multierror).await {
                     if let Some(ref locksystem) = self.ls {
                         locksystem.delete(&path).ok();
                     }
@@ -280,12 +280,12 @@ impl crate::DavInner {
                     } else {
                         StatusCode::CREATED
                     };
-                    let _ = await!(multierror.add_status(&path, s));
+                    let _ = multierror.add_status(&path, s).await;
                 }
             }
             Ok::<_, DavError>(())
         });
 
-        await!(multi_error(req_path, items))
+        multi_error(req_path, items).await
     }
 }

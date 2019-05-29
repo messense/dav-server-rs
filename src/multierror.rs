@@ -34,7 +34,7 @@ impl MultiError {
     ) -> Result<(), futures::channel::mpsc::SendError>
     {
         let status = status.into().statuscode();
-        await!(self.0.send((path.clone(), status)));
+        self.0.send((path.clone(), status)).await;
         Ok(())
     }
 }
@@ -98,7 +98,7 @@ where
 {
     // read the first path/status item
     let mut status_stream = Box::pin(status_stream);
-    let (path, status) = match await!(status_stream.next()) {
+    let (path, status) = match status_stream.next().await {
         None => {
             debug!("multi_error: empty status_stream");
             return Err(DavError::ChanError);
@@ -112,7 +112,7 @@ where
     if path == req_path {
         // the first path/status item was for the request path.
         // see if there is a next item.
-        match await!(status_stream.next()) {
+        match status_stream.next().await {
             None => {
                 // No, this was the first and only item.
                 let resp = Response::builder().status(status).body(empty_body()).unwrap();
@@ -147,11 +147,11 @@ where
         })?;
         xw.write(XmlWEvent::start_element("D:multistatus").ns("D", "DAV:"))?;
         let data = buffer.take()?;
-        await!(tx.send(data));
+        tx.send(data).await;
 
         // now write the items.
         let mut status_stream = futures::stream::iter(items).chain(status_stream);
-        while let Some(res) = await!(status_stream.next()) {
+        while let Some(res) = status_stream.next().await {
             let (path, status) = res?;
             let status = if status == StatusCode::NO_CONTENT {
                 StatusCode::OK
@@ -160,13 +160,13 @@ where
             };
             write_response(&mut xw, &path, status)?;
             let data = buffer.take()?;
-            await!(tx.send(data));
+            tx.send(data).await;
         }
 
         // and finally write the trailer.
         xw.write(XmlWEvent::end_element())?;
         let data = buffer.take()?;
-        await!(tx.send(data));
+        tx.send(data).await;
 
         Ok::<_, DavError>(())
     });

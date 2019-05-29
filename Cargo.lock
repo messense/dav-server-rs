@@ -1908,7 +1908,7 @@ dependencies = [
 
 [[package]]
 name = "webdav-handler"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "actix 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 0.7.19 (registry+https://github.com/rust-lang/crates.io-index)",

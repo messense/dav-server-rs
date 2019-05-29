@@ -79,7 +79,7 @@ impl crate::DavInner {
                 have_count = true;
             }
             let path = self.path(&req);
-            let meta = await!(self.fs.metadata(&path));
+            let meta = self.fs.metadata(&path).await;
 
             // close connection on error.
             let mut res = Response::new(empty_body());
@@ -155,7 +155,7 @@ impl crate::DavInner {
 
             // check the If and If-* headers.
             let tokens = if_match_get_tokens(&req, meta.as_ref().ok(), &self.fs, &self.ls, &path);
-            let tokens = match await!(tokens) {
+            let tokens = match tokens.await {
                 Ok(t) => t,
                 Err(s) => return Err(DavError::StatusClose(s)),
             };
@@ -185,7 +185,7 @@ impl crate::DavInner {
                 oo.create_new = true;
             }
 
-            let mut file = match await!(self.fs.open(&path, oo)) {
+            let mut file = match self.fs.open(&path, oo).await {
                 Ok(f) => f,
                 Err(FsError::NotFound) | Err(FsError::Exists) => {
                     let s = if !oo.create || oo.create_new {
@@ -200,7 +200,7 @@ impl crate::DavInner {
 
             if do_range {
                 // seek to beginning of requested data.
-                if let Err(_) = await!(file.seek(std::io::SeekFrom::Start(start))) {
+                if let Err(_) = file.seek(std::io::SeekFrom::Start(start)).await {
                     return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
                 }
             }
@@ -212,7 +212,7 @@ impl crate::DavInner {
             let mut bad = false;
             let mut body = body;
 
-            while let Some(buffer) = await!(body.next()) {
+            while let Some(buffer) = body.next().await {
                 let buffer = buffer.map_err(|e| to_ioerror(e))?;
                 let mut n = buffer.len();
                 if have_count {
@@ -234,9 +234,9 @@ impl crate::DavInner {
                 if n == 0 {
                     break;
                 }
-                await!(file.write_all(&buffer))?;
+                file.write_all(&buffer).await?;
             }
-            await!(file.flush())?;
+            file.flush().await?;
             if bad {
                 return Err(DavError::StatusClose(SC::BAD_REQUEST));
             }
@@ -253,7 +253,7 @@ impl crate::DavInner {
             // no errors, connection may be kept open.
             res.headers_mut().remove(http::header::CONNECTION);
 
-            if let Ok(m) = await!(file.metadata()) {
+            if let Ok(m) = file.metadata().await {
                 if let Some(etag) = davheaders::ETag::from_meta(&m) {
                     res.headers_mut().typed_insert(etag);
                 }
