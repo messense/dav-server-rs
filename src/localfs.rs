@@ -36,17 +36,15 @@ where
     F: FnOnce() -> T + 'a,
     T: 'a,
 {
-    future::ready(Some(func)).then(|mut func| {
-        let fut = futures01::future::poll_fn(move || tokio_threadpool::blocking(|| (func.take().unwrap())()))
-            .compat()
-            .then(|res| {
-                match res {
-                    Ok(x) => future::ready(x),
-                    Err(_) => panic!("the thread pool has shut down"),
-                }
-            });
-        fut
-    })
+    let mut func = Some(func);
+    futures01::future::poll_fn(move || tokio_threadpool::blocking(|| (func.take().unwrap())()))
+        .compat()
+        .then(|res| {
+            match res {
+                Ok(x) => future::ready(x),
+                Err(_) => panic!("the thread pool has shut down"),
+            }
+        })
 }
 
 #[derive(Debug, Clone)]
@@ -154,8 +152,8 @@ impl LocalFs {
         F: FnOnce() -> T + 'a,
         T: 'a,
     {
-        future::ready(Some(func)).then(move |mut func| {
-            let fut03 = futures01::future::poll_fn(move || {
+        let mut func = Some(func);
+        futures01::future::poll_fn(move || {
                 tokio_threadpool::blocking(|| {
                     let _guard = self.inner.fs_access_guard.as_ref().map(|f| f());
                     (func.take().unwrap())()
@@ -167,9 +165,7 @@ impl LocalFs {
                     Ok(x) => future::ready(x),
                     Err(_) => panic!("the thread pool has shut down"),
                 }
-            });
-            fut03
-        })
+            })
     }
 }
 
