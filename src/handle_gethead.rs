@@ -10,7 +10,7 @@ use time;
 use bytes::Bytes;
 
 use crate::conditional;
-use crate::corostream::CoroStream;
+use crate::async_stream::AsyncStream;
 use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
@@ -169,7 +169,7 @@ impl crate::DavInner {
             }
 
             // now just loop and send data.
-            *res.body_mut() = Box::new(CoroStream::new(async move |mut tx| {
+            *res.body_mut() = Box::new(AsyncStream::new(async move |mut tx| {
                 let mut buffer = [0; READ_BUF_SIZE];
                 let zero = [0; 4096];
 
@@ -275,7 +275,7 @@ impl crate::DavInner {
             }
 
             // now just loop and send data.
-            *res.body_mut() = Box::new(CoroStream::new(async move |mut tx| {
+            *res.body_mut() = Box::new(AsyncStream::new(async move |mut tx| {
                 // transform all entries into a dirent struct.
                 struct Dirent {
                     path: String,

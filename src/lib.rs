@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/webdav-handler/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/webdav-handler/0.1.1")]
 //! ## Generic async HTTP/WEBDAV handler
 //!
 //! [`Webdav`] ([RFC4918]) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
@@ -125,7 +125,7 @@ extern crate log;
 extern crate lazy_static;
 
 mod conditional;
-pub mod corostream;
+pub mod async_stream;
 mod davhandler;
 mod davheaders;
 mod errors;

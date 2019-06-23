@@ -5,7 +5,7 @@ use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
 use crate::conditional::if_match_get_tokens;
-use crate::corostream::CoroStream;
+use crate::async_stream::AsyncStream;
 use crate::davheaders::Depth;
 use crate::errors::*;
 use crate::fs::*;
@@ -152,7 +152,7 @@ impl crate::DavInner {
 
         let req_path = path.clone();
 
-        let items = CoroStream::new(async move |tx| {
+        let items = AsyncStream::new(async move |tx| {
             // turn the Sink into something easier to pass around.
             let mut multierror = MultiError::new(tx);
 

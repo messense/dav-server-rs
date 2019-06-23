@@ -1,4 +1,4 @@
-//! Use an [async closure][async] in a coroutine-like way to produce items for a stream.
+//! Use an [async closure][async] to produce items for a stream.
 //!
 //! Example:
 //!
@@ -6,10 +6,10 @@
 //! #![feature(async_await)]
 //! use futures::StreamExt;
 //! use futures::executor::block_on;
-//! # use webdav_handler::corostream;
-//! use corostream::CoroStream;
+//! # use webdav_handler::async_stream;
+//! use async_stream::AsyncStream;
 //!
-//! let mut strm = CoroStream::<u8, std::io::Error>::new(async move |mut tx| {
+//! let mut strm = AsyncStream::<u8, std::io::Error>::new(async move |mut tx| {
 //!     for i in 0u8..10 {
 //!         tx.send(i).await;
 //!     }
@@ -38,8 +38,8 @@
 //!
 //! [async]: https://rust-lang.github.io/async-book/getting_started/async_await_primer.html
 //! [Stream01]: https://docs.rs/futures/0.1/futures/stream/trait.Stream.html
-//! [Stream03]: https://rust-lang-nursery.github.io/futures-api-docs/0.3.0-alpha.13/futures/stream/trait.Stream.html
-//! [send]: corostream/struct.Sender.html#method.send
+//! [Stream03]: https://rust-lang-nursery.github.io/futures-api-docs/0.3.0-alpha.16/futures/stream/trait.Stream.html
+//! [send]: async_stream/struct.Sender.html#method.send
 //!
 use std::cell::Cell;
 use std::marker::PhantomData;
@@ -87,7 +87,7 @@ impl Future03 for SenderFuture {
     }
 }
 
-// Only internally used by one CoroStream and never shared
+// Only internally used by one AsyncStream and never shared
 // in any other way, so we don't have to use Arc<Mutex<..>>.
 /// Type of the sender passed as first argument into the async closure.
 pub struct Sender<I, E>(Arc<Cell<Option<I>>>, PhantomData<E>);
@@ -115,8 +115,8 @@ impl<I, E> Sender<I, E> {
 /// An abstraction around a future, where the
 /// future can internally loop and yield items.
 ///
-/// CoroStream::new() takes a [futures 0.3 Future][Future03] ([async closure][async], usually)
-/// and CoroStream then implements both a [futures 0.1 Stream][Stream01] and a
+/// AsyncStream::new() takes a [futures 0.3 Future][Future03] ([async closure][async], usually)
+/// and AsyncStream then implements both a [futures 0.1 Stream][Stream01] and a
 /// [futures 0.3 Stream][Stream03].
 ///
 /// [async]: https://rust-lang.github.io/async-book/getting_started/async_await_primer.html
@@ -124,19 +124,19 @@ impl<I, E> Sender<I, E> {
 /// [Stream01]: https://docs.rs/futures/0.1/futures/stream/trait.Stream.html
 /// [Stream03]: https://rust-lang-nursery.github.io/futures-api-docs/0.3.0-alpha.13/futures/stream/trait.Stream.html
 #[must_use]
-pub struct CoroStream<Item, Error> {
+pub struct AsyncStream<Item, Error> {
     item: Sender<Item, Error>,
     fut:  Option<Pin<Box<Future03<Output = Result<(), Error>> + 'static + Send>>>,
 }
 
-impl<Item, Error: 'static + Send> CoroStream<Item, Error> {
+impl<Item, Error: 'static + Send> AsyncStream<Item, Error> {
     /// Create a new stream from a closure returning a Future 0.3,
     /// or an "async closure" (which is the same).
     ///
     /// The closure is passed one argument, the sender, which has a
     /// method "send" that can be called to send a item to the stream.
     ///
-    /// The CoroStream instance that is returned impl's both
+    /// The AsyncStream instance that is returned impl's both
     /// a futures 0.1 Stream and a futures 0.3 Stream.
     pub fn new<F, R>(f: F) -> Self
     where
@@ -145,7 +145,7 @@ impl<Item, Error: 'static + Send> CoroStream<Item, Error> {
         Item: 'static,
     {
         let sender = Sender::new(None);
-        CoroStream::<Item, Error> {
+        AsyncStream::<Item, Error> {
             item: sender.clone(),
             fut:  Some(Box::pin(f(sender))),
         }
@@ -153,7 +153,7 @@ impl<Item, Error: 'static + Send> CoroStream<Item, Error> {
 }
 
 /// Stream implementation for Futures 0.1.
-impl<I, E> Stream01 for CoroStream<I, E> {
+impl<I, E> Stream01 for AsyncStream<I, E> {
     type Item = I;
     type Error = E;
 
@@ -182,7 +182,7 @@ impl<I, E> Stream01 for CoroStream<I, E> {
 }
 
 /// Stream implementation for Futures 0.3.
-impl<I, E: Unpin> Stream03 for CoroStream<I, E> {
+impl<I, E: Unpin> Stream03 for AsyncStream<I, E> {
     type Item = Result<I, E>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll03<Option<Result<I, E>>> {
@@ -219,7 +219,7 @@ mod hyper {
     ///
     /// This implementation allows you to use anything that implements
     /// IntoBuf as a Payload item.
-    impl<Item, Error> hyper::body::Payload for CoroStream<Item, Error>
+    impl<Item, Error> hyper::body::Payload for AsyncStream<Item, Error>
     where
         Item: bytes::buf::IntoBuf + Send + Sync + 'static,
         Item::Buf: Send,

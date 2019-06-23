@@ -6,7 +6,7 @@ use http::{Request, Response, StatusCode};
 
 //use crate::common::*;
 use crate::conditional::*;
-use crate::corostream::CoroStream;
+use crate::async_stream::AsyncStream;
 use crate::davheaders::{self, Depth};
 use crate::errors::*;
 use crate::fs::*;
@@ -242,7 +242,7 @@ impl crate::DavInner {
 
         let req_path = path.clone();
 
-        let items = CoroStream::new(async move |tx| {
+        let items = AsyncStream::new(async move |tx| {
             let mut multierror = MultiError::new(tx);
 
             // see if we need to delete the destination first.

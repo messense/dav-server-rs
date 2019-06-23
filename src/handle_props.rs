@@ -16,7 +16,7 @@ use xml::EmitterConfig;
 use xmltree::Element;
 
 use crate::conditional::if_match_get_tokens;
-use crate::corostream::CoroStream;
+use crate::async_stream::AsyncStream;
 use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
@@ -88,7 +88,7 @@ lazy_static! {
 }
 
 type Emitter = EventWriter<MultiBuf>;
-type Sender = crate::corostream::Sender<bytes::Bytes, io::Error>;
+type Sender = crate::async_stream::Sender<bytes::Bytes, io::Error>;
 
 struct StatusElement {
     status:  StatusCode,
@@ -204,7 +204,7 @@ impl DavInner {
 
         let mut pw = PropWriter::new(&req, &mut res, name, props, &self.fs, self.ls.as_ref())?;
 
-        *res.body_mut() = Box::new(CoroStream::new(async move |tx| {
+        *res.body_mut() = Box::new(AsyncStream::new(async move |tx| {
             pw.set_tx(tx);
             let is_dir = meta.is_dir();
             pw.write_props(&path, meta).await?;
@@ -479,7 +479,7 @@ impl DavInner {
 
         // And reply.
         let mut pw = PropWriter::new(&req, &mut res, "propertyupdate", Vec::new(), &self.fs, None)?;
-        *res.body_mut() = Box::new(CoroStream::new(async move |tx| {
+        *res.body_mut() = Box::new(AsyncStream::new(async move |tx| {
             pw.set_tx(tx);
             pw.write_propresponse(&path, hm)?;
             pw.close().await?;

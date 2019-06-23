@@ -13,12 +13,12 @@ use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
 use xml::EmitterConfig;
 
-use crate::corostream::CoroStream;
+use crate::async_stream::AsyncStream;
 use crate::util::empty_body;
 use crate::webpath::WebPath;
 use crate::{BoxedByteStream, DavError};
 
-type Sender = crate::corostream::Sender<(WebPath, StatusCode), DavError>;
+type Sender = crate::async_stream::Sender<(WebPath, StatusCode), DavError>;
 
 pub(crate) struct MultiError(Sender);
 
@@ -130,7 +130,7 @@ where
     }
 
     // Transform path/status items to XML.
-    let body = CoroStream::new(async move |mut tx| {
+    let body = AsyncStream::new(async move |mut tx| {
         // Write initial header.
         let buffer = MultiBuf::new();
         let mut xw = EventWriter::new_with_config(

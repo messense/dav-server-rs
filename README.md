@@ -102,16 +102,16 @@ fn main() {
     hyper::rt::run(server);
 }
 ```
-[DavHandler]: https://docs.rs/webdav-handler/0.1.0/struct.DavHandler.html
-[DavFileSystem]: https://docs.rs/webdav-handler/0.1.0/fs/index.html
-[DavLockSystem]: https://docs.rs/webdav-handler/0.1.0/ls/index.html
-[DavProp]: https://docs.rs/webdav-handler/0.1.0/fs/struct.DavProp.html
+[DavHandler]: https://docs.rs/webdav-handler/0.1.1/struct.DavHandler.html
+[DavFileSystem]: https://docs.rs/webdav-handler/0.1.1/fs/index.html
+[DavLockSystem]: https://docs.rs/webdav-handler/0.1.1/ls/index.html
+[DavProp]: https://docs.rs/webdav-handler/0.1.1/fs/struct.DavProp.html
 [`WebDav`]: https://tools.ietf.org/html/rfc4918
 [RFC4918]: https://tools.ietf.org/html/rfc4918
-[`MemLs`]: https://docs.rs/webdav-handler/0.1.0/memls/index.html
-[`MemFs`]: https://docs.rs/webdav-handler/0.1.0/memfs/index.html
-[`LocalFs`]: https://docs.rs/webdav-handler/0.1.0/localfs/index.html
-[`FakeLs`]: https://docs.rs/webdav-handler/0.1.0/fakels/index.html
+[`MemLs`]: https://docs.rs/webdav-handler/0.1.1/memls/index.html
+[`MemFs`]: https://docs.rs/webdav-handler/0.1.1/memfs/index.html
+[`LocalFs`]: https://docs.rs/webdav-handler/0.1.1/localfs/index.html
+[`FakeLs`]: https://docs.rs/webdav-handler/0.1.1/fakels/index.html
 [README_litmus]: https://github.com/miquels/webdav-handler-rs/blob/master/README.litmus-test.md
 [hyper_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/hyper.rs
 [actix_web_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/actix-web.rs
