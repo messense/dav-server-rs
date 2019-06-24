@@ -60,16 +60,14 @@ use futures::Stream as Stream03;
 ///
 /// Completes when the item is sent.
 #[must_use]
-pub struct SenderFuture<E = ()> {
-    state:   bool,
-    phantom: PhantomData<E>,
+pub struct SenderFuture {
+    is_ready:   bool,
 }
 
-impl<E> SenderFuture<E> {
-    fn new() -> SenderFuture<E> {
+impl SenderFuture {
+    fn new() -> SenderFuture {
         SenderFuture {
-            state:   false,
-            phantom: PhantomData::<E>,
+            is_ready:   false,
         }
     }
 }
@@ -78,10 +76,10 @@ impl Future03 for SenderFuture {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll03<Self::Output> {
-        if self.state {
+        if self.is_ready {
             Poll03::Ready(())
         } else {
-            self.state = true;
+            self.is_ready = true;
             Poll03::Pending
         }
     }
@@ -122,7 +120,7 @@ impl<I, E> Sender<I, E> {
 /// [async]: https://rust-lang.github.io/async-book/getting_started/async_await_primer.html
 /// [Future03]: https://doc.rust-lang.org/nightly/std/future/trait.Future.html
 /// [Stream01]: https://docs.rs/futures/0.1/futures/stream/trait.Stream.html
-/// [Stream03]: https://rust-lang-nursery.github.io/futures-api-docs/0.3.0-alpha.13/futures/stream/trait.Stream.html
+/// [Stream03]: https://rust-lang-nursery.github.io/futures-api-docs/0.3.0-alpha.16/futures/stream/trait.Stream.html
 #[must_use]
 pub struct AsyncStream<Item, Error> {
     item: Sender<Item, Error>,
