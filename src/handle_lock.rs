@@ -216,7 +216,7 @@ impl crate::DavInner {
     }
 }
 
-pub(crate) fn list_lockdiscovery(ls: Option<&Box<DavLockSystem>>, path: &WebPath) -> Element {
+pub(crate) fn list_lockdiscovery(ls: Option<&Box<dyn DavLockSystem>>, path: &WebPath) -> Element {
     let mut elem = Element::new2("D:lockdiscovery");
 
     // must have a locksystem or bail
@@ -233,7 +233,7 @@ pub(crate) fn list_lockdiscovery(ls: Option<&Box<DavLockSystem>>, path: &WebPath
     elem
 }
 
-pub(crate) fn list_supportedlock(ls: Option<&Box<DavLockSystem>>) -> Element {
+pub(crate) fn list_supportedlock(ls: Option<&Box<dyn DavLockSystem>>) -> Element {
     let mut elem = Element::new2("D:supportedlock");
 
     // must have a locksystem or bail

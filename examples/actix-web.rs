@@ -7,7 +7,7 @@ use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 use threadpool_helper::{pipe_from_threadpool, pipe_to_threadpool, spawn_on_threadpool};
 
 // Actix-web webdav handler.
-fn handle_webdav(httpreq: &HttpRequest<DavHandler>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+fn handle_webdav(httpreq: &HttpRequest<DavHandler>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     // transform the Actix http request into a standard http request.
     let req = httpreq.request();
     let mut builder = http::Request::builder();

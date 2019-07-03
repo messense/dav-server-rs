@@ -66,12 +66,12 @@ pub trait DavLockSystem: Debug + Sync + Send + BoxCloneLs {
 
 #[doc(hidden)]
 pub trait BoxCloneLs {
-    fn box_clone(&self) -> Box<DavLockSystem>;
+    fn box_clone(&self) -> Box<dyn DavLockSystem>;
 }
 
 // generic Clone, calls implementation-specific box_clone().
-impl Clone for Box<DavLockSystem> {
-    fn clone(&self) -> Box<DavLockSystem> {
+impl Clone for Box<dyn DavLockSystem> {
+    fn clone(&self) -> Box<dyn DavLockSystem> {
         self.box_clone()
     }
 }
@@ -79,7 +79,7 @@ impl Clone for Box<DavLockSystem> {
 // implementation-specific clone.
 #[doc(hidden)]
 impl<LS: Clone + DavLockSystem + 'static> BoxCloneLs for LS {
-    fn box_clone(&self) -> Box<DavLockSystem> {
+    fn box_clone(&self) -> Box<dyn DavLockSystem> {
         Box::new((*self).clone())
     }
 }

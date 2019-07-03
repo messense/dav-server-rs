@@ -124,7 +124,7 @@ impl<I, E> Sender<I, E> {
 #[must_use]
 pub struct AsyncStream<Item, Error> {
     item: Sender<Item, Error>,
-    fut:  Option<Pin<Box<Future03<Output = Result<(), Error>> + 'static + Send>>>,
+    fut:  Option<Pin<Box<dyn Future03<Output = Result<(), Error>> + 'static + Send>>>,
 }
 
 impl<Item, Error: 'static + Send> AsyncStream<Item, Error> {

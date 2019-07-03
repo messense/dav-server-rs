@@ -66,7 +66,7 @@ pub struct DavProp {
 }
 
 /// Future (futures 0.3) returned by almost all of the DavFileSystem methods.
-pub type FsFuture<'a, T> = Pin<Box<Future<Output = FsResult<T>> + Send + 'a>>;
+pub type FsFuture<'a, T> = Pin<Box<dyn Future<Output = FsResult<T>> + Send + 'a>>;
 
 /// Used as argument to the read_dir() method. It is:
 ///
@@ -88,17 +88,17 @@ pub enum ReadDirMeta {
 /// The trait that defines a filesystem.
 pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     /// Open a file.
-    fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<DavFile>>;
+    fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<dyn DavFile>>;
 
     /// Perform read_dir.
     fn read_dir<'a>(
         &'a self,
         path: &'a WebPath,
         meta: ReadDirMeta,
-    ) -> FsFuture<Pin<Box<Stream<Item = Box<DavDirEntry>> + Send>>>;
+    ) -> FsFuture<Pin<Box<dyn Stream<Item = Box<dyn DavDirEntry>> + Send>>>;
 
     /// Return the metadata of a file or directory.
-    fn metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<DavMetaData>>;
+    fn metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<dyn DavMetaData>>;
 
     /// Return the metadata of a file, directory or symbolic link.
     ///
@@ -108,7 +108,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     ///
     /// The default implementation returns FsError::NotImplemented.
     #[allow(unused_variables)]
-    fn symlink_metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
+    fn symlink_metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<dyn DavMetaData>> {
         self.metadata(path)
     }
 
@@ -182,7 +182,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     ///
     /// The default implementation returns `false`.
     #[allow(unused_variables)]
-    fn have_props<'a>(&'a self, path: &'a WebPath) -> Pin<Box<Future<Output = bool> + Send + 'a>> {
+    fn have_props<'a>(&'a self, path: &'a WebPath) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>> {
         Box::pin(future::ready(false))
     }
 
@@ -232,12 +232,12 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
 // BoxClone trait.
 #[doc(hidden)]
 pub trait BoxCloneFs {
-    fn box_clone(&self) -> Box<DavFileSystem>;
+    fn box_clone(&self) -> Box<dyn DavFileSystem>;
 }
 
 // generic Clone, calls implementation-specific box_clone().
-impl Clone for Box<DavFileSystem> {
-    fn clone(&self) -> Box<DavFileSystem> {
+impl Clone for Box<dyn DavFileSystem> {
+    fn clone(&self) -> Box<dyn DavFileSystem> {
         self.box_clone()
     }
 }
@@ -245,7 +245,7 @@ impl Clone for Box<DavFileSystem> {
 // implementation-specific clone.
 #[doc(hidden)]
 impl<FS: Clone + DavFileSystem + 'static> BoxCloneFs for FS {
-    fn box_clone(&self) -> Box<DavFileSystem> {
+    fn box_clone(&self) -> Box<dyn DavFileSystem> {
         Box::new((*self).clone())
     }
 }
@@ -256,7 +256,7 @@ pub trait DavDirEntry: Send + Sync {
     fn name(&self) -> Vec<u8>;
 
     /// metadata of the entry.
-    fn metadata<'a>(&'a self) -> FsFuture<Box<DavMetaData>>;
+    fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>>;
 
     /// Default implementation of is_dir just returns `self.metadata()?.is_dir()`.
     /// Implementations can override this if their metadata() method is
@@ -280,7 +280,7 @@ pub trait DavDirEntry: Send + Sync {
 /// A DavFile should be readable/writeable/seekable, and be able
 /// to return its metadata.
 pub trait DavFile: Debug + Send + Sync {
-    fn metadata<'a>(&'a self) -> FsFuture<Box<DavMetaData>>;
+    fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>>;
     fn write_bytes<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<usize>;
     fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<()>;
     fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize>;
@@ -345,8 +345,8 @@ pub trait DavMetaData: Debug + BoxCloneMd + Send + Sync {
 }
 
 // generic Clone, calls implementation-specific box_clone().
-impl Clone for Box<DavMetaData> {
-    fn clone(&self) -> Box<DavMetaData> {
+impl Clone for Box<dyn DavMetaData> {
+    fn clone(&self) -> Box<dyn DavMetaData> {
         self.box_clone()
     }
 }
@@ -354,13 +354,13 @@ impl Clone for Box<DavMetaData> {
 // BoxCloneMd trait.
 #[doc(hidden)]
 pub trait BoxCloneMd {
-    fn box_clone(&self) -> Box<DavMetaData>;
+    fn box_clone(&self) -> Box<dyn DavMetaData>;
 }
 
 // implementation-specific clone.
 #[doc(hidden)]
 impl<MD: Clone + DavMetaData + 'static> BoxCloneMd for MD {
-    fn box_clone(&self) -> Box<DavMetaData> {
+    fn box_clone(&self) -> Box<dyn DavMetaData> {
         Box::new((*self).clone())
     }
 }
@@ -422,7 +422,7 @@ impl std::error::Error for FsError {
     fn description(&self) -> &str {
         "DavFileSystem error"
     }
-    fn cause(&self) -> Option<&std::error::Error> {
+    fn cause(&self) -> Option<&dyn std::error::Error> {
         None
     }
 }

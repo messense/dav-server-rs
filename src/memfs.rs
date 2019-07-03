@@ -73,7 +73,7 @@ impl MemFs {
         })
     }
 
-    fn do_open(&self, tree: &mut Tree, path: &[u8], options: OpenOptions) -> FsResult<Box<DavFile>> {
+    fn do_open(&self, tree: &mut Tree, path: &[u8], options: OpenOptions) -> FsResult<Box<dyn DavFile>> {
         let node_id = match tree.lookup(path) {
             Ok(n) => {
                 if options.create_new {
@@ -116,13 +116,13 @@ impl Clone for MemFs {
 }
 
 impl DavFileSystem for MemFs {
-    fn metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
+    fn metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<dyn DavMetaData>> {
         Box::pin(
             async move {
                 let tree = &*self.tree.lock().unwrap();
                 let node_id = tree.lookup(path.as_bytes())?;
                 let meta = tree.get_node(node_id)?.as_dirent(path.as_bytes());
-                Ok(Box::new(meta) as Box<DavMetaData>)
+                Ok(Box::new(meta) as Box<dyn DavMetaData>)
             },
         )
     }
@@ -131,7 +131,7 @@ impl DavFileSystem for MemFs {
         &'a self,
         path: &'a WebPath,
         _meta: ReadDirMeta,
-    ) -> FsFuture<Pin<Box<Stream<Item = Box<DavDirEntry>> + Send>>>
+    ) -> FsFuture<Pin<Box<dyn Stream<Item = Box<dyn DavDirEntry>> + Send>>>
     {
         Box::pin(
             async move {
@@ -140,19 +140,19 @@ impl DavFileSystem for MemFs {
                 if !tree.get_node(node_id)?.is_dir() {
                     return Err(FsError::Forbidden);
                 }
-                let mut v: Vec<Box<DavDirEntry>> = Vec::new();
+                let mut v: Vec<Box<dyn DavDirEntry>> = Vec::new();
                 for (name, dnode_id) in tree.get_children(node_id)? {
                     if let Ok(node) = tree.get_node(dnode_id) {
                         v.push(Box::new(node.as_dirent(&name)));
                     }
                 }
                 let strm = futures::stream::iter(v.into_iter());
-                Ok(Box::pin(strm) as Pin<Box<Stream<Item = Box<DavDirEntry>> + Send>>)
+                Ok(Box::pin(strm) as Pin<Box<dyn Stream<Item = Box<dyn DavDirEntry>> + Send>>)
             },
         )
     }
 
-    fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<DavFile>> {
+    fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<dyn DavFile>> {
         Box::pin(
             async move {
                 let tree = &mut *self.tree.lock().unwrap();
@@ -245,7 +245,7 @@ impl DavFileSystem for MemFs {
         )
     }
 
-    fn have_props<'a>(&'a self, _path: &'a WebPath) -> Pin<Box<Future<Output = bool> + Send + 'a>> {
+    fn have_props<'a>(&'a self, _path: &'a WebPath) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>> {
         Box::pin(future::ready(true))
     }
 
@@ -327,9 +327,9 @@ fn cloneprop(p: &DavProp) -> DavProp {
 }
 
 impl DavDirEntry for MemFsDirEntry {
-    fn metadata<'a>(&'a self) -> FsFuture<Box<DavMetaData>> {
+    fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>> {
         let meta = (*self).clone();
-        Box::pin(future::ok(Box::new(meta) as Box<DavMetaData>))
+        Box::pin(future::ok(Box::new(meta) as Box<dyn DavMetaData>))
     }
 
     fn name(&self) -> Vec<u8> {
@@ -338,13 +338,13 @@ impl DavDirEntry for MemFsDirEntry {
 }
 
 impl DavFile for MemFsFile {
-    fn metadata<'a>(&'a self) -> FsFuture<Box<DavMetaData>> {
+    fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>> {
         Box::pin(
             async move {
                 let tree = &*self.tree.lock().unwrap();
                 let node = tree.get_node(self.node_id)?;
                 let meta = node.as_dirent(b"");
-                Ok(Box::new(meta) as Box<DavMetaData>)
+                Ok(Box::new(meta) as Box<dyn DavMetaData>)
             },
         )
     }

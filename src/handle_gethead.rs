@@ -280,7 +280,7 @@ impl crate::DavInner {
                 struct Dirent {
                     path: String,
                     name: String,
-                    meta: Box<DavMetaData>,
+                    meta: Box<dyn DavMetaData>,
                 }
 
                 let mut dirents: Vec<Dirent> = Vec::new();

@@ -101,8 +101,8 @@ struct PropWriter {
     tx:        Option<Sender>,
     name:      String,
     props:     Vec<Element>,
-    fs:        Box<DavFileSystem>,
-    ls:        Option<Box<DavLockSystem>>,
+    fs:        Box<dyn DavFileSystem>,
+    ls:        Option<Box<dyn DavLockSystem>>,
     useragent: String,
     q_cache:   QuotaCache,
 }
@@ -262,7 +262,7 @@ impl DavInner {
                 propwriter.write_props(&npath, meta).await?;
                 propwriter.flush().await?;
                 if depth == davheaders::Depth::Infinity && is_dir {
-                    let fut_obj : Pin<Box<Future<Output = _> + Send>> = Box::pin(
+                    let fut_obj : Pin<Box<dyn Future<Output = _> + Send>> = Box::pin(
                         self.propfind_directory(&npath, depth, propwriter)
                     );
                     fut_obj.await?;
@@ -496,8 +496,8 @@ impl PropWriter {
         res: &mut Response<BoxedByteStream>,
         name: &str,
         mut props: Vec<Element>,
-        fs: &Box<DavFileSystem>,
-        ls: Option<&Box<DavLockSystem>>,
+        fs: &Box<dyn DavFileSystem>,
+        ls: Option<&Box<dyn DavLockSystem>>,
     ) -> DavResult<PropWriter>
     {
         let contenttype = "application/xml; charset=utf-8".parse().unwrap();
@@ -619,7 +619,7 @@ impl PropWriter {
         &'a self,
         qc: &'a mut QuotaCache,
         path: &'a WebPath,
-        meta: Box<DavMetaData + 'a>,
+        meta: Box<dyn DavMetaData + 'a>,
     ) -> impl Future<Output = FsResult<(u64, Option<u64>)>> + Send + 'a
     {
         async move {
@@ -662,7 +662,7 @@ impl PropWriter {
         &'a self,
         prop: &'a Element,
         path: &'a WebPath,
-        meta: Box<DavMetaData + 'a>,
+        meta: Box<dyn DavMetaData + 'a>,
         qc: &'a mut QuotaCache,
         docontent: bool,
     ) -> impl Future<Output = DavResult<StatusElement>> + Send + 'a
@@ -863,7 +863,7 @@ impl PropWriter {
     pub fn write_props<'a>(
         &'a mut self,
         path: &'a WebPath,
-        meta: Box<DavMetaData + 'static>,
+        meta: Box<dyn DavMetaData + 'static>,
     ) -> impl Future<Output = Result<(), DavError>> + Send + 'a
     {
         async move {

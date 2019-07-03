@@ -30,7 +30,7 @@ impl Error for DavError {
         "DAV error"
     }
 
-    fn cause(&self) -> Option<&Error> {
+    fn cause(&self) -> Option<&dyn Error> {
         match self {
             &DavError::FsError(ref e) => Some(e),
             &DavError::IoError(ref e) => Some(e),

@@ -233,7 +233,7 @@ impl DavMetaData for EmptyMetaData {
 impl LocalFs {
     // Is this a virtualfile ?
     #[inline]
-    pub(crate) fn is_virtual(&self, path: &WebPath) -> Option<Box<DavMetaData>> {
+    pub(crate) fn is_virtual(&self, path: &WebPath) -> Option<Box<dyn DavMetaData>> {
         if !self.inner.macos {
             return None;
         }

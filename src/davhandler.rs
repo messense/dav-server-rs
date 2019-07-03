@@ -37,9 +37,9 @@ pub struct DavConfig {
     /// Prefix to be stripped off when handling request.
     pub prefix: Option<String>,
     /// Filesystem backend.
-    pub fs: Option<Box<DavFileSystem>>,
+    pub fs: Option<Box<dyn DavFileSystem>>,
     /// Locksystem backend.
-    pub ls: Option<Box<DavLockSystem>>,
+    pub ls: Option<Box<dyn DavLockSystem>>,
     /// Set of allowed methods (None means "all methods")
     pub allow: Option<AllowedMethods>,
     /// Principal is webdav speak for "user", used to give locks an owner (if a locksystem is
@@ -55,8 +55,8 @@ pub struct DavConfig {
 // a DavInner struct. DavInner::handle then handles the request.
 pub(crate) struct DavInner {
     pub prefix:        String,
-    pub fs:            Box<DavFileSystem>,
-    pub ls:            Option<Box<DavLockSystem>>,
+    pub fs:            Box<dyn DavFileSystem>,
+    pub ls:            Option<Box<dyn DavLockSystem>>,
     pub allow:         Option<AllowedMethods>,
     pub principal:     Option<String>,
     pub hide_symlinks: Option<bool>,
@@ -110,7 +110,7 @@ impl DavHandler {
     /// - `prefix`: URL prefix to be stripped off.
     /// - `fs:` The filesystem backend.
     /// - `ls:` Optional locksystem backend
-    pub fn new(prefix: Option<&str>, fs: Box<DavFileSystem>, ls: Option<Box<DavLockSystem>>) -> DavHandler {
+    pub fn new(prefix: Option<&str>, fs: Box<dyn DavFileSystem>, ls: Option<Box<dyn DavLockSystem>>) -> DavHandler {
         let config = DavConfig {
             prefix:        prefix.map(|s| s.to_string()),
             fs:            Some(fs),
@@ -205,8 +205,8 @@ impl DavInner {
         &self,
         res: &mut Response<BoxedByteStream>,
         path: &mut WebPath,
-        meta: Box<DavMetaData>,
-    ) -> Box<DavMetaData>
+        meta: Box<dyn DavMetaData>,
+    ) -> Box<dyn DavMetaData>
     {
         if meta.is_dir() && !path.is_collection() {
             path.add_slash();

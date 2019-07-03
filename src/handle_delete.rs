@@ -40,7 +40,7 @@ impl crate::DavInner {
         &'a self,
         mut res: &'a mut MultiError,
         depth: Depth,
-        meta: Box<DavMetaData + 'a>,
+        meta: Box<dyn DavMetaData + 'a>,
         path: &'a WebPath,
     ) -> impl Future<Output = DavResult<()>> + Send + 'a
     {
@@ -89,7 +89,7 @@ impl crate::DavInner {
                 //   ) -> impl Future<Output = DavResult<()>> + Send + 'a
                 //        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expands to self-referential type
                 // see https://github.com/rust-lang/rust/issues/53690#issuecomment-457993865
-                let fut_obj : Pin<Box<Future<Output = _> + Send>> = Box::pin(
+                let fut_obj : Pin<Box<dyn Future<Output = _> + Send>> = Box::pin(
                     self.delete_items(&mut res, depth, meta, &npath)
                 );
                 if let Err(e) = fut_obj.await {

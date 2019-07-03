@@ -325,7 +325,7 @@ impl ETag {
         }
     }
 
-    pub fn from_meta(meta: impl AsRef<DavMetaData>) -> Option<ETag> {
+    pub fn from_meta(meta: impl AsRef<dyn DavMetaData>) -> Option<ETag> {
         let tag = meta.as_ref().etag()?;
         Some(ETag{
             tag:    format!("\"{}\"", tag),

@@ -63,7 +63,7 @@ impl Error for ParseError {
     fn description(&self) -> &str {
         "WebPath parse error"
     }
-    fn cause(&self) -> Option<&Error> {
+    fn cause(&self) -> Option<&dyn Error> {
         None
     }
 }

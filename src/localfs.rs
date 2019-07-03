@@ -62,7 +62,7 @@ pub(crate) struct LocalFsInner {
     pub public:           bool,
     pub case_insensitive: bool,
     pub macos:            bool,
-    pub fs_access_guard:  Option<Box<Fn() -> Box<Any> + Send + Sync + 'static>>,
+    pub fs_access_guard:  Option<Box<dyn Fn() -> Box<dyn Any> + Send + Sync + 'static>>,
 }
 
 #[derive(Debug)]
@@ -120,7 +120,7 @@ impl LocalFs {
         public: bool,
         case_insensitive: bool,
         macos: bool,
-        fs_access_guard: Option<Box<Fn() -> Box<Any> + Send + Sync + 'static>>,
+        fs_access_guard: Option<Box<dyn Fn() -> Box<dyn Any> + Send + Sync + 'static>>,
     ) -> Box<LocalFs>
     {
         let inner = LocalFsInner {
@@ -172,7 +172,7 @@ impl LocalFs {
 // This implementation is basically a bunch of boilerplate to
 // wrap the std::fs call in self.blocking() calls.
 impl DavFileSystem for LocalFs {
-    fn metadata<'a>(&'a self, webpath: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
+    fn metadata<'a>(&'a self, webpath: &'a WebPath) -> FsFuture<Box<dyn DavMetaData>> {
         self.blocking(move || {
             if let Some(meta) = self.is_virtual(webpath) {
                 return Ok(meta);
@@ -182,14 +182,14 @@ impl DavFileSystem for LocalFs {
                 return Err(FsError::NotFound);
             }
             match std::fs::metadata(path) {
-                Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<DavMetaData>),
+                Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
                 Err(e) => Err(e.into()),
             }
         })
         .boxed()
     }
 
-    fn symlink_metadata<'a>(&'a self, webpath: &'a WebPath) -> FsFuture<Box<DavMetaData>> {
+    fn symlink_metadata<'a>(&'a self, webpath: &'a WebPath) -> FsFuture<Box<dyn DavMetaData>> {
         self.blocking(move || {
             if let Some(meta) = self.is_virtual(webpath) {
                 return Ok(meta);
@@ -199,7 +199,7 @@ impl DavFileSystem for LocalFs {
                 return Err(FsError::NotFound);
             }
             match std::fs::symlink_metadata(path) {
-                Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<DavMetaData>),
+                Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
                 Err(e) => Err(e.into()),
             }
         })
@@ -212,7 +212,7 @@ impl DavFileSystem for LocalFs {
         &'a self,
         webpath: &'a WebPath,
         meta: ReadDirMeta,
-    ) -> FsFuture<Pin<Box<Stream<Item = Box<DavDirEntry>> + Send>>>
+    ) -> FsFuture<Pin<Box<dyn Stream<Item = Box<dyn DavDirEntry>> + Send>>>
     {
         debug!("FS: read_dir {:?}", self.fspath_dbg(webpath));
         self.blocking(move || {
@@ -226,7 +226,7 @@ impl DavFileSystem for LocalFs {
                         dir_cache: self.dir_cache_builder(path),
                         iterator:  iterator,
                     };
-                    Ok(Box::pin(strm) as Pin<Box<Stream<Item = Box<DavDirEntry>> + Send>>)
+                    Ok(Box::pin(strm) as Pin<Box<dyn Stream<Item = Box<dyn DavDirEntry>> + Send>>)
                 },
                 Err(e) => Err(e.into()),
             }
@@ -234,7 +234,7 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<DavFile>> {
+    fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<dyn DavFile>> {
         debug!("FS: open {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             if self.is_forbidden(path) {
@@ -250,7 +250,7 @@ impl DavFileSystem for LocalFs {
                 .mode(if self.inner.public { 0o644 } else { 0o600 })
                 .open(self.fspath(path));
             match res {
-                Ok(file) => Ok(Box::new(LocalFsFile(file)) as Box<DavFile>),
+                Ok(file) => Ok(Box::new(LocalFsFile(file)) as Box<dyn DavFile>),
                 Err(e) => Err(e.into()),
             }
         })
@@ -317,7 +317,7 @@ impl DavFileSystem for LocalFs {
 
 // The stream implementation tries to be smart and batch I/O operations
 impl Stream for LocalFsReadDir {
-    type Item = Box<DavDirEntry>;
+    type Item = Box<dyn DavDirEntry>;
 
     fn poll_next(
         mut self: Pin<&mut Self>,
@@ -408,11 +408,11 @@ impl LocalFsDirEntry {
 }
 
 impl DavDirEntry for LocalFsDirEntry {
-    fn metadata<'a>(&'a self) -> FsFuture<Box<DavMetaData>> {
+    fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>> {
         match self.meta {
             Meta::Data(ref meta) => {
                 let m = match meta {
-                    Ok(meta) => Ok(Box::new(LocalFsMetaData(meta.clone())) as Box<DavMetaData>),
+                    Ok(meta) => Ok(Box::new(LocalFsMetaData(meta.clone())) as Box<dyn DavMetaData>),
                     Err(e) => Err(e.into()),
                 };
                 Box::pin(future::ready(m))
@@ -420,7 +420,7 @@ impl DavDirEntry for LocalFsDirEntry {
             Meta::Fs(ref fs) => {
                 fs.blocking(move || {
                     match self.entry.metadata() {
-                        Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<DavMetaData>),
+                        Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
                         Err(e) => Err(e.into()),
                     }
                 })
@@ -447,10 +447,10 @@ impl DavDirEntry for LocalFsDirEntry {
 }
 
 impl DavFile for LocalFsFile {
-    fn metadata<'a>(&'a self) -> FsFuture<Box<DavMetaData>> {
+    fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>> {
         blocking(move || {
             let meta = self.0.metadata()?;
-            Ok(Box::new(LocalFsMetaData(meta)) as Box<DavMetaData>)
+            Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>)
         })
         .boxed()
     }

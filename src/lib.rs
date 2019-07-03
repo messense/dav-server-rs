@@ -162,7 +162,7 @@ pub(crate) use crate::fs::*;
 
 /// A boxed futures 0.1 Stream of Bytes.
 #[allow(unused)]
-pub type BoxedByteStream = Box<futures01::Stream<Item = Bytes, Error = io::Error> + Send + 'static>;
+pub type BoxedByteStream = Box<dyn futures01::Stream<Item = Bytes, Error = io::Error> + Send + 'static>;
 
 pub use crate::davhandler::{DavConfig, DavHandler};
 pub use crate::util::{AllowedMethods, Method};

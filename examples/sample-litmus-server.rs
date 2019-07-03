@@ -33,11 +33,11 @@ struct Server {
     auth: bool,
 }
 
-type BoxedFuture = Box<Future<Item = hyper::Response<hyper::Body>, Error = std::io::Error> + Send>;
+type BoxedFuture = Box<dyn Future<Item = hyper::Response<hyper::Body>, Error = std::io::Error> + Send>;
 
 impl Server {
     pub fn new(directory: String, memls: bool, auth: bool) -> Self {
-        let memls: Option<Box<DavLockSystem>> = if memls { Some(memls::MemLs::new()) } else { None };
+        let memls: Option<Box<dyn DavLockSystem>> = if memls { Some(memls::MemLs::new()) } else { None };
         let dh = if directory != "" {
             let fs = localfs::LocalFs::new(directory, true, true, true);
             DavHandler::new(None, fs, memls)

@@ -105,7 +105,7 @@ impl crate::DavInner {
                     ndest.add_slash();
                 }
                 // recurse.
-                let fut_obj : Pin<Box<Future<Output = _> + Send>> = Box::pin(
+                let fut_obj : Pin<Box<dyn Future<Output = _> + Send>> = Box::pin(
                     self.do_copy(&nsrc, topdest, &ndest, depth, multierror)
                 );
                 if let Err(e) = fut_obj.await {
