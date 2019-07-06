@@ -615,284 +615,278 @@ impl PropWriter {
         })
     }
 
-    fn get_quota<'a>(
+    async fn get_quota<'a>(
         &'a self,
         qc: &'a mut QuotaCache,
         path: &'a WebPath,
         meta: Box<dyn DavMetaData + 'a>,
-    ) -> impl Future<Output = FsResult<(u64, Option<u64>)>> + Send + 'a
+    ) -> FsResult<(u64, Option<u64>)>
     {
-        async move {
-            // do lookup only once.
-            match qc.q_state {
-                0 => {
-                    match self.fs.get_quota().await {
-                        Err(e) => {
-                            qc.q_state = 1;
-                            return Err(e);
-                        },
-                        Ok((u, t)) => {
-                            qc.q_used = u;
-                            qc.q_total = t;
-                            qc.q_state = 2;
-                        },
-                    }
-                },
-                1 => return Err(FsError::NotImplemented),
-                _ => {},
-            }
-
-            // if not "/", return for "used" just the size of this file/dir.
-            let used = if path.as_bytes() == b"/" {
-                qc.q_used
-            } else {
-                meta.len()
-            };
-
-            // calculate available space.
-            let avail = match qc.q_total {
-                None => None,
-                Some(total) => Some(if total > used { total - used } else { 0 }),
-            };
-            Ok((used, avail))
+        // do lookup only once.
+        match qc.q_state {
+            0 => {
+                match self.fs.get_quota().await {
+                    Err(e) => {
+                        qc.q_state = 1;
+                        return Err(e);
+                    },
+                    Ok((u, t)) => {
+                        qc.q_used = u;
+                        qc.q_total = t;
+                        qc.q_state = 2;
+                    },
+                }
+            },
+            1 => return Err(FsError::NotImplemented),
+            _ => {},
         }
+
+        // if not "/", return for "used" just the size of this file/dir.
+        let used = if path.as_bytes() == b"/" {
+            qc.q_used
+        } else {
+            meta.len()
+        };
+
+        // calculate available space.
+        let avail = match qc.q_total {
+            None => None,
+            Some(total) => Some(if total > used { total - used } else { 0 }),
+        };
+        Ok((used, avail))
     }
 
-    fn build_prop<'a>(
+    async fn build_prop<'a>(
         &'a self,
         prop: &'a Element,
         path: &'a WebPath,
         meta: Box<dyn DavMetaData + 'a>,
         qc: &'a mut QuotaCache,
         docontent: bool,
-    ) -> impl Future<Output = DavResult<StatusElement>> + Send + 'a
+    ) -> DavResult<StatusElement>
     {
-        async move {
-            // in some cases, a live property might be stored in the
-            // dead prop database, like DAV:displayname.
-            let mut try_deadprop = false;
-            let mut pfx = "";
+        // in some cases, a live property might be stored in the
+        // dead prop database, like DAV:displayname.
+        let mut try_deadprop = false;
+        let mut pfx = "";
 
-            match prop.namespace.as_ref().map(|x| x.as_str()) {
-                Some(NS_DAV_URI) => {
-                    pfx = "D";
-                    match prop.name.as_str() {
-                        "creationdate" => {
-                            if let Ok(time) = meta.created() {
-                                let tm = systemtime_to_rfc3339(time);
-                                return self.build_elem(docontent, pfx, prop, tm);
-                            }
-                            // use ctime instead - apache seems to do this.
-                            if let Ok(ctime) = meta.status_changed() {
-                                let mut time = ctime;
-                                if let Ok(mtime) = meta.modified() {
-                                    if mtime < ctime {
-                                        time = mtime;
-                                    }
+        match prop.namespace.as_ref().map(|x| x.as_str()) {
+            Some(NS_DAV_URI) => {
+                pfx = "D";
+                match prop.name.as_str() {
+                    "creationdate" => {
+                        if let Ok(time) = meta.created() {
+                            let tm = systemtime_to_rfc3339(time);
+                            return self.build_elem(docontent, pfx, prop, tm);
+                        }
+                        // use ctime instead - apache seems to do this.
+                        if let Ok(ctime) = meta.status_changed() {
+                            let mut time = ctime;
+                            if let Ok(mtime) = meta.modified() {
+                                if mtime < ctime {
+                                    time = mtime;
                                 }
-                                let tm = systemtime_to_rfc3339(time);
-                                return self.build_elem(docontent, pfx, prop, tm);
                             }
-                        },
-                        "displayname" | "getcontentlanguage" => {
-                            try_deadprop = true;
-                        },
-                        "getetag" => {
-                            if let Some(etag) = meta.etag() {
-                                return self.build_elem(docontent, pfx, prop, etag);
-                            }
-                        },
-                        "getcontentlength" => {
-                            if !meta.is_dir() {
-                                return self.build_elem(docontent, pfx, prop, meta.len().to_string());
-                            }
-                        },
-                        "getcontenttype" => {
-                            return if meta.is_dir() {
-                                self.build_elem(docontent, pfx, prop, "httpd/unix-directory")
-                            } else {
-                                self.build_elem(docontent, pfx, prop, path.get_mime_type_str())
-                            };
-                        },
-                        "getlastmodified" => {
-                            if let Ok(time) = meta.modified() {
-                                let tm = systemtime_to_httpdate(time);
-                                return self.build_elem(docontent, pfx, prop, tm);
-                            }
-                        },
-                        "resourcetype" => {
-                            let mut elem = prop.clone();
-                            if meta.is_dir() && docontent {
-                                let dir = Element::new2("D:collection");
-                                elem.children.push(dir);
-                            }
-                            return Ok(StatusElement {
-                                status:  StatusCode::OK,
-                                element: elem,
-                            });
-                        },
-                        "supportedlock" => {
-                            return Ok(StatusElement {
-                                status:  StatusCode::OK,
-                                element: list_supportedlock(self.ls.as_ref()),
-                            });
-                        },
-                        "lockdiscovery" => {
-                            return Ok(StatusElement {
-                                status:  StatusCode::OK,
-                                element: list_lockdiscovery(self.ls.as_ref(), path),
-                            });
-                        },
-                        "quota-available-bytes" => {
-                            let mut qc = qc;
-                            if let Ok((_, Some(avail))) = self.get_quota(&mut qc, path, meta).await {
-                                return self.build_elem(docontent, pfx, prop, avail.to_string());
-                            }
-                        },
-                        "quota-used-bytes" => {
-                            let mut qc = qc;
-                            if let Ok((used, _)) = self.get_quota(&mut qc, path, meta).await {
-                                let used = if self.useragent.contains("WebDAVFS") {
-                                    // Need this on OSX, otherwise the value is off
-                                    // by a factor of 10 or so .. ?!?!!?
-                                    format!("{:014}", used)
-                                } else {
-                                    used.to_string()
-                                };
-                                return self.build_elem(docontent, pfx, prop, used);
-                            }
-                        },
-                        _ => {},
-                    }
-                },
-                Some(NS_APACHE_URI) => {
-                    pfx = "A";
-                    match prop.name.as_str() {
-                        "executable" => {
-                            if let Ok(x) = meta.executable() {
-                                let b = if x { "T" } else { "F" };
-                                return self.build_elem(docontent, pfx, prop, b);
-                            }
-                        },
-                        _ => {},
-                    }
-                },
-                Some(NS_MS_URI) => {
-                    pfx = "Z";
-                    match prop.name.as_str() {
-                        "Win32CreationTime" => {
-                            if let Ok(time) = meta.created() {
-                                let tm = systemtime_to_httpdate(time);
-                                return self.build_elem(docontent, pfx, prop, tm);
-                            }
-                            // use ctime instead - apache seems to do this.
-                            if let Ok(ctime) = meta.status_changed() {
-                                let mut time = ctime;
-                                if let Ok(mtime) = meta.modified() {
-                                    if mtime < ctime {
-                                        time = mtime;
-                                    }
-                                }
-                                let tm = systemtime_to_httpdate(time);
-                                return self.build_elem(docontent, pfx, prop, tm);
-                            }
-                        },
-                        "Win32LastAccessTime" => {
-                            if let Ok(time) = meta.accessed() {
-                                let tm = systemtime_to_httpdate(time);
-                                return self.build_elem(docontent, pfx, prop, tm);
-                            }
-                        },
-                        "Win32LastModifiedTime" => {
-                            if let Ok(time) = meta.modified() {
-                                let tm = systemtime_to_httpdate(time);
-                                return self.build_elem(docontent, pfx, prop, tm);
-                            }
-                        },
-                        "Win32FileAttributes" => {
-                            let mut attr = 0u32;
-                            // Enable when we implement permissions() on DavMetaData.
-                            //if meta.permissions().readonly() {
-                            //    attr |= 0x0001;
-                            //}
-                            if path.file_name().starts_with(b".") {
-                                attr |= 0x0002;
-                            }
-                            if meta.is_dir() {
-                                attr |= 0x0010;
-                            } else {
-                                // this is the 'Archive' bit, which is set by
-                                // default on _all_ files on creation and on
-                                // modification.
-                                attr |= 0x0020;
-                            }
-                            return self.build_elem(docontent, pfx, prop, format!("{:08x}", attr));
-                        },
-                        _ => {},
-                    }
-                },
-                _ => {
-                    try_deadprop = true;
-                },
-            }
-
-            if try_deadprop && self.name == "prop" && self.fs.have_props(path).await {
-                // asking for a specific property.
-                let dprop = element_to_davprop(prop);
-                if let Ok(xml) = self.fs.get_prop(path, dprop).await {
-                    if let Ok(e) = Element::parse(Cursor::new(xml)) {
+                            let tm = systemtime_to_rfc3339(time);
+                            return self.build_elem(docontent, pfx, prop, tm);
+                        }
+                    },
+                    "displayname" | "getcontentlanguage" => {
+                        try_deadprop = true;
+                    },
+                    "getetag" => {
+                        if let Some(etag) = meta.etag() {
+                            return self.build_elem(docontent, pfx, prop, etag);
+                        }
+                    },
+                    "getcontentlength" => {
+                        if !meta.is_dir() {
+                            return self.build_elem(docontent, pfx, prop, meta.len().to_string());
+                        }
+                    },
+                    "getcontenttype" => {
+                        return if meta.is_dir() {
+                            self.build_elem(docontent, pfx, prop, "httpd/unix-directory")
+                        } else {
+                            self.build_elem(docontent, pfx, prop, path.get_mime_type_str())
+                        };
+                    },
+                    "getlastmodified" => {
+                        if let Ok(time) = meta.modified() {
+                            let tm = systemtime_to_httpdate(time);
+                            return self.build_elem(docontent, pfx, prop, tm);
+                        }
+                    },
+                    "resourcetype" => {
+                        let mut elem = prop.clone();
+                        if meta.is_dir() && docontent {
+                            let dir = Element::new2("D:collection");
+                            elem.children.push(dir);
+                        }
                         return Ok(StatusElement {
                             status:  StatusCode::OK,
-                            element: e,
+                            element: elem,
                         });
-                    }
+                    },
+                    "supportedlock" => {
+                        return Ok(StatusElement {
+                            status:  StatusCode::OK,
+                            element: list_supportedlock(self.ls.as_ref()),
+                        });
+                    },
+                    "lockdiscovery" => {
+                        return Ok(StatusElement {
+                            status:  StatusCode::OK,
+                            element: list_lockdiscovery(self.ls.as_ref(), path),
+                        });
+                    },
+                    "quota-available-bytes" => {
+                        let mut qc = qc;
+                        if let Ok((_, Some(avail))) = self.get_quota(&mut qc, path, meta).await {
+                            return self.build_elem(docontent, pfx, prop, avail.to_string());
+                        }
+                    },
+                    "quota-used-bytes" => {
+                        let mut qc = qc;
+                        if let Ok((used, _)) = self.get_quota(&mut qc, path, meta).await {
+                            let used = if self.useragent.contains("WebDAVFS") {
+                                // Need this on OSX, otherwise the value is off
+                                // by a factor of 10 or so .. ?!?!!?
+                                format!("{:014}", used)
+                            } else {
+                                used.to_string()
+                            };
+                            return self.build_elem(docontent, pfx, prop, used);
+                        }
+                    },
+                    _ => {},
+                }
+            },
+            Some(NS_APACHE_URI) => {
+                pfx = "A";
+                match prop.name.as_str() {
+                    "executable" => {
+                        if let Ok(x) = meta.executable() {
+                            let b = if x { "T" } else { "F" };
+                            return self.build_elem(docontent, pfx, prop, b);
+                        }
+                    },
+                    _ => {},
+                }
+            },
+            Some(NS_MS_URI) => {
+                pfx = "Z";
+                match prop.name.as_str() {
+                    "Win32CreationTime" => {
+                        if let Ok(time) = meta.created() {
+                            let tm = systemtime_to_httpdate(time);
+                            return self.build_elem(docontent, pfx, prop, tm);
+                        }
+                        // use ctime instead - apache seems to do this.
+                        if let Ok(ctime) = meta.status_changed() {
+                            let mut time = ctime;
+                            if let Ok(mtime) = meta.modified() {
+                                if mtime < ctime {
+                                    time = mtime;
+                                }
+                            }
+                            let tm = systemtime_to_httpdate(time);
+                            return self.build_elem(docontent, pfx, prop, tm);
+                        }
+                    },
+                    "Win32LastAccessTime" => {
+                        if let Ok(time) = meta.accessed() {
+                            let tm = systemtime_to_httpdate(time);
+                            return self.build_elem(docontent, pfx, prop, tm);
+                        }
+                    },
+                    "Win32LastModifiedTime" => {
+                        if let Ok(time) = meta.modified() {
+                            let tm = systemtime_to_httpdate(time);
+                            return self.build_elem(docontent, pfx, prop, tm);
+                        }
+                    },
+                    "Win32FileAttributes" => {
+                        let mut attr = 0u32;
+                        // Enable when we implement permissions() on DavMetaData.
+                        //if meta.permissions().readonly() {
+                        //    attr |= 0x0001;
+                        //}
+                        if path.file_name().starts_with(b".") {
+                            attr |= 0x0002;
+                        }
+                        if meta.is_dir() {
+                            attr |= 0x0010;
+                        } else {
+                            // this is the 'Archive' bit, which is set by
+                            // default on _all_ files on creation and on
+                            // modification.
+                            attr |= 0x0020;
+                        }
+                        return self.build_elem(docontent, pfx, prop, format!("{:08x}", attr));
+                    },
+                    _ => {},
+                }
+            },
+            _ => {
+                try_deadprop = true;
+            },
+        }
+
+        if try_deadprop && self.name == "prop" && self.fs.have_props(path).await {
+            // asking for a specific property.
+            let dprop = element_to_davprop(prop);
+            if let Ok(xml) = self.fs.get_prop(path, dprop).await {
+                if let Ok(e) = Element::parse(Cursor::new(xml)) {
+                    return Ok(StatusElement {
+                        status:  StatusCode::OK,
+                        element: e,
+                    });
                 }
             }
-            let prop = if pfx != "" {
-                self.build_elem(false, pfx, prop, "").map(|s| s.element).unwrap()
-            } else {
-                prop.clone()
-            };
-            Ok(StatusElement {
-                status:  StatusCode::NOT_FOUND,
-                element: prop,
-            })
         }
+        let prop = if pfx != "" {
+            self.build_elem(false, pfx, prop, "").map(|s| s.element).unwrap()
+        } else {
+            prop.clone()
+        };
+        Ok(StatusElement {
+            status:  StatusCode::NOT_FOUND,
+            element: prop,
+        })
     }
 
-    pub fn write_props<'a>(
+    pub async fn write_props<'a>(
         &'a mut self,
         path: &'a WebPath,
         meta: Box<dyn DavMetaData + 'static>,
-    ) -> impl Future<Output = Result<(), DavError>> + Send + 'a
+    ) -> Result<(), DavError>
     {
-        async move {
-            // A HashMap<StatusCode, Vec<Element>> for the result.
-            let mut props = HashMap::new();
+        // A HashMap<StatusCode, Vec<Element>> for the result.
+        let mut props = HashMap::new();
 
-            // Get properties one-by-one
-            let do_content = self.name != "propname";
-            let mut qc = self.q_cache;
-            for p in &self.props {
-                let meta = meta.clone();
-                let res = self.build_prop(p, path, meta, &mut qc, do_content).await?;
-                if res.status == StatusCode::OK || (self.name != "propname" && self.name != "allprop") {
-                    add_sc_elem(&mut props, res.status, res.element);
-                }
+        // Get properties one-by-one
+        let do_content = self.name != "propname";
+        let mut qc = self.q_cache;
+        for p in &self.props {
+            let meta = meta.clone();
+            let res = self.build_prop(p, path, meta, &mut qc, do_content).await?;
+            if res.status == StatusCode::OK || (self.name != "propname" && self.name != "allprop") {
+                add_sc_elem(&mut props, res.status, res.element);
             }
-            self.q_cache = qc;
-
-            // and list the dead properties as well.
-            if (self.name == "propname" || self.name == "allprop") && self.fs.have_props(path).await {
-                if let Ok(v) = self.fs.get_props(path, do_content).await {
-                    v.into_iter()
-                        .map(davprop_to_element)
-                        .for_each(|e| add_sc_elem(&mut props, StatusCode::OK, e));
-                }
-            }
-
-            Ok::<(), DavError>(self.write_propresponse(path, props)?)
         }
+        self.q_cache = qc;
+
+        // and list the dead properties as well.
+        if (self.name == "propname" || self.name == "allprop") && self.fs.have_props(path).await {
+            if let Ok(v) = self.fs.get_props(path, do_content).await {
+                v.into_iter()
+                    .map(davprop_to_element)
+                    .for_each(|e| add_sc_elem(&mut props, StatusCode::OK, e));
+            }
+        }
+
+        Ok::<(), DavError>(self.write_propresponse(path, props)?)
     }
 
     pub fn write_propresponse(
