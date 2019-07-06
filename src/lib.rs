@@ -118,6 +118,7 @@
 //! [actix-web]: https://actix.rs/
 //!
 #![feature(async_await)]
+#![feature(async_closure)]
 
 #[macro_use]
 extern crate log;

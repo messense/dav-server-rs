@@ -4,6 +4,7 @@
 //!
 //! ```rust text
 //! #![feature(async_await)]
+//! #![feature(async_closure)]
 //! use futures::StreamExt;
 //! use futures::executor::block_on;
 //! # use webdav_handler::async_stream;
