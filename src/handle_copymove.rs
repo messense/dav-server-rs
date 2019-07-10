@@ -1,6 +1,4 @@
-use std::pin::Pin;
-
-use futures::{Future, StreamExt};
+use futures::{Future, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
@@ -105,10 +103,7 @@ impl crate::DavInner {
                     ndest.add_slash();
                 }
                 // recurse.
-                let fut_obj : Pin<Box<dyn Future<Output = _> + Send>> = Box::pin(
-                    self.do_copy(&nsrc, topdest, &ndest, depth, multierror)
-                );
-                if let Err(e) = fut_obj.await {
+                if let Err(e) = self.do_copy(&nsrc, topdest, &ndest, depth, multierror).boxed().await {
                     retval = Err(e);
                 }
             }

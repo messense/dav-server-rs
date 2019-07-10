@@ -2,9 +2,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::{self, Cursor};
-use std::pin::Pin;
 
-use futures::{Future, StreamExt};
+use futures::{Future, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
@@ -262,10 +261,7 @@ impl DavInner {
                 propwriter.write_props(&npath, meta).await?;
                 propwriter.flush().await?;
                 if depth == davheaders::Depth::Infinity && is_dir {
-                    let fut_obj : Pin<Box<dyn Future<Output = _> + Send>> = Box::pin(
-                        self.propfind_directory(&npath, depth, propwriter)
-                    );
-                    fut_obj.await?;
+                        self.propfind_directory(&npath, depth, propwriter).boxed().await?;
                 }
             }
             Ok(())

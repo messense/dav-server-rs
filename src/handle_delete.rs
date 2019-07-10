@@ -1,6 +1,4 @@
-use std::pin::Pin;
-
-use futures::{Future, StreamExt};
+use futures::{Future, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
@@ -84,15 +82,7 @@ impl crate::DavInner {
 
                 // do the actual work. If this fails with a non-fs related error,
                 // return immediately.
-                //
-                // Recursion. Need to erase type, otherwise you get:
-                //   ) -> impl Future<Output = DavResult<()>> + Send + 'a
-                //        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expands to self-referential type
-                // see https://github.com/rust-lang/rust/issues/53690#issuecomment-457993865
-                let fut_obj : Pin<Box<dyn Future<Output = _> + Send>> = Box::pin(
-                    self.delete_items(&mut res, depth, meta, &npath)
-                );
-                if let Err(e) = fut_obj.await {
+                if let Err(e) = self.delete_items(&mut res, depth, meta, &npath).boxed().await {
                     match e {
                         DavError::Status(_) => {
                             result = Err(e);
