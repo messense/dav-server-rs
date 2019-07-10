@@ -619,7 +619,7 @@ impl PropWriter {
         &'a self,
         qc: &'a mut QuotaCache,
         path: &'a WebPath,
-        meta: Box<dyn DavMetaData + 'a>,
+        meta: &'a dyn DavMetaData,
     ) -> FsResult<(u64, Option<u64>)>
     {
         // do lookup only once.
@@ -660,7 +660,7 @@ impl PropWriter {
         &'a self,
         prop: &'a Element,
         path: &'a WebPath,
-        meta: Box<dyn DavMetaData + 'a>,
+        meta: &'a dyn DavMetaData,
         qc: &'a mut QuotaCache,
         docontent: bool,
     ) -> DavResult<StatusElement>
@@ -869,8 +869,7 @@ impl PropWriter {
         let do_content = self.name != "propname";
         let mut qc = self.q_cache;
         for p in &self.props {
-            let meta = meta.clone();
-            let res = self.build_prop(p, path, meta, &mut qc, do_content).await?;
+            let res = self.build_prop(p, path, &*meta, &mut qc, do_content).await?;
             if res.status == StatusCode::OK || (self.name != "propname" && self.name != "allprop") {
                 add_sc_elem(&mut props, res.status, res.element);
             }
