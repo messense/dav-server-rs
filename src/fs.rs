@@ -67,6 +67,7 @@ pub struct DavProp {
 
 /// Future (futures 0.3) returned by almost all of the DavFileSystem methods.
 pub type FsFuture<'a, T> = Pin<Box<dyn Future<Output = FsResult<T>> + Send + 'a>>;
+pub type FsStream<T> = Pin<Box<dyn Stream<Item = T> + Send>>;
 
 /// Used as argument to the read_dir() method. It is:
 ///
@@ -95,7 +96,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
         &'a self,
         path: &'a WebPath,
         meta: ReadDirMeta,
-    ) -> FsFuture<Pin<Box<dyn Stream<Item = Box<dyn DavDirEntry>> + Send>>>;
+    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>>;
 
     /// Return the metadata of a file or directory.
     fn metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<dyn DavMetaData>>;

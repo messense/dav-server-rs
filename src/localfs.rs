@@ -212,7 +212,7 @@ impl DavFileSystem for LocalFs {
         &'a self,
         webpath: &'a WebPath,
         meta: ReadDirMeta,
-    ) -> FsFuture<Pin<Box<dyn Stream<Item = Box<dyn DavDirEntry>> + Send>>>
+    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>>
     {
         debug!("FS: read_dir {:?}", self.fspath_dbg(webpath));
         self.blocking(move || {
@@ -226,7 +226,7 @@ impl DavFileSystem for LocalFs {
                         dir_cache: self.dir_cache_builder(path),
                         iterator:  iterator,
                     };
-                    Ok(Box::pin(strm) as Pin<Box<dyn Stream<Item = Box<dyn DavDirEntry>> + Send>>)
+                    Ok(Box::pin(strm) as FsStream<Box<dyn DavDirEntry>>)
                 },
                 Err(e) => Err(e.into()),
             }
