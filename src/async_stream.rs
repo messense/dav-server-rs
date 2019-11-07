@@ -39,7 +39,7 @@
 //!
 //! [async]: https://rust-lang.github.io/async-book/getting_started/async_await_primer.html
 //! [Stream01]: https://docs.rs/futures/0.1/futures/stream/trait.Stream.html
-//! [Stream03]: https://rust-lang-nursery.github.io/futures-api-docs/0.3.0-alpha.16/futures/stream/trait.Stream.html
+//! [Stream03]: https://docs.rs/futures/0.3/futures/stream/trait.Stream.html
 //! [send]: async_stream/struct.Sender.html#method.send
 //!
 use std::cell::Cell;
@@ -121,7 +121,7 @@ impl<I, E> Sender<I, E> {
 /// [async]: https://rust-lang.github.io/async-book/getting_started/async_await_primer.html
 /// [Future03]: https://doc.rust-lang.org/nightly/std/future/trait.Future.html
 /// [Stream01]: https://docs.rs/futures/0.1/futures/stream/trait.Stream.html
-/// [Stream03]: https://rust-lang-nursery.github.io/futures-api-docs/0.3.0-alpha.16/futures/stream/trait.Stream.html
+/// [Stream03]: https://docs.rs/futures/0.3/futures/stream/trait.Stream.html
 #[must_use]
 pub struct AsyncStream<Item, Error> {
     item: Sender<Item, Error>,

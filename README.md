@@ -13,9 +13,9 @@ the types from the `http` crate. It comes complete with an async filesystem
 backend, so it can be used as a WEBDAV filesystem server, or just as a
 feature-complete HTTP server.
 
-NOTE: this crate uses futures 0.3 + async/await code internally, so it
-only works on Rust nightly (currently rustc 1.36.0-nightly (938d4ffe1 2019-04-27)).
-The external interface is futures 0.1 based though (might add 0.3 as well).
+NOTE: this crate uses futures 0.3 + async/await code internally, so it only works
+with Rust 1.39 and up. The external interface is still futures 0.1 + tokio 0.1 based
+though.
 
 ### Interface.
 
@@ -124,8 +124,7 @@ fn main() {
 
 ### Building.
 
-This crate uses futures@0.3 and async/await internally, so you have to
-build it with a nightly toolchain.
+You need at least Rust 1.39.
 
 ### Testing.
 
