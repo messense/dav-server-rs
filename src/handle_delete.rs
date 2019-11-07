@@ -1,4 +1,4 @@
-use futures::{Future, FutureExt, StreamExt};
+use futures::{future::BoxFuture, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
@@ -40,7 +40,7 @@ impl crate::DavInner {
         depth: Depth,
         meta: Box<dyn DavMetaData + 'a>,
         path: &'a WebPath,
-    ) -> impl Future<Output = DavResult<()>> + Send + 'a
+    ) -> BoxFuture<'a, DavResult<()>>
     {
         async move {
             if !meta.is_dir() {
@@ -82,7 +82,7 @@ impl crate::DavInner {
 
                 // do the actual work. If this fails with a non-fs related error,
                 // return immediately.
-                if let Err(e) = self.delete_items(&mut res, depth, meta, &npath).boxed().await {
+                if let Err(e) = self.delete_items(&mut res, depth, meta, &npath).await {
                     match e {
                         DavError::Status(_) => {
                             result = Err(e);
@@ -101,7 +101,7 @@ impl crate::DavInner {
                 Ok(x) => Ok(x),
                 Err(e) => Err(dir_status(&mut res, path, e).await),
             }
-        }
+        }.boxed()
     }
 
     pub(crate) async fn handle_delete(self, req: Request<()>) -> Result<Response<BoxedByteStream>, DavError> {
@@ -142,7 +142,7 @@ impl crate::DavInner {
 
         let req_path = path.clone();
 
-        let items = AsyncStream::new(async move |tx| {
+        let items = AsyncStream::new(|tx| async move {
             // turn the Sink into something easier to pass around.
             let mut multierror = MultiError::new(tx);
 

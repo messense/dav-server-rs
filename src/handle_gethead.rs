@@ -168,7 +168,7 @@ impl crate::DavInner {
         }
 
         // now just loop and send data.
-        *res.body_mut() = Box::new(AsyncStream::new(async move |mut tx| {
+        *res.body_mut() = Box::new(AsyncStream::new(|mut tx| async move {
             let mut buffer = [0; READ_BUF_SIZE];
             let zero = [0; 4096];
 
@@ -271,7 +271,7 @@ impl crate::DavInner {
         }
 
         // now just loop and send data.
-        *res.body_mut() = Box::new(AsyncStream::new(async move |mut tx| {
+        *res.body_mut() = Box::new(AsyncStream::new(|mut tx| async move {
             // transform all entries into a dirent struct.
             struct Dirent {
                 path: String,

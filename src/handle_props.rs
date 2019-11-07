@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::{self, Cursor};
 
-use futures::{Future, FutureExt, StreamExt};
+use futures::{future::BoxFuture, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
@@ -203,7 +203,7 @@ impl DavInner {
 
         let mut pw = PropWriter::new(&req, &mut res, name, props, &self.fs, self.ls.as_ref())?;
 
-        *res.body_mut() = Box::new(AsyncStream::new(async move |tx| {
+        *res.body_mut() = Box::new(AsyncStream::new(|tx| async move {
             pw.set_tx(tx);
             let is_dir = meta.is_dir();
             pw.write_props(&path, meta).await?;
@@ -225,7 +225,7 @@ impl DavInner {
         path: &'a WebPath,
         depth: davheaders::Depth,
         propwriter: &'a mut PropWriter,
-    ) -> impl Future<Output = DavResult<()>> + Send + 'a
+    ) -> BoxFuture<'a, DavResult<()>>
     {
         async move {
             let readdir_meta = match self.hide_symlinks {
@@ -261,11 +261,11 @@ impl DavInner {
                 propwriter.write_props(&npath, meta).await?;
                 propwriter.flush().await?;
                 if depth == davheaders::Depth::Infinity && is_dir {
-                        self.propfind_directory(&npath, depth, propwriter).boxed().await?;
+                        self.propfind_directory(&npath, depth, propwriter).await?;
                 }
             }
             Ok(())
-        }
+        }.boxed()
     }
 
     // set/change a live property. returns StatusCode::CONTINUE if
@@ -475,7 +475,7 @@ impl DavInner {
 
         // And reply.
         let mut pw = PropWriter::new(&req, &mut res, "propertyupdate", Vec::new(), &self.fs, None)?;
-        *res.body_mut() = Box::new(AsyncStream::new(async move |tx| {
+        *res.body_mut() = Box::new(AsyncStream::new(|tx| async move {
             pw.set_tx(tx);
             pw.write_propresponse(&path, hm)?;
             pw.close().await?;

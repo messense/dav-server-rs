@@ -1,4 +1,4 @@
-use futures::{Future, FutureExt, StreamExt};
+use futures::{future::BoxFuture, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
@@ -34,7 +34,7 @@ impl crate::DavInner {
         dest: &'a WebPath,
         depth: Depth,
         mut multierror: &'a mut MultiError,
-    ) -> impl Future<Output = DavResult<()>> + Send + 'a
+    ) -> BoxFuture<'a, DavResult<()>>
     {
         async move {
             // when doing "COPY /a/b /a/b/c make sure we don't recursively
@@ -103,13 +103,13 @@ impl crate::DavInner {
                     ndest.add_slash();
                 }
                 // recurse.
-                if let Err(e) = self.do_copy(&nsrc, topdest, &ndest, depth, multierror).boxed().await {
+                if let Err(e) = self.do_copy(&nsrc, topdest, &ndest, depth, multierror).await {
                     retval = Err(e);
                 }
             }
 
             retval
-        }
+        }.boxed()
     }
 
     // Right now we handle MOVE with a simple RENAME. RFC4918 #9.9.2 talks
@@ -237,7 +237,7 @@ impl crate::DavInner {
 
         let req_path = path.clone();
 
-        let items = AsyncStream::new(async move |tx| {
+        let items = AsyncStream::new(|tx| async move {
             let mut multierror = MultiError::new(tx);
 
             // see if we need to delete the destination first.

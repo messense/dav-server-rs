@@ -130,7 +130,7 @@ where
     }
 
     // Transform path/status items to XML.
-    let body = AsyncStream::new(async move |mut tx| {
+    let body = AsyncStream::new(|mut tx| async move {
         // Write initial header.
         let buffer = MultiBuf::new();
         let mut xw = EventWriter::new_with_config(
