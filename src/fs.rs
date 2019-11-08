@@ -194,8 +194,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     fn patch_props<'a>(
         &'a self,
         path: &'a WebPath,
-        set: Vec<DavProp>,
-        remove: Vec<DavProp>,
+        patch: Vec<(bool, DavProp)>,
     ) -> FsFuture<Vec<(StatusCode, DavProp)>>
     {
         notimplemented_fut!("patch_props")

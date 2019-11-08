@@ -404,14 +404,13 @@ impl DavInner {
             return Err(DavError::XmlParseError);
         }
 
-        let mut set = Vec::new();
-        let mut rem = Vec::new();
+        let mut patch = Vec::new();
         let mut ret = Vec::new();
         let can_deadprop = self.fs.have_props(&path).await;
 
         // walk over the element tree and feed "set" and "remove" items to
         // the liveprop_set/liveprop_remove functions. If skipped by those,
-        // gather them in the set/rem Vec to be processed as dead properties.
+        // gather .them in the "patch" Vec to be processed as dead properties.
         for elem in &tree.children {
             for n in elem
                 .children
@@ -422,13 +421,13 @@ impl DavInner {
                 match elem.name.as_str() {
                     "set" => {
                         match self.liveprop_set(&n, can_deadprop) {
-                            StatusCode::CONTINUE => set.push(element_to_davprop_full(&n)),
+                            StatusCode::CONTINUE => patch.push((true, element_to_davprop_full(&n))),
                             s => ret.push((s, element_to_davprop(&n))),
                         }
                     },
                     "remove" => {
                         match self.liveprop_remove(&n, can_deadprop) {
-                            StatusCode::CONTINUE => rem.push(element_to_davprop(&n)),
+                            StatusCode::CONTINUE => patch.push((false, element_to_davprop(&n))),
                             s => ret.push((s, element_to_davprop(&n))),
                         }
                     },
@@ -450,16 +449,15 @@ impl DavInner {
                 })
                 .collect::<Vec<_>>();
             ret.extend(
-                set.into_iter()
-                    .chain(rem.into_iter())
-                    .map(|p| (StatusCode::FAILED_DEPENDENCY, p)),
+                patch.into_iter()
+                     .map(|(_, p)| (StatusCode::FAILED_DEPENDENCY, p)),
             );
-        } else if set.len() > 0 || rem.len() > 0 {
+        } else if patch.len() > 0 {
             // hmmm ... we assume nothing goes wrong here at the
             // moment. if it does, we should roll back the earlier
             // made changes to live props, but come on, we're not
             // builing a transaction engine here.
-            let deadret = self.fs.patch_props(&path, set, rem).await?;
+            let deadret = self.fs.patch_props(&path, patch).await?;
             ret.extend(deadret.into_iter());
         }
 

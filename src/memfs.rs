@@ -235,8 +235,7 @@ impl DavFileSystem for MemFs {
     fn patch_props<'a>(
         &'a self,
         path: &'a WebPath,
-        mut set: Vec<DavProp>,
-        mut remove: Vec<DavProp>,
+        mut patch: Vec<(bool, DavProp)>,
     ) -> FsFuture<Vec<(StatusCode, DavProp)>>
     {
         async move {
@@ -247,15 +246,21 @@ impl DavFileSystem for MemFs {
 
             let mut res = Vec::new();
 
-            let remove = remove.drain(..).collect::<Vec<_>>();
-            for p in remove.into_iter() {
-                props.remove(&propkey(&p.namespace, &p.name));
-                res.push((StatusCode::OK, p));
-            }
-            let set = set.drain(..).collect::<Vec<_>>();
-            for p in set.into_iter() {
-                res.push((StatusCode::OK, cloneprop(&p)));
-                props.insert(propkey(&p.namespace, &p.name), p);
+            let patch = patch.drain(..).collect::<Vec<_>>();
+            for (set, p) in patch.into_iter() {
+                let prop = cloneprop(&p);
+                let status = if set {
+                    props.insert(propkey(&p.namespace, &p.name), p);
+                    StatusCode::OK
+                } else {
+                    props.remove(&propkey(&p.namespace, &p.name));
+                    // the below map was added to signify if the remove succeeded or
+                    // failed. however it seems that removing non-existant properties
+                    // always succeed, so just return success.
+                    //  .map(|_| StatusCode::OK).unwrap_or(StatusCode::NOT_FOUND)
+                    StatusCode::OK
+                };
+                res.push((status, prop));
             }
             Ok(res)
         }.boxed()

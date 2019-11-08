@@ -23,7 +23,7 @@ use headers::{Authorization, authorization::Basic, HeaderMapExt};
 use webdav_handler::{
     localfs,
     ls::DavLockSystem,
-    memfs, memls,
+    memfs, memls, fakels,
     DavConfig, DavHandler,
 };
 
@@ -36,14 +36,20 @@ struct Server {
 type BoxedFuture = Box<dyn Future<Item = hyper::Response<hyper::Body>, Error = std::io::Error> + Send>;
 
 impl Server {
-    pub fn new(directory: String, memls: bool, auth: bool) -> Self {
-        let memls: Option<Box<dyn DavLockSystem>> = if memls { Some(memls::MemLs::new()) } else { None };
+    pub fn new(directory: String, memls: bool, fakels: bool, auth: bool) -> Self {
+        let ls: Option<Box<dyn DavLockSystem>> = if fakels {
+            Some(fakels::FakeLs::new())
+        } else if memls {
+            Some(memls::MemLs::new())
+        } else {
+            None
+        };
         let dh = if directory != "" {
             let fs = localfs::LocalFs::new(directory, true, true, true);
-            DavHandler::new(None, fs, memls)
+            DavHandler::new(None, fs, ls)
         } else {
             let fs = memfs::MemFs::new();
-            DavHandler::new(None, fs, memls)
+            DavHandler::new(None, fs, ls)
         };
         Server { dh, auth }
     }
@@ -98,6 +104,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         (@arg DIR: -d --dir +takes_value "local directory to serve")
         (@arg MEMFS: -m --memfs "serve from ephemeral memory filesystem (default)")
         (@arg MEMLS: -l --memls "use ephemeral memory locksystem (default with --memfs)")
+        (@arg FAKELS: -f --fakels "use fake memory locksystem (default with --memfs)")
         (@arg AUTH: -a --auth "require basic authentication")
     )
     .get_matches();
@@ -108,8 +115,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let auth = matches.is_present("AUTH");
     let memls = matches.is_present("MEMFS") || matches.is_present("MEMLS");
+    let fakels = matches.is_present("FAKELS");
 
-    let dav_server = Server::new(dir.to_string(), memls, auth);
+    let dav_server = Server::new(dir.to_string(), memls, fakels, auth);
     let make_service = move || {
         let dav_server = dav_server.clone();
         hyper::service::service_fn(move |req| dav_server.handle(req))

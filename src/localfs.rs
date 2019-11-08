@@ -294,7 +294,23 @@ impl DavFileSystem for LocalFs {
             if self.is_forbidden(from) || self.is_forbidden(to) {
                 return Err(FsError::Forbidden);
             }
-            std::fs::rename(self.fspath(from), self.fspath(to)).map_err(|e| e.into())
+            let frompath = self.fspath(from);
+            let topath = self.fspath(to);
+            match std::fs::rename(&frompath, &topath) {
+                Ok(v) => Ok(v),
+                Err(e) => {
+                    // webdav allows a rename from a directory to a file.
+                    // note that this check is racy, and I'm not quite sure what
+                    // we should do if the source is a symlink. anyway ...
+                    if e.raw_os_error() == Some(libc::ENOTDIR) && frompath.is_dir() {
+                        // remove and try again.
+                        let _ = std::fs::remove_file(&topath);
+                        std::fs::rename(frompath, topath).map_err(|e| e.into())
+                    } else {
+                        Err(e.into())
+                    }
+                }
+            }
         })
         .boxed()
     }

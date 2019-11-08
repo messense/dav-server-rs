@@ -63,6 +63,8 @@ impl crate::DavInner {
             prop.write_ev(&mut emitter)?;
             drop(emitter);
 
+            let ct = "application/xml; charset=utf-8".to_owned();
+            res.headers_mut().typed_insert(davheaders::ContentType(ct));
             *res.body_mut() = single_body(buffer.take()?);
             return Ok(res);
         }
@@ -168,7 +170,9 @@ impl crate::DavInner {
 
         // output result
         let lt = format!("<{}>", lock.token);
+        let ct = "application/xml; charset=utf-8".to_owned();
         res.headers_mut().typed_insert(davheaders::LockToken(lt));
+        res.headers_mut().typed_insert(davheaders::ContentType(ct));
         if let None = meta {
             *res.status_mut() = SC::CREATED;
         } else {
