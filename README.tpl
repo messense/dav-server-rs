@@ -8,8 +8,7 @@
 
 ### Building.
 
-This crate uses futures@0.3 and async/await internally, so you have to
-build it with a nightly toolchain.
+You need at least Rust 1.39.
 
 ### Testing.
 
