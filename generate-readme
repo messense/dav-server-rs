@@ -1,7 +1,7 @@
 #! /bin/sh
 
 VERSION=$(sed -ne 's!^version *= *"\(.*\)".*!\1!p' Cargo.toml)
-DOCS="https://docs.rs/webdav-handler/$VERSION"
+DOCS="https://docs.rs/webdav-handler/$VERSION/webdav_handler"
 
 if ! fgrep "$VERSION" src/lib.rs >/dev/null
 then

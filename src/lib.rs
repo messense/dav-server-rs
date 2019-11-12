@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/webdav-handler/0.1.1")]
+#![doc(html_root_url = "https://docs.rs/webdav-handler/0.1.2")]
 //! ## Generic async HTTP/WEBDAV handler
 //!
 //! [`Webdav`] ([RFC4918]) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
@@ -8,9 +8,9 @@
 //! backend, so it can be used as a WEBDAV filesystem server, or just as a
 //! feature-complete HTTP server.
 //!
-//! NOTE: this crate uses futures 0.3 + async/await code internally, so it
-//! only works on Rust nightly (currently rustc 1.36.0-nightly (938d4ffe1 2019-04-27)).
-//! The external interface is futures 0.1 based though (might add 0.3 as well).
+//! NOTE: this crate uses futures 0.3 + async/await code internally, so it only works
+//! with Rust 1.39 and up. The external interface is still futures 0.1 + tokio 0.1 based
+//! though.
 //!
 //! ## Interface.
 //!
