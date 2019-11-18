@@ -3,8 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::{self, Bytes};
 
-use futures::stream::TryStreamExt;
-use futures01;
+use futures::future;
+use futures::stream;
 
 use headers::Header;
 use http::Method as httpMethod;
@@ -94,26 +94,25 @@ impl AllowedMethods {
 }
 
 // return a 404 reply.
-pub(crate) fn notfound() -> impl futures01::Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
+pub(crate) fn notfound() -> http::Response<BoxedByteStream>
 {
-    let body = futures01::stream::once(Ok(bytes::Bytes::from("Not Found")));
+    let body = stream::once(future::ready(Ok(bytes::Bytes::from("Not Found"))));
     let body: BoxedByteStream = Box::new(body);
-    let response = http::Response::builder()
+    http::Response::builder()
         .status(404)
         .header("connection", "close")
         .body(body)
-        .unwrap();
-    return Box::new(futures01::future::ok(response));
+        .unwrap()
 }
 
 // helper.
 pub(crate) fn empty_body() -> BoxedByteStream {
-    Box::new(futures::stream::empty::<io::Result<Bytes>>().compat())
+    Box::new(stream::empty::<io::Result<Bytes>>())
 }
 
 pub(crate) fn single_body(body: impl Into<Bytes>) -> BoxedByteStream {
     let body = vec![Ok::<Bytes, io::Error>(body.into())].into_iter();
-    Box::new(futures::stream::iter(body).compat())
+    Box::new(futures::stream::iter(body))
 }
 
 pub(crate) fn dav_xml_error(body: &str) -> BoxedByteStream {

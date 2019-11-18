@@ -2,8 +2,7 @@ use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
 
-use futures::{Stream, StreamExt};
-use futures01::Stream as Stream01;
+use futures::{Stream, StreamExt, TryStreamExt};
 
 use bytes::Bytes;
 use http::{Response, StatusCode};

@@ -8,10 +8,7 @@ use std::sync::Arc;
 
 use bytes;
 
-use futures::compat::Stream01CompatExt;
-use futures::future::TryFutureExt;
-use futures::stream::StreamExt;
-use futures01;
+use futures::stream::{Stream, StreamExt};
 
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
@@ -138,19 +135,20 @@ impl DavHandler {
     /// Only one error kind is ever returned: `ErrorKind::BrokenPipe`. In that case we
     /// were not able to generate a response at all, and the server should just
     /// close the connection.
-    pub fn handle<ReqBody, ReqError>(
+    pub async fn handle<ReqBody, ReqError>(
         &self,
         req: Request<ReqBody>,
-    ) -> impl futures01::Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
+    //) -> io::Result<Response<BoxedByteStream>>
+    ) -> Response<BoxedByteStream>
     where
-        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send,
+        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
         if self.config.fs.is_none() {
-            return futures01::future::Either::A(notfound());
+            return notfound();
         }
         let inner = DavInner::from(&*self.config);
-        futures01::future::Either::B(inner.handle(req))
+        inner.handle(req).await.unwrap()
     }
 
     /// Handle a webdav request, overriding parts of the config.
@@ -160,13 +158,14 @@ impl DavHandler {
     /// Or, the default config has no locksystem, and you pass in
     /// a fake locksystem (`FakeLs`) because this is a request from a
     /// windows or osx client that needs to see locking support.
-    pub fn handle_with<ReqBody, ReqError>(
+    pub async fn handle_with<ReqBody, ReqError>(
         &self,
         config: DavConfig,
         req: Request<ReqBody>,
-    ) -> impl futures01::Future<Item = http::Response<BoxedByteStream>, Error = io::Error>
+    //) -> io::Result<Response<BoxedByteStream>>
+    ) -> Response<BoxedByteStream>
     where
-        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send,
+        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
         let orig = &*self.config;
@@ -179,10 +178,10 @@ impl DavHandler {
             hide_symlinks: config.hide_symlinks.or(orig.hide_symlinks.clone()),
         };
         if newconf.fs.is_none() {
-            return futures01::future::Either::A(notfound());
+            return notfound();
         }
         let inner = DavInner::from(newconf);
-        futures01::future::Either::B(inner.handle(req))
+        inner.handle(req).await.unwrap()
     }
 }
 
@@ -219,14 +218,13 @@ impl DavInner {
     // drain request body and return length.
     pub(crate) async fn read_request<'a, ReqBody, ReqError>(
         &'a self,
-        body: ReqBody,
+        mut body: ReqBody,
         max_size: usize,
     ) -> DavResult<Vec<u8>>
     where
-        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send + 'a,
+        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Send + Unpin + 'a,
         ReqError: StdError + Send + Sync + 'static,
     {
-        let mut body = futures::compat::Compat01As03::new(body);
         let mut data = Vec::new();
         while let Some(res) = body.next().await {
             let chunk = res.map_err(|_| {
@@ -241,62 +239,59 @@ impl DavInner {
     }
 
     // internal dispatcher.
-    fn handle<ReqBody, ReqError>(
+    async fn handle<ReqBody, ReqError>(
         self,
         req: Request<ReqBody>,
-    ) -> impl futures01::Future<Item = Response<BoxedByteStream>, Error = io::Error>
+    ) -> io::Result<Response<BoxedByteStream>>
     where
-        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send,
+        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
-        let fut = async move {
-            let (req, body) = {
-                let (parts, body) = req.into_parts();
-                (Request::from_parts(parts, ()), body)
-            };
-
-            let is_ms = req
-                .headers()
-                .get("user-agent")
-                .and_then(|s| s.to_str().ok())
-                .map(|s| s.contains("Microsoft"))
-                .unwrap_or(false);
-
-            // Turn any DavError results into a HTTP error response.
-            match self.handle2(req, body).await {
-                Ok(resp) => {
-                    debug!("== END REQUEST result OK");
-                    Ok(resp)
-                },
-                Err(err) => {
-                    debug!("== END REQUEST result {:?}", err);
-                    let mut resp = Response::builder();
-                    if is_ms && err.statuscode() == StatusCode::NOT_FOUND {
-                        // This is an attempt to convince Windows to not
-                        // cache a 404 NOT_FOUND for 30-60 seconds.
-                        //
-                        // That is a problem since windows caches the NOT_FOUND in a
-                        // case-insensitive way. So if "www" does not exist, but "WWW" does,
-                        // and you do a "dir www" and then a "dir WWW" the second one
-                        // will fail.
-                        //
-                        // Ofcourse the below is not sufficient. Fixes welcome.
-                        resp.header("Cache-Control", "no-store, no-cache, must-revalidate");
-                        resp.header("Progma", "no-cache");
-                        resp.header("Expires", "0");
-                        resp.header("Vary", "*");
-                    }
-                    resp.header("Content-Length", "0");
-                    resp.status(err.statuscode());
-                    if err.must_close() {
-                        resp.header("connection", "close");
-                    }
-                    let resp = resp.body(empty_body()).unwrap();
-                    Ok(resp)
-                },
-            }
+        let (req, body) = {
+            let (parts, body) = req.into_parts();
+            (Request::from_parts(parts, ()), body)
         };
-        Box::pin(fut).compat()
+
+        let is_ms = req
+            .headers()
+            .get("user-agent")
+            .and_then(|s| s.to_str().ok())
+            .map(|s| s.contains("Microsoft"))
+            .unwrap_or(false);
+
+        // Turn any DavError results into a HTTP error response.
+        match self.handle2(req, body).await {
+            Ok(resp) => {
+                debug!("== END REQUEST result OK");
+                Ok(resp)
+            },
+            Err(err) => {
+                debug!("== END REQUEST result {:?}", err);
+                let mut resp = Response::builder();
+                if is_ms && err.statuscode() == StatusCode::NOT_FOUND {
+                    // This is an attempt to convince Windows to not
+                    // cache a 404 NOT_FOUND for 30-60 seconds.
+                    //
+                    // That is a problem since windows caches the NOT_FOUND in a
+                    // case-insensitive way. So if "www" does not exist, but "WWW" does,
+                    // and you do a "dir www" and then a "dir WWW" the second one
+                    // will fail.
+                    //
+                    // Ofcourse the below is not sufficient. Fixes welcome.
+                    resp.header("Cache-Control", "no-store, no-cache, must-revalidate");
+                    resp.header("Progma", "no-cache");
+                    resp.header("Expires", "0");
+                    resp.header("Vary", "*");
+                }
+                resp.header("Content-Length", "0");
+                resp.status(err.statuscode());
+                if err.must_close() {
+                    resp.header("connection", "close");
+                }
+                let resp = resp.body(empty_body()).unwrap();
+                Ok(resp)
+            },
+        }
     }
 
     // internal dispatcher part 2.
@@ -306,7 +301,7 @@ impl DavInner {
         body: ReqBody,
     ) -> DavResult<Response<BoxedByteStream>>
     where
-        ReqBody: futures01::Stream<Item = bytes::Bytes, Error = ReqError> + Send,
+        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
         // debug when running the webdav litmus tests.
@@ -364,7 +359,7 @@ impl DavInner {
             Method::Lock => self.handle_lock(req, body_data).await,
             Method::Unlock => self.handle_unlock(req).await,
             Method::Head | Method::Get => self.handle_get(req).await,
-            Method::Put | Method::Patch => self.handle_put(req, body_strm.unwrap().compat()).await,
+            Method::Put | Method::Patch => self.handle_put(req, body_strm.unwrap()).await,
             Method::Copy | Method::Move => self.handle_copymove(req, method).await,
         };
         res

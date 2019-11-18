@@ -8,10 +8,6 @@
 //! backend, so it can be used as a WEBDAV filesystem server, or just as a
 //! feature-complete HTTP server.
 //!
-//! NOTE: this crate uses futures 0.3 + async/await code internally, so it
-//! only works on Rust nightly (currently rustc 1.36.0-nightly (938d4ffe1 2019-04-27)).
-//! The external interface is futures 0.1 based though (might add 0.3 as well).
-//!
 //! ## Interface.
 //!
 //! It has an interface similar to the Go x/net/webdav package:
@@ -61,10 +57,11 @@
 //! able to mount this network share from Linux, OSX and Windows.
 //!
 //! ```no_run
-//! # extern crate futures01 as futures;
-//! use hyper;
+//! use std::future::Future;
+//!
 //! use bytes::Bytes;
-//! use futures::{future::Future, stream::Stream};
+//! use futures::stream::Stream;
+//! use hyper;
 //! use webdav_handler::{DavHandler, localfs::LocalFs, fakels::FakeLs};
 //!
 //! fn main() {
@@ -154,14 +151,15 @@ pub mod webpath;
 use std::io;
 
 use bytes::Bytes;
+use futures::stream::Stream;
 
 pub(crate) use crate::davhandler::DavInner;
 pub(crate) use crate::errors::{DavError, DavResult};
 pub(crate) use crate::fs::*;
 
-/// A boxed futures 0.1 Stream of Bytes.
+/// A boxed Stream of Bytes.
 #[allow(unused)]
-pub type BoxedByteStream = Box<dyn futures01::Stream<Item = Bytes, Error = io::Error> + Send + 'static>;
+pub type BoxedByteStream = Box<dyn Stream<Item = io::Result<Bytes>> + Send + 'static>;
 
 pub use crate::davhandler::{DavConfig, DavHandler};
 pub use crate::util::{AllowedMethods, Method};

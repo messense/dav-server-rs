@@ -6,6 +6,7 @@
 
 use std::any::Any;
 use std::collections::VecDeque;
+use std::future::Future;
 use std::io::ErrorKind;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::ffi::OsStrExt;
@@ -18,8 +19,9 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use futures::compat::Future01CompatExt;
-use futures::{future, Future, FutureExt, Stream};
+use futures::{future, FutureExt, Stream};
+use  pin_utils::pin_mut;
+use tokio_executor::threadpool;
 
 use libc;
 
@@ -27,24 +29,21 @@ use crate::fs::*;
 use crate::localfs_macos::DUCacheBuilder;
 use crate::webpath::WebPath;
 
-// Run some code via tokio_threadpool::blocking(), returns Future 0.3
+// Run some code via tokio_executor::threadpool::blocking(), returns a future.
 //
 // There's also a method on LocalFs for this, use the freestanding
 // function if you do not want the fs_access_guard() closure to be used.
-fn blocking<'a, F, T>(func: F) -> impl Future<Output = T> + 'a
+async fn blocking<F, T>(func: F) -> T
 where
-    F: FnOnce() -> T + 'a,
-    T: 'a,
+    F: FnOnce() -> T,
+    T: Unpin,
 {
     let mut func = Some(func);
-    futures01::future::poll_fn(move || tokio_threadpool::blocking(|| (func.take().unwrap())()))
-        .compat()
-        .then(|res| {
-            match res {
-                Ok(x) => future::ready(x),
-                Err(_) => panic!("the thread pool has shut down"),
-            }
-        })
+    let r = future::poll_fn(move |_cx| threadpool::blocking(|| (func.take().unwrap())())).await;
+    match r {
+        Ok(x) => x,
+        Err(_) => panic!("the thread pool has shut down"),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -147,25 +146,20 @@ impl LocalFs {
 
     // Futures 0.3 blocking() adapter, also run the before/after hooks.
     #[doc(hidden)]
-    pub fn blocking<'a, F, T>(&'a self, func: F) -> impl Future<Output = T> + 'a
+    pub async fn blocking<'a, F, T>(&'a self, func: F) -> T
     where
         F: FnOnce() -> T + 'a,
         T: 'a,
     {
         let mut func = Some(func);
-        futures01::future::poll_fn(move || {
-                tokio_threadpool::blocking(|| {
-                    let _guard = self.inner.fs_access_guard.as_ref().map(|f| f());
-                    (func.take().unwrap())()
-                })
-            })
-            .compat()
-            .then(|res| {
-                match res {
-                    Ok(x) => future::ready(x),
-                    Err(_) => panic!("the thread pool has shut down"),
-                }
-            })
+        let r = future::poll_fn(move |_cx| threadpool::blocking(|| {
+                let _guard = self.inner.fs_access_guard.as_ref().map(|f| f());
+                (func.take().unwrap())()
+            })).await;
+        match r {
+            Ok(x) => x,
+            Err(_) => panic!("the thread pool has shut down"),
+        }
     }
 }
 
@@ -344,7 +338,7 @@ impl Stream for LocalFsReadDir {
 
         // We buffer up to 256 entries, so that we batch the blocking() calls.
         if self.buffer.len() == 0 {
-            let mut fut = blocking(|| {
+            let fut = blocking(|| {
                 let _guard = match self.do_meta {
                     ReadDirMeta::None => None,
                     _ => self.fs.inner.fs_access_guard.as_ref().map(|f| f()),
@@ -379,6 +373,7 @@ impl Stream for LocalFsReadDir {
                     }
                 }
             });
+            pin_mut!(fut);
             match Pin::new(&mut fut).poll(cx) {
                 Poll::Ready(_) => {},
                 Poll::Pending => return Poll::Pending,
