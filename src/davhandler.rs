@@ -141,9 +141,9 @@ impl DavHandler {
         req: Request<ReqBody>,
     ) -> io::Result<Response<Body>>
     where
-        ReqData: Buf + Send + Unpin,
+        ReqData: Buf + Send ,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Unpin + Send,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
     {
         if self.config.fs.is_none() {
             return Ok(notfound())
@@ -165,9 +165,9 @@ impl DavHandler {
         req: Request<ReqBody>,
     ) -> io::Result<Response<Body>>
     where
-        ReqData: Buf + Send + Unpin,
+        ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Unpin + Send,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
     {
         let orig = &*self.config;
         let newconf = DavConfig {
@@ -219,14 +219,15 @@ impl DavInner {
     // drain request body and return length.
     pub(crate) async fn read_request<'a, ReqBody, ReqError>(
         &'a self,
-        mut body: ReqBody,
+        body: ReqBody,
         max_size: usize,
     ) -> DavResult<Vec<u8>>
     where
-        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Send + Unpin + 'a,
+        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Send + 'a,
         ReqError: StdError + Send + Sync + 'static,
     {
         let mut data = Vec::new();
+        pin_utils::pin_mut!(body);
         while let Some(res) = body.next().await {
             let chunk = res.map_err(|_| {
                 DavError::IoError(io::Error::new(io::ErrorKind::UnexpectedEof, "UnexpectedEof"))
@@ -247,7 +248,7 @@ impl DavInner {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Unpin + Send,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
     {
         let (req, body) = {
             let (parts, body) = req.into_parts();
@@ -303,7 +304,7 @@ impl DavInner {
         body: ReqBody,
     ) -> DavResult<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + Send,
+        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
         // debug when running the webdav litmus tests.
