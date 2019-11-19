@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/webdav-handler/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/webdav-handler/0.2.0-alpha.1")]
 //! ## Generic async HTTP/WEBDAV handler
 //!
 //! [`Webdav`] ([RFC4918]) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
