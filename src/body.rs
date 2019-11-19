@@ -93,7 +93,7 @@ use pin_project::pin_project;
 // A struct that contains a http_body::Body, and implements Stream.
 //
 #[pin_project]
-pub struct InBody<B, Data, Error>
+pub(crate) struct InBody<B, Data, Error>
 where
     Data: Buf + Send,
     Error: std::error::Error + Send + Sync + 'static,

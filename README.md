@@ -13,10 +13,6 @@ the types from the `http` crate. It comes complete with an async filesystem
 backend, so it can be used as a WEBDAV filesystem server, or just as a
 feature-complete HTTP server.
 
-NOTE: this crate uses futures 0.3 + async/await code internally, so it only works
-with Rust 1.39 and up. The external interface is still futures 0.1 + tokio 0.1 based
-though.
-
 ### Interface.
 
 It has an interface similar to the Go x/net/webdav package:
@@ -27,8 +23,8 @@ It has an interface similar to the Go x/net/webdav package:
 - you can supply a [locksystem][DavLockSystem] that handles the webdav locks
 
 With some glue code, this handler can be used from HTTP server
-libraries/frameworks such as [hyper] or [actix-web].
-(See [examples/hyper.rs][hyper_example] or [examples/actix-web][actix_web_example]).
+libraries/frameworks such as [hyper].
+(See [examples/hyper.rs][hyper_example]).
 
 ### Implemented standards.
 
@@ -66,65 +62,55 @@ Example server that serves the /tmp directory in r/w mode. You should be
 able to mount this network share from Linux, OSX and Windows.
 
 ```rust
-use hyper;
-use bytes::Bytes;
-use futures::{future::Future, stream::Stream};
-use webdav_handler::{DavHandler, localfs::LocalFs, fakels::FakeLs};
+use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let dir = "/tmp";
     let addr = ([127, 0, 0, 1], 4918).into();
 
     let dav_server = DavHandler::new(None, LocalFs::new(dir, false, false, false), Some(FakeLs::new()));
-    let make_service = move || {
+    let make_service = hyper::service::make_service_fn(move |_| {
         let dav_server = dav_server.clone();
-        hyper::service::service_fn(move |req: hyper::Request<hyper::Body>| {
-            /// Turn hyper request body stream into more general Bytes stream.
-            let (parts, body) = req.into_parts();
-            let body = body.map(|item| Bytes::from(item));
-            let req = http::Request::from_parts(parts, body);
-            let fut = dav_server.handle(req)
-                .and_then(|resp| {
-                    /// Transform the response Byte stream into a hyper response body.
-                    let (parts, body) = resp.into_parts();
-                    let body = hyper::Body::wrap_stream(body);
-                    Ok(hyper::Response::from_parts(parts, body))
-                });
-            Box::new(fut)
-        })
-    };
+        async move {
+            let func = move |req| {
+                let dav_server = dav_server.clone();
+                async move {
+                    dav_server.handle(req).await
+                }
+            };
+            Ok::<_, hyper::Error>(hyper::service::service_fn(func))
+        }
+    });
 
     println!("Serving {} on {}", dir, addr);
-    let server = hyper::Server::bind(&addr)
+    let _ = hyper::Server::bind(&addr)
         .serve(make_service)
+        .await
         .map_err(|e| eprintln!("server error: {}", e));
-
-    hyper::rt::run(server);
 }
 ```
-[DavHandler]: https://docs.rs/webdav-handler/0.1.1/struct.DavHandler.html
-[DavFileSystem]: https://docs.rs/webdav-handler/0.1.1/fs/index.html
-[DavLockSystem]: https://docs.rs/webdav-handler/0.1.1/ls/index.html
-[DavProp]: https://docs.rs/webdav-handler/0.1.1/fs/struct.DavProp.html
+[DavHandler]: https://docs.rs/webdav-handler/0.2.0/struct.DavHandler.html
+[DavFileSystem]: https://docs.rs/webdav-handler/0.2.0/fs/index.html
+[DavLockSystem]: https://docs.rs/webdav-handler/0.2.0/ls/index.html
+[DavProp]: https://docs.rs/webdav-handler/0.2.0/fs/struct.DavProp.html
 [`WebDav`]: https://tools.ietf.org/html/rfc4918
 [RFC4918]: https://tools.ietf.org/html/rfc4918
-[`MemLs`]: https://docs.rs/webdav-handler/0.1.1/memls/index.html
-[`MemFs`]: https://docs.rs/webdav-handler/0.1.1/memfs/index.html
-[`LocalFs`]: https://docs.rs/webdav-handler/0.1.1/localfs/index.html
-[`FakeLs`]: https://docs.rs/webdav-handler/0.1.1/fakels/index.html
+[`MemLs`]: https://docs.rs/webdav-handler/0.2.0/memls/index.html
+[`MemFs`]: https://docs.rs/webdav-handler/0.2.0/memfs/index.html
+[`LocalFs`]: https://docs.rs/webdav-handler/0.2.0/localfs/index.html
+[`FakeLs`]: https://docs.rs/webdav-handler/0.2.0/fakels/index.html
 [README_litmus]: https://github.com/miquels/webdav-handler-rs/blob/master/README.litmus-test.md
 [hyper_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/hyper.rs
-[actix_web_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/actix-web.rs
 [PartialPut]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
 [PUT]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
 [PATCH]: https://github.com/miquels/webdavfs/blob/master/SABREDAV-partialupdate.md
 [hyper]: https://hyper.rs/
-[actix-web]: https://actix.rs/
 
 
 ### Building.
 
-You need at least Rust 1.39.
+This crate uses std::future::Future and async/await, so it only works with Rust 1.39 and up.
 
 ### Testing.
 

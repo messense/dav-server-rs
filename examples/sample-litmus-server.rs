@@ -52,7 +52,7 @@ impl Server {
         Server { dh, auth }
     }
 
-    async fn handle(self, req: hyper::Request<hyper::Body>) -> io::Result<hyper::Response<Body>> {
+    async fn handle(&self, req: hyper::Request<hyper::Body>) -> io::Result<hyper::Response<Body>> {
 
         let user = if self.auth {
             // we want the client to authenticate.
@@ -105,9 +105,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let dav_server = Server::new(dir.to_string(), memls, fakels, auth);
     let make_service = hyper::service::make_service_fn(|_| {
-        let dav_server2 = dav_server.clone();
+        let dav_server = dav_server.clone();
         async move {
-            let func = move |req| dav_server2.clone().handle(req);
+            let func = move |req| {
+                let dav_server = dav_server.clone();
+                async move {
+                    dav_server.clone().handle(req).await
+                }
+            };
             Ok::<_, hyper::Error>(hyper::service::service_fn(func))
         }
     });

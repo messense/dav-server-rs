@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/webdav-handler/0.1.1")]
+#![doc(html_root_url = "https://docs.rs/webdav-handler/0.2.0")]
 //! ## Generic async HTTP/WEBDAV handler
 //!
 //! [`Webdav`] ([RFC4918]) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
@@ -18,8 +18,8 @@
 //! - you can supply a [locksystem][DavLockSystem] that handles the webdav locks
 //!
 //! With some glue code, this handler can be used from HTTP server
-//! libraries/frameworks such as [hyper] or [actix-web].
-//! (See [examples/hyper.rs][hyper_example] or [examples/actix-web][actix_web_example]).
+//! libraries/frameworks such as [hyper].
+//! (See [examples/hyper.rs][hyper_example]).
 //!
 //! ## Implemented standards.
 //!
@@ -57,42 +57,32 @@
 //! able to mount this network share from Linux, OSX and Windows.
 //!
 //! ```no_run
-//! use std::future::Future;
+//! use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 //!
-//! use bytes::Bytes;
-//! use futures::stream::Stream;
-//! use hyper;
-//! use webdav_handler::{DavHandler, localfs::LocalFs, fakels::FakeLs};
-//!
-//! fn main() {
+//! #[tokio::main]
+//! async fn main() {
 //!     let dir = "/tmp";
 //!     let addr = ([127, 0, 0, 1], 4918).into();
 //!
 //!     let dav_server = DavHandler::new(None, LocalFs::new(dir, false, false, false), Some(FakeLs::new()));
-//!     let make_service = move || {
+//!     let make_service = hyper::service::make_service_fn(move |_| {
 //!         let dav_server = dav_server.clone();
-//!         hyper::service::service_fn(move |req: hyper::Request<hyper::Body>| {
-//!             /// Turn hyper request body stream into more general Bytes stream.
-//!             let (parts, body) = req.into_parts();
-//!             let body = body.map(|item| Bytes::from(item));
-//!             let req = http::Request::from_parts(parts, body);
-//!             let fut = dav_server.handle(req)
-//!                 .and_then(|resp| {
-//!                     /// Transform the response Byte stream into a hyper response body.
-//!                     let (parts, body) = resp.into_parts();
-//!                     let body = hyper::Body::wrap_stream(body);
-//!                     Ok(hyper::Response::from_parts(parts, body))
-//!                 });
-//!             Box::new(fut)
-//!         })
-//!     };
+//!         async move {
+//!             let func = move |req| {
+//!                 let dav_server = dav_server.clone();
+//!                 async move {
+//!                     dav_server.handle(req).await
+//!                 }
+//!             };
+//!             Ok::<_, hyper::Error>(hyper::service::service_fn(func))
+//!         }
+//!     });
 //!
 //!     println!("Serving {} on {}", dir, addr);
-//!     let server = hyper::Server::bind(&addr)
+//!     let _ = hyper::Server::bind(&addr)
 //!         .serve(make_service)
+//!         .await
 //!         .map_err(|e| eprintln!("server error: {}", e));
-//!
-//!     hyper::rt::run(server);
 //! }
 //! ```
 //! [DavHandler]: struct.DavHandler.html
@@ -107,12 +97,10 @@
 //! [`FakeLs`]: fakels/index.html
 //! [README_litmus]: https://github.com/miquels/webdav-handler-rs/blob/master/README.litmus-test.md
 //! [hyper_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/hyper.rs
-//! [actix_web_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/actix-web.rs
 //! [PartialPut]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
 //! [PUT]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
 //! [PATCH]: https://github.com/miquels/webdavfs/blob/master/SABREDAV-partialupdate.md
 //! [hyper]: https://hyper.rs/
-//! [actix-web]: https://actix.rs/
 //!
 
 #[macro_use]
