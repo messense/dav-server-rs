@@ -122,6 +122,7 @@ extern crate lazy_static;
 
 mod conditional;
 pub mod async_stream;
+pub mod body;
 mod davhandler;
 mod davheaders;
 mod errors;
@@ -160,6 +161,5 @@ pub(crate) use crate::fs::*;
 /// A boxed Stream of Bytes.
 #[allow(unused)]
 pub type BoxedByteStream = Box<dyn Stream<Item = io::Result<Bytes>> + Send + 'static>;
-
 pub use crate::davhandler::{DavConfig, DavHandler};
 pub use crate::util::{AllowedMethods, Method};

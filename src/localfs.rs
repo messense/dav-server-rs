@@ -29,14 +29,13 @@ use crate::fs::*;
 use crate::localfs_macos::DUCacheBuilder;
 use crate::webpath::WebPath;
 
-// Run some code via tokio_executor::threadpool::blocking(), returns a future.
+// Run some code via tokio_executor::threadpool::blocking().
 //
 // There's also a method on LocalFs for this, use the freestanding
 // function if you do not want the fs_access_guard() closure to be used.
 async fn blocking<F, T>(func: F) -> T
 where
     F: FnOnce() -> T,
-    T: Unpin,
 {
     let mut func = Some(func);
     let r = future::poll_fn(move |_cx| threadpool::blocking(|| (func.take().unwrap())())).await;
@@ -144,12 +143,11 @@ impl LocalFs {
         crate::localfs_windows::resolve(&self.inner.basedir, path.as_bytes(), self.inner.case_insensitive)
     }
 
-    // Futures 0.3 blocking() adapter, also run the before/after hooks.
+    // threadpool::blocking() adapter, also runs the before/after hooks.
     #[doc(hidden)]
-    pub async fn blocking<'a, F, T>(&'a self, func: F) -> T
+    pub async fn blocking<F, T>(&self, func: F) -> T
     where
-        F: FnOnce() -> T + 'a,
-        T: 'a,
+        F: FnOnce() -> T
     {
         let mut func = Some(func);
         let r = future::poll_fn(move |_cx| threadpool::blocking(|| {

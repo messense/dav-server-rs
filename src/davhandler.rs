@@ -138,17 +138,16 @@ impl DavHandler {
     pub async fn handle<ReqBody, ReqError>(
         &self,
         req: Request<ReqBody>,
-    //) -> io::Result<Response<BoxedByteStream>>
-    ) -> Response<BoxedByteStream>
+    ) -> io::Result<Response<BoxedByteStream>>
     where
         ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
         if self.config.fs.is_none() {
-            return notfound();
+            return Ok(notfound())
         }
         let inner = DavInner::from(&*self.config);
-        inner.handle(req).await.unwrap()
+        inner.handle(req).await
     }
 
     /// Handle a webdav request, overriding parts of the config.
@@ -162,8 +161,7 @@ impl DavHandler {
         &self,
         config: DavConfig,
         req: Request<ReqBody>,
-    //) -> io::Result<Response<BoxedByteStream>>
-    ) -> Response<BoxedByteStream>
+    ) -> io::Result<Response<BoxedByteStream>>
     where
         ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + Send,
         ReqError: StdError + Send + Sync + 'static,
@@ -178,10 +176,10 @@ impl DavHandler {
             hide_symlinks: config.hide_symlinks.or(orig.hide_symlinks.clone()),
         };
         if newconf.fs.is_none() {
-            return notfound();
+            return Ok(notfound());
         }
         let inner = DavInner::from(newconf);
-        inner.handle(req).await.unwrap()
+        inner.handle(req).await
     }
 }
 
