@@ -28,10 +28,12 @@ impl pct::EncodeSet for ENCODE_SET {
     #[inline]
     fn contains(&self, byte: u8) -> bool {
         let unreserved = (byte >= b'A' && byte <= b'Z') ||
-                         (byte >= b'a' && byte <= b'z') ||
-                         (byte >= b'0' && byte <= b'9') ||
-                         byte == b'-' || byte == b'_' ||
-                         byte == b'.' || byte == b'~';
+            (byte >= b'a' && byte <= b'z') ||
+            (byte >= b'0' && byte <= b'9') ||
+            byte == b'-' ||
+            byte == b'_' ||
+            byte == b'.' ||
+            byte == b'~';
         !unreserved && byte != b'/'
     }
 }

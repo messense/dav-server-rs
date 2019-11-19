@@ -89,8 +89,7 @@ impl AllowedMethods {
 }
 
 // return a 404 reply.
-pub(crate) fn notfound() -> http::Response<Body>
-{
+pub(crate) fn notfound() -> http::Response<Body> {
     http::Response::builder()
         .status(404)
         .header("connection", "close")

@@ -129,9 +129,8 @@ impl crate::DavInner {
         match req.headers().typed_try_get::<headers::ContentRange>() {
             Ok(Some(range)) => {
                 if let Some((b, e)) = range.bytes_range() {
-
                     if b > e {
-                            return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
+                        return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
                     }
 
                     if have_count {

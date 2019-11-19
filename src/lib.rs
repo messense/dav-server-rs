@@ -108,9 +108,9 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-mod conditional;
 pub mod async_stream;
 pub mod body;
+mod conditional;
 mod davhandler;
 mod davheaders;
 mod errors;

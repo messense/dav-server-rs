@@ -17,15 +17,9 @@ use env_logger;
 use futures::future::TryFutureExt;
 use hyper;
 
-use headers::{Authorization, authorization::Basic, HeaderMapExt};
+use headers::{authorization::Basic, Authorization, HeaderMapExt};
 
-use webdav_handler::{
-    localfs,
-    ls::DavLockSystem,
-    memfs, memls, fakels,
-    body::Body,
-    DavConfig, DavHandler,
-};
+use webdav_handler::{body::Body, fakels, localfs, ls::DavLockSystem, memfs, memls, DavConfig, DavHandler};
 
 #[derive(Clone)]
 struct Server {
@@ -53,7 +47,6 @@ impl Server {
     }
 
     async fn handle(&self, req: hyper::Request<hyper::Body>) -> io::Result<hyper::Response<Body>> {
-
         let user = if self.auth {
             // we want the client to authenticate.
             match req.headers().typed_get::<Authorization<Basic>>() {
@@ -109,9 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         async move {
             let func = move |req| {
                 let dav_server = dav_server.clone();
-                async move {
-                    dav_server.clone().handle(req).await
-                }
+                async move { dav_server.clone().handle(req).await }
             };
             Ok::<_, hyper::Error>(hyper::service::service_fn(func))
         }

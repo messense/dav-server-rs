@@ -2,51 +2,51 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use bytes::{buf::IntoBuf, buf::FromBuf, Bytes, Buf};
+use bytes::{buf::FromBuf, buf::IntoBuf, Buf, Bytes};
 use futures::{future, stream, stream::Stream};
-use http_body::Body as HttpBody;
 use http::header::HeaderMap;
+use http_body::Body as HttpBody;
 
 use crate::async_stream::AsyncStream;
 
 /// Body is returned by the handler, and implements both Stream and http_body::Body.
 pub struct Body {
-	inner:	BodyType,
+    inner: BodyType,
 }
 
 enum BodyType {
-	Stream(Box<dyn Stream<Item = io::Result<Bytes>> + Send + Unpin + 'static>),
-	AsyncStream(AsyncStream<Bytes, io::Error>),
+    Stream(Box<dyn Stream<Item = io::Result<Bytes>> + Send + Unpin + 'static>),
+    AsyncStream(AsyncStream<Bytes, io::Error>),
     Empty,
 }
 
 impl Body {
     /// Return an empty body.
     pub fn empty() -> Body {
-        Body{ inner: BodyType::Empty }
+        Body {
+            inner: BodyType::Empty,
+        }
     }
 }
 
 impl Stream for Body {
-	type Item = io::Result<Bytes>;
+    type Item = io::Result<Bytes>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-		match self.inner {
-			BodyType::Stream(ref mut strm) => {
+        match self.inner {
+            BodyType::Stream(ref mut strm) => {
                 // cannot use pin_mut! - doesn't work with references.
                 let strm = unsafe { Pin::new_unchecked(strm) };
                 strm.poll_next(cx)
             },
-			BodyType::AsyncStream(ref mut strm) => {
+            BodyType::AsyncStream(ref mut strm) => {
                 // cannot use pin_mut! - doesn't work with references.
                 let strm = unsafe { Pin::new_unchecked(strm) };
                 strm.poll_next(cx)
             },
-            BodyType::Empty => {
-                Poll::Ready(None)
-            }
-		}
-	}
+            BodyType::Empty => Poll::Ready(None),
+        }
+    }
 }
 
 impl HttpBody for Body {
@@ -62,7 +62,11 @@ impl HttpBody for Body {
         }
     }
 
-    fn poll_trailers(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<Option<HeaderMap>, Self::Error>> {
+    fn poll_trailers(
+        self: Pin<&mut Self>,
+        _cx: &mut Context,
+    ) -> Poll<Result<Option<HeaderMap>, Self::Error>>
+    {
         Poll::Ready(Ok(None))
     }
 }
@@ -71,7 +75,9 @@ macro_rules! into_body {
     ($type:ty) => {
         impl From<$type> for Body {
             fn from(t: $type) -> Body {
-                Body{ inner: BodyType::Stream(Box::new(stream::once(future::ready(Ok(Bytes::from(t)))))) }
+                Body {
+                    inner: BodyType::Stream(Box::new(stream::once(future::ready(Ok(Bytes::from(t)))))),
+                }
             }
         }
     };
@@ -82,8 +88,10 @@ into_body!(&str);
 into_body!(Bytes);
 
 impl From<AsyncStream<Bytes, io::Error>> for Body {
-	fn from(s: AsyncStream<Bytes, io::Error>) -> Body {
-        Body{ inner: BodyType::AsyncStream(s) }
+    fn from(s: AsyncStream<Bytes, io::Error>) -> Body {
+        Body {
+            inner: BodyType::AsyncStream(s),
+        }
     }
 }
 
@@ -100,7 +108,7 @@ where
     B: HttpBody<Data = Data, Error = Error>,
 {
     #[pin]
-    body:   B
+    body: B,
 }
 
 impl<B, Data, Error> Stream for InBody<B, Data, Error>
@@ -129,7 +137,6 @@ where
     B: HttpBody<Data = Data, Error = Error>,
 {
     pub fn from(body: B) -> InBody<B, Data, Error> {
-        InBody{ body }
+        InBody { body }
     }
 }
-

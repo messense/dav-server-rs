@@ -14,9 +14,9 @@ use xml::writer::XmlEvent as XmlWEvent;
 use xml::EmitterConfig;
 use xmltree::Element;
 
+use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::conditional::if_match_get_tokens;
-use crate::async_stream::AsyncStream;
 use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
@@ -141,7 +141,8 @@ impl DavInner {
 
         let mut res = Response::new(Body::empty());
 
-        res.headers_mut().typed_insert(headers::CacheControl::new().with_no_cache());
+        res.headers_mut()
+            .typed_insert(headers::CacheControl::new().with_no_cache());
         res.headers_mut().typed_insert(headers::Pragma::no_cache());
 
         let depth = match req.headers().typed_get::<davheaders::Depth>() {
@@ -204,18 +205,20 @@ impl DavInner {
 
         let mut pw = PropWriter::new(&req, &mut res, name, props, &self.fs, self.ls.as_ref())?;
 
-        *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
-            pw.set_tx(tx);
-            let is_dir = meta.is_dir();
-            pw.write_props(&path, meta).await?;
-            pw.flush().await?;
+        *res.body_mut() = Body::from(AsyncStream::new(|tx| {
+            async move {
+                pw.set_tx(tx);
+                let is_dir = meta.is_dir();
+                pw.write_props(&path, meta).await?;
+                pw.flush().await?;
 
-            if is_dir && depth != davheaders::Depth::Zero {
-                let _ = self.propfind_directory(&path, depth, &mut pw).await;
+                if is_dir && depth != davheaders::Depth::Zero {
+                    let _ = self.propfind_directory(&path, depth, &mut pw).await;
+                }
+                pw.close().await?;
+
+                Ok(())
             }
-            pw.close().await?;
-
-            Ok(())
         }));
 
         Ok(res)
@@ -262,11 +265,12 @@ impl DavInner {
                 propwriter.write_props(&npath, meta).await?;
                 propwriter.flush().await?;
                 if depth == davheaders::Depth::Infinity && is_dir {
-                        self.propfind_directory(&npath, depth, propwriter).await?;
+                    self.propfind_directory(&npath, depth, propwriter).await?;
                 }
             }
             Ok(())
-        }.boxed()
+        }
+        .boxed()
     }
 
     // set/change a live property. returns StatusCode::CONTINUE if
@@ -283,7 +287,7 @@ impl DavInner {
                         // FIXME only here to make "litmus" happy, really...
                         if let Some(ref s) = prop.text {
                             if davheaders::ContentLanguage::try_from(s.as_str()).is_err() {
-                               return StatusCode::CONFLICT;
+                                return StatusCode::CONFLICT;
                             }
                         }
                         if can_deadprop {
@@ -449,10 +453,7 @@ impl DavInner {
                     }
                 })
                 .collect::<Vec<_>>();
-            ret.extend(
-                patch.into_iter()
-                     .map(|(_, p)| (StatusCode::FAILED_DEPENDENCY, p)),
-            );
+            ret.extend(patch.into_iter().map(|(_, p)| (StatusCode::FAILED_DEPENDENCY, p)));
         } else if patch.len() > 0 {
             // hmmm ... we assume nothing goes wrong here at the
             // moment. if it does, we should roll back the earlier
@@ -474,11 +475,13 @@ impl DavInner {
 
         // And reply.
         let mut pw = PropWriter::new(&req, &mut res, "propertyupdate", Vec::new(), &self.fs, None)?;
-        *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
-            pw.set_tx(tx);
-            pw.write_propresponse(&path, hm)?;
-            pw.close().await?;
-            Ok::<_, io::Error>(())
+        *res.body_mut() = Body::from(AsyncStream::new(|tx| {
+            async move {
+                pw.set_tx(tx);
+                pw.write_propresponse(&path, hm)?;
+                pw.close().await?;
+                Ok::<_, io::Error>(())
+            }
         }));
 
         Ok(res)

@@ -2,9 +2,9 @@ use futures::{future::BoxFuture, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
+use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::conditional::if_match_get_tokens;
-use crate::async_stream::AsyncStream;
 use crate::davheaders::Depth;
 use crate::errors::*;
 use crate::fs::*;
@@ -102,7 +102,8 @@ impl crate::DavInner {
                 Ok(x) => Ok(x),
                 Err(e) => Err(dir_status(&mut res, path, e).await),
             }
-        }.boxed()
+        }
+        .boxed()
     }
 
     pub(crate) async fn handle_delete(self, req: Request<()>) -> DavResult<Response<Body>> {
@@ -143,21 +144,23 @@ impl crate::DavInner {
 
         let req_path = path.clone();
 
-        let items = AsyncStream::new(|tx| async move {
-            // turn the Sink into something easier to pass around.
-            let mut multierror = MultiError::new(tx);
+        let items = AsyncStream::new(|tx| {
+            async move {
+                // turn the Sink into something easier to pass around.
+                let mut multierror = MultiError::new(tx);
 
-            // now delete the path recursively.
-            let fut = self.delete_items(&mut multierror, depth, meta, &path);
-            if let Ok(()) = fut.await {
-                // Done. Now delete the path in the locksystem as well.
-                // Should really do this per resource, in case the delete partially fails. See TODO.pm
-                if let Some(ref locksystem) = self.ls {
-                    locksystem.delete(&path).ok();
+                // now delete the path recursively.
+                let fut = self.delete_items(&mut multierror, depth, meta, &path);
+                if let Ok(()) = fut.await {
+                    // Done. Now delete the path in the locksystem as well.
+                    // Should really do this per resource, in case the delete partially fails. See TODO.pm
+                    if let Some(ref locksystem) = self.ls {
+                        locksystem.delete(&path).ok();
+                    }
+                    let _ = multierror.add_status(&path, StatusCode::NO_CONTENT).await;
                 }
-                let _ = multierror.add_status(&path, StatusCode::NO_CONTENT).await;
+                Ok(())
             }
-            Ok(())
         });
 
         multi_error(req_path, items).await

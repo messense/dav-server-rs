@@ -2,9 +2,9 @@ use futures::{future::BoxFuture, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
+use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::conditional::*;
-use crate::async_stream::AsyncStream;
 use crate::davheaders::{self, Depth};
 use crate::errors::*;
 use crate::fs::*;
@@ -109,7 +109,8 @@ impl crate::DavInner {
             }
 
             retval
-        }.boxed()
+        }
+        .boxed()
     }
 
     // Right now we handle MOVE with a simple RENAME. RFC4918 #9.9.2 talks
@@ -139,12 +140,7 @@ impl crate::DavInner {
         }
     }
 
-    pub(crate) async fn handle_copymove(
-        self,
-        req: Request<()>,
-        method: Method,
-    ) -> DavResult<Response<Body>>
-    {
+    pub(crate) async fn handle_copymove(self, req: Request<()>, method: Method) -> DavResult<Response<Body>> {
         // get and check headers.
         let overwrite = req
             .headers()
@@ -237,48 +233,51 @@ impl crate::DavInner {
 
         let req_path = path.clone();
 
-        let items = AsyncStream::new(|tx| async move {
-            let mut multierror = MultiError::new(tx);
+        let items = AsyncStream::new(|tx| {
+            async move {
+                let mut multierror = MultiError::new(tx);
 
-            // see if we need to delete the destination first.
-            if overwrite && exists && depth != Depth::Zero && !dest_is_file {
-                debug!("handle_copymove: deleting destination {}", dest);
-                if let Err(_) =
-                    self.delete_items(&mut multierror, Depth::Infinity, dmeta.unwrap(), &dest).await
-                {
-                    return Ok(());
-                }
-                // should really do this per item, in case the delete partially fails. See TODO.md
-                if let Some(ref locksystem) = self.ls {
-                    let _ = locksystem.delete(&dest);
-                }
-            }
-
-            // COPY or MOVE.
-            if method == Method::Copy {
-                if let Ok(_) = self.do_copy(&path, &dest, &dest, depth, &mut multierror).await {
-                    let s = if exists {
-                        StatusCode::NO_CONTENT
-                    } else {
-                        StatusCode::CREATED
-                    };
-                    let _ = multierror.add_status(&path, s).await;
-                }
-            } else {
-                // move and if successful, remove locks at old location.
-                if let Ok(_) = self.do_move(&path, &dest, &mut multierror).await {
-                    if let Some(ref locksystem) = self.ls {
-                        locksystem.delete(&path).ok();
+                // see if we need to delete the destination first.
+                if overwrite && exists && depth != Depth::Zero && !dest_is_file {
+                    debug!("handle_copymove: deleting destination {}", dest);
+                    if let Err(_) = self
+                        .delete_items(&mut multierror, Depth::Infinity, dmeta.unwrap(), &dest)
+                        .await
+                    {
+                        return Ok(());
                     }
-                    let s = if exists {
-                        StatusCode::NO_CONTENT
-                    } else {
-                        StatusCode::CREATED
-                    };
-                    let _ = multierror.add_status(&path, s).await;
+                    // should really do this per item, in case the delete partially fails. See TODO.md
+                    if let Some(ref locksystem) = self.ls {
+                        let _ = locksystem.delete(&dest);
+                    }
                 }
+
+                // COPY or MOVE.
+                if method == Method::Copy {
+                    if let Ok(_) = self.do_copy(&path, &dest, &dest, depth, &mut multierror).await {
+                        let s = if exists {
+                            StatusCode::NO_CONTENT
+                        } else {
+                            StatusCode::CREATED
+                        };
+                        let _ = multierror.add_status(&path, s).await;
+                    }
+                } else {
+                    // move and if successful, remove locks at old location.
+                    if let Ok(_) = self.do_move(&path, &dest, &mut multierror).await {
+                        if let Some(ref locksystem) = self.ls {
+                            locksystem.delete(&path).ok();
+                        }
+                        let s = if exists {
+                            StatusCode::NO_CONTENT
+                        } else {
+                            StatusCode::CREATED
+                        };
+                        let _ = multierror.add_status(&path, s).await;
+                    }
+                }
+                Ok::<_, DavError>(())
             }
-            Ok::<_, DavError>(())
         });
 
         multi_error(req_path, items).await

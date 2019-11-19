@@ -43,7 +43,12 @@ pub(crate) fn ifrange_match(
     }
 }
 
-pub(crate) fn etaglist_match(tags: &davheaders::ETagList, exists: bool, tag: Option<&davheaders::ETag>) -> bool {
+pub(crate) fn etaglist_match(
+    tags: &davheaders::ETagList,
+    exists: bool,
+    tag: Option<&davheaders::ETag>,
+) -> bool
+{
     match tags {
         &davheaders::ETagList::Star => exists,
         &davheaders::ETagList::Tags(ref t) => {

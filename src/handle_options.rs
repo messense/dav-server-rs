@@ -6,11 +6,7 @@ use crate::util::{dav_method, Method};
 use crate::DavResult;
 
 impl crate::DavInner {
-    pub(crate) async fn handle_options(
-        self,
-        req: Request<()>,
-    ) -> DavResult<Response<Body>>
-    {
+    pub(crate) async fn handle_options(self, req: Request<()>) -> DavResult<Response<Body>> {
         let mut res = Response::new(Body::empty());
 
         let h = res.headers_mut();

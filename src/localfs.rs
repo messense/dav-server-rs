@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures::{future, FutureExt, Stream};
-use  pin_utils::pin_mut;
+use pin_utils::pin_mut;
 use tokio_executor::threadpool;
 
 use libc;
@@ -34,9 +34,7 @@ use crate::webpath::WebPath;
 // There's also a method on LocalFs for this, use the freestanding
 // function if you do not want the fs_access_guard() closure to be used.
 async fn blocking<F, T>(func: F) -> T
-where
-    F: FnOnce() -> T,
-{
+where F: FnOnce() -> T {
     let mut func = Some(func);
     let r = future::poll_fn(move |_cx| threadpool::blocking(|| (func.take().unwrap())())).await;
     match r {
@@ -146,14 +144,15 @@ impl LocalFs {
     // threadpool::blocking() adapter, also runs the before/after hooks.
     #[doc(hidden)]
     pub async fn blocking<F, T>(&self, func: F) -> T
-    where
-        F: FnOnce() -> T
-    {
+    where F: FnOnce() -> T {
         let mut func = Some(func);
-        let r = future::poll_fn(move |_cx| threadpool::blocking(|| {
+        let r = future::poll_fn(move |_cx| {
+            threadpool::blocking(|| {
                 let _guard = self.inner.fs_access_guard.as_ref().map(|f| f());
                 (func.take().unwrap())()
-            })).await;
+            })
+        })
+        .await;
         match r {
             Ok(x) => x,
             Err(_) => panic!("the thread pool has shut down"),
@@ -301,7 +300,7 @@ impl DavFileSystem for LocalFs {
                     } else {
                         Err(e.into())
                     }
-                }
+                },
             }
         })
         .boxed()

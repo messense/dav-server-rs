@@ -108,7 +108,12 @@ impl DavHandler {
     /// - `prefix`: URL prefix to be stripped off.
     /// - `fs:` The filesystem backend.
     /// - `ls:` Optional locksystem backend
-    pub fn new(prefix: Option<&str>, fs: Box<dyn DavFileSystem>, ls: Option<Box<dyn DavLockSystem>>) -> DavHandler {
+    pub fn new(
+        prefix: Option<&str>,
+        fs: Box<dyn DavFileSystem>,
+        ls: Option<Box<dyn DavLockSystem>>,
+    ) -> DavHandler
+    {
         let config = DavConfig {
             prefix:        prefix.map(|s| s.to_string()),
             fs:            Some(fs),
@@ -141,12 +146,12 @@ impl DavHandler {
         req: Request<ReqBody>,
     ) -> io::Result<Response<Body>>
     where
-        ReqData: Buf + Send ,
+        ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
         ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
     {
         if self.config.fs.is_none() {
-            return Ok(notfound())
+            return Ok(notfound());
         }
         let inner = DavInner::from(&*self.config);
         inner.handle(req).await
@@ -211,7 +216,8 @@ impl DavInner {
         if meta.is_dir() && !path.is_collection() {
             path.add_slash();
             let newloc = path.as_url_string_with_prefix();
-            res.headers_mut().typed_insert(davheaders::ContentLocation(newloc));
+            res.headers_mut()
+                .typed_insert(davheaders::ContentLocation(newloc));
         }
         meta
     }
@@ -241,10 +247,7 @@ impl DavInner {
     }
 
     // internal dispatcher.
-    async fn handle<ReqBody, ReqData, ReqError>(
-        self,
-        req: Request<ReqBody>,
-    ) -> io::Result<Response<Body>>
+    async fn handle<ReqBody, ReqData, ReqError>(self, req: Request<ReqBody>) -> io::Result<Response<Body>>
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
@@ -298,11 +301,7 @@ impl DavInner {
     }
 
     // internal dispatcher part 2.
-    async fn handle2<ReqBody, ReqError>(
-        self,
-        req: Request<()>,
-        body: ReqBody,
-    ) -> DavResult<Response<Body>>
+    async fn handle2<ReqBody, ReqError>(self, req: Request<()>, body: ReqBody) -> DavResult<Response<Body>>
     where
         ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Send,
         ReqError: StdError + Send + Sync + 'static,

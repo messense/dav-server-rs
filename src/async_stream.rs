@@ -51,14 +51,12 @@ use futures::Stream;
 /// Completes when the item is sent.
 #[must_use]
 pub struct SenderFuture {
-    is_ready:   bool,
+    is_ready: bool,
 }
 
 impl SenderFuture {
     fn new() -> SenderFuture {
-        SenderFuture {
-            is_ready:   false,
-        }
+        SenderFuture { is_ready: false }
     }
 }
 
@@ -165,4 +163,3 @@ impl<I, E: Unpin> Stream for AsyncStream<I, E> {
         }
     }
 }
-

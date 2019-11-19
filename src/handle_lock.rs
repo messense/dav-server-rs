@@ -19,12 +19,7 @@ use crate::xmltree_ext::{self, ElementExt};
 use crate::DavResult;
 
 impl crate::DavInner {
-    pub(crate) async fn handle_lock(
-        self,
-        req: Request<()>,
-        xmldata: Vec<u8>,
-    ) -> DavResult<Response<Body>>
-    {
+    pub(crate) async fn handle_lock(self, req: Request<()>, xmldata: Vec<u8>) -> DavResult<Response<Body>> {
         // must have a locksystem or bail
         let locksystem = match self.ls {
             Some(ref ls) => ls,

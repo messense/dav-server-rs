@@ -176,9 +176,9 @@ pub struct Cache {
 #[derive(Clone)]
 struct Entry {
     // Full case-sensitive pathname.
-    path:   PathBuf,
+    path: PathBuf,
     // Unix timestamp.
-    time:   u64,
+    time: u64,
 }
 
 // helper

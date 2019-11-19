@@ -11,7 +11,10 @@ use std::io::{Error, ErrorKind, SeekFrom};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use futures::{future, future::{BoxFuture, FutureExt}};
+use futures::{
+    future,
+    future::{BoxFuture, FutureExt},
+};
 use http::StatusCode;
 
 use crate::fs::*;
@@ -121,7 +124,8 @@ impl DavFileSystem for MemFs {
             let node_id = tree.lookup(path.as_bytes())?;
             let meta = tree.get_node(node_id)?.as_dirent(path.as_bytes());
             Ok(Box::new(meta) as Box<dyn DavMetaData>)
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn read_dir<'a>(
@@ -144,14 +148,16 @@ impl DavFileSystem for MemFs {
             }
             let strm = futures::stream::iter(v.into_iter());
             Ok(Box::pin(strm) as FsStream<Box<dyn DavDirEntry>>)
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<dyn DavFile>> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             self.do_open(tree, path.as_bytes(), options)
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn create_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
@@ -163,7 +169,8 @@ impl DavFileSystem for MemFs {
             tree.add_child(parent_id, file_name(path), MemFsNode::new_dir(), false)?;
             tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
             Ok(())
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn remove_file<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
@@ -174,7 +181,8 @@ impl DavFileSystem for MemFs {
             tree.delete_node(node_id)?;
             tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
             Ok(())
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn remove_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
@@ -185,7 +193,8 @@ impl DavFileSystem for MemFs {
             tree.delete_node(node_id)?;
             tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
             Ok(())
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn rename<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
@@ -198,7 +207,8 @@ impl DavFileSystem for MemFs {
             tree.get_node_mut(parent_id)?.update_mtime(SystemTime::now());
             tree.get_node_mut(dst_id)?.update_mtime(SystemTime::now());
             Ok(())
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn copy<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
@@ -225,7 +235,8 @@ impl DavFileSystem for MemFs {
             *tree.get_node_mut(dnode_id)? = data;
 
             Ok(())
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn have_props<'a>(&'a self, _path: &'a WebPath) -> BoxFuture<'a, bool> {
@@ -263,7 +274,8 @@ impl DavFileSystem for MemFs {
                 res.push((status, prop));
             }
             Ok(res)
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn get_props<'a>(&'a self, path: &'a WebPath, do_content: bool) -> FsFuture<Vec<DavProp>> {
@@ -276,7 +288,8 @@ impl DavFileSystem for MemFs {
                 res.push(if do_content { p.clone() } else { cloneprop(p) });
             }
             Ok(res)
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn get_prop<'a>(&'a self, path: &'a WebPath, prop: DavProp) -> FsFuture<Vec<u8>> {
@@ -289,7 +302,8 @@ impl DavFileSystem for MemFs {
                 .get(&propkey(&prop.namespace, &prop.name))
                 .ok_or(FsError::NotFound)?;
             Ok(p.xml.clone().ok_or(FsError::NotFound)?)
-        }.boxed()
+        }
+        .boxed()
     }
 }
 
@@ -326,7 +340,8 @@ impl DavFile for MemFsFile {
             let node = tree.get_node(self.node_id)?;
             let meta = node.as_dirent(b"");
             Ok(Box::new(meta) as Box<dyn DavMetaData>)
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize> {
@@ -346,7 +361,8 @@ impl DavFile for MemFsFile {
             let cnt = end - start;
             buf[..cnt].copy_from_slice(&file.data[start..end]);
             Ok(cnt)
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn write_bytes<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<usize> {
@@ -361,14 +377,16 @@ impl DavFile for MemFsFile {
             }
             file.data[start..end].copy_from_slice(buf);
             Ok(end - start)
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<()> {
         async move {
             self.write_bytes(buf).await?;
             Ok(())
-        }.boxed()
+        }
+        .boxed()
     }
 
     fn flush<'a>(&'a mut self) -> FsFuture<()> {
@@ -399,7 +417,8 @@ impl DavFile for MemFsFile {
                 self.pos = (start + offset as u64) as usize;
             }
             Ok(self.pos as u64)
-        }.boxed()
+        }
+        .boxed()
     }
 }
 

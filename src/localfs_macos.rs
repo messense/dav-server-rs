@@ -11,8 +11,8 @@
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -87,7 +87,6 @@ impl DUCache {
     //
     // Note that it's assumed the file_name() DOES start with "._".
     fn negative(&self, path: &PathBuf) -> bool {
-
         // parent directory must be present in the cache.
         let mut dir = match path.parent() {
             Some(d) => d.to_path_buf(),
@@ -100,7 +99,7 @@ impl DUCache {
                 Some(t) => (t.dir_id, t.dir_modtime),
                 None => {
                     debug!(target: "webdav_cache", "DUCache::negative({:?}): parent not in cache", path);
-                    return false
+                    return false;
                 },
             }
         };
@@ -129,7 +128,7 @@ impl DUCache {
             None => {
                 debug!(target: "webdav_cache", "DUCache::negative({:?}): not in cache", path);
                 true
-            }
+            },
         }
     }
 }
@@ -166,7 +165,6 @@ impl DUCacheBuilder {
     // We add all the "._" files we saw in the directory, and the
     // directory itself (with "/." added).
     pub fn finish(&mut self) {
-
         if self.done {
             return;
         }
@@ -190,9 +188,9 @@ impl DUCacheBuilder {
         let mut path = self.dir.clone();
         path.push(".");
         let entry = Entry {
-            time: now,
+            time:        now,
             dir_modtime: dir_modtime,
-            dir_id: dir_id,
+            dir_id:      dir_id,
         };
         cache.put(path, entry);
 
@@ -202,9 +200,9 @@ impl DUCacheBuilder {
             let mut path = self.dir.clone();
             path.push(filename);
             let entry = Entry {
-                time: now,
+                time:        now,
                 dir_modtime: dir_modtime,
-                dir_id: dir_id,
+                dir_id:      dir_id,
             };
             cache.put(path, entry);
         }
