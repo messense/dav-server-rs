@@ -90,16 +90,16 @@ async fn main() {
         .map_err(|e| eprintln!("server error: {}", e));
 }
 ```
-[DavHandler]: https://docs.rs/webdav-handler/0.2.0-alpha.1/struct.DavHandler.html
-[DavFileSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.1/fs/index.html
-[DavLockSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.1/ls/index.html
-[DavProp]: https://docs.rs/webdav-handler/0.2.0-alpha.1/fs/struct.DavProp.html
+[DavHandler]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/struct.DavHandler.html
+[DavFileSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/fs/index.html
+[DavLockSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/ls/index.html
+[DavProp]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/fs/struct.DavProp.html
 [`WebDav`]: https://tools.ietf.org/html/rfc4918
 [RFC4918]: https://tools.ietf.org/html/rfc4918
-[`MemLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/memls/index.html
-[`MemFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/memfs/index.html
-[`LocalFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/localfs/index.html
-[`FakeLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/fakels/index.html
+[`MemLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/memls/index.html
+[`MemFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/memfs/index.html
+[`LocalFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/localfs/index.html
+[`FakeLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/fakels/index.html
 [README_litmus]: https://github.com/miquels/webdav-handler-rs/blob/master/README.litmus-test.md
 [hyper_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/hyper.rs
 [PartialPut]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
