@@ -166,35 +166,3 @@ impl<I, E: Unpin> Stream for AsyncStream<I, E> {
     }
 }
 
-#[cfg(feature = "hyper")]
-mod hyper {
-    use bytes;
-    use futures01::Poll as Poll01;
-    use hyper;
-
-    /// hyper::body::Payload trait implementation.
-    ///
-    /// This implementation allows you to use anything that implements
-    /// IntoBuf as a Payload item.
-    impl<Item, Error> hyper::body::Payload for AsyncStream<Item, Error>
-    where
-        Item: bytes::buf::IntoBuf + Send + Sync + 'static,
-        Item::Buf: Send,
-        Error: std::error::Error + Send + Sync + 'static,
-    {
-        type Data = Item::Buf;
-        type Error = Error;
-
-        fn poll_data(&mut self) -> Poll01<Option<Self::Data>, Self::Error> {
-            match self.poll() {
-                Ok(Async01::Ready(Some(item))) => Ok(Async01::Ready(Some(item.into_buf()))),
-                Ok(Async01::Ready(None)) => Ok(Async01::Ready(None)),
-                Ok(Async01::NotReady) => Ok(Async01::NotReady),
-                Err(e) => Err(e),
-            }
-        }
-    }
-}
-
-#[cfg(feature = "hyper")]
-use hyper::*;
