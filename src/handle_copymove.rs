@@ -2,7 +2,7 @@ use futures::{future::BoxFuture, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
-//use crate::common::*;
+use crate::body::Body;
 use crate::conditional::*;
 use crate::async_stream::AsyncStream;
 use crate::davheaders::{self, Depth};
@@ -10,7 +10,7 @@ use crate::errors::*;
 use crate::fs::*;
 use crate::multierror::{multi_error, MultiError};
 use crate::webpath::WebPath;
-use crate::{util::Method, BoxedByteStream, DavResult};
+use crate::{util::Method, DavResult};
 
 // map_err helper.
 async fn add_status<'a>(
@@ -143,7 +143,7 @@ impl crate::DavInner {
         self,
         req: Request<()>,
         method: Method,
-    ) -> DavResult<Response<BoxedByteStream>>
+    ) -> DavResult<Response<Body>>
     {
         // get and check headers.
         let overwrite = req

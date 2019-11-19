@@ -8,11 +8,11 @@ use headers::HeaderMapExt;
 use http::StatusCode as SC;
 use http::{self, Request, Response};
 
+use crate::body::Body;
 use crate::conditional::if_match_get_tokens;
 use crate::davheaders;
 use crate::fs::*;
-use crate::util::empty_body;
-use crate::{BoxedByteStream, DavError, DavResult};
+use crate::{DavError, DavResult};
 
 const SABRE: &'static str = "application/x-sabredav-partialupdate";
 
@@ -59,7 +59,7 @@ impl crate::DavInner {
         self,
         req: Request<()>,
         body: ReqBody,
-    ) -> DavResult<Response<BoxedByteStream>>
+    ) -> DavResult<Response<Body>>
     where
         ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin,
         ReqError: StdError + Sync + Send + 'static,
@@ -81,7 +81,7 @@ impl crate::DavInner {
         let meta = self.fs.metadata(&path).await;
 
         // close connection on error.
-        let mut res = Response::new(empty_body());
+        let mut res = Response::new(Body::empty());
         res.headers_mut().typed_insert(headers::Connection::close());
 
         // SabreDAV style PATCH?

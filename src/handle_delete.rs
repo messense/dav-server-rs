@@ -2,6 +2,7 @@ use futures::{future::BoxFuture, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
+use crate::body::Body;
 use crate::conditional::if_match_get_tokens;
 use crate::async_stream::AsyncStream;
 use crate::davheaders::Depth;
@@ -9,7 +10,7 @@ use crate::errors::*;
 use crate::fs::*;
 use crate::multierror::{multi_error, MultiError};
 use crate::webpath::WebPath;
-use crate::{BoxedByteStream, DavResult};
+use crate::DavResult;
 
 // map_err helper.
 async fn add_status<'a>(m_err: &'a mut MultiError, path: &'a WebPath, e: FsError) -> DavError {
@@ -104,7 +105,7 @@ impl crate::DavInner {
         }.boxed()
     }
 
-    pub(crate) async fn handle_delete(self, req: Request<()>) -> Result<Response<BoxedByteStream>, DavError> {
+    pub(crate) async fn handle_delete(self, req: Request<()>) -> DavResult<Response<Body>> {
         // RFC4918 9.6.1 DELETE for Collections.
         // Note that allowing Depth: 0 is NOT RFC compliant.
         let depth = match req.headers().typed_get::<Depth>() {

@@ -1,16 +1,17 @@
 use headers::HeaderMapExt;
 use http::{Request, Response};
 
-use crate::util::{dav_method, empty_body, Method};
-use crate::{BoxedByteStream, DavResult};
+use crate::body::Body;
+use crate::util::{dav_method, Method};
+use crate::DavResult;
 
 impl crate::DavInner {
     pub(crate) async fn handle_options(
         self,
         req: Request<()>,
-    ) -> DavResult<Response<BoxedByteStream>>
+    ) -> DavResult<Response<Body>>
     {
-        let mut res = Response::new(empty_body());
+        let mut res = Response::new(Body::empty());
 
         let h = res.headers_mut();
         let dav = if self.ls.is_some() {

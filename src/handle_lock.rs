@@ -7,23 +7,23 @@ use http::StatusCode as SC;
 use http::{Request, Response};
 use xmltree::{self, Element};
 
+use crate::body::Body;
 use crate::conditional::{dav_if_match, if_match};
 use crate::davheaders::{self, DavTimeout};
 use crate::errors::*;
 use crate::fs::{FsError, OpenOptions};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
-use crate::util::{empty_body, single_body};
 use crate::webpath::WebPath;
 use crate::xmltree_ext::{self, ElementExt};
-use crate::{BoxedByteStream, DavResult};
+use crate::DavResult;
 
 impl crate::DavInner {
     pub(crate) async fn handle_lock(
         self,
         req: Request<()>,
         xmldata: Vec<u8>,
-    ) -> DavResult<Response<BoxedByteStream>>
+    ) -> DavResult<Response<Body>>
     {
         // must have a locksystem or bail
         let locksystem = match self.ls {
@@ -31,7 +31,7 @@ impl crate::DavInner {
             None => return Err(SC::METHOD_NOT_ALLOWED.into()),
         };
 
-        let mut res = Response::new(empty_body());
+        let mut res = Response::new(Body::empty());
 
         // path and meta
         let mut path = self.path(&req);
@@ -65,7 +65,7 @@ impl crate::DavInner {
 
             let ct = "application/xml; charset=utf-8".to_owned();
             res.headers_mut().typed_insert(davheaders::ContentType(ct));
-            *res.body_mut() = single_body(buffer.take()?);
+            *res.body_mut() = Body::from(buffer.take()?);
             return Ok(res);
         }
 
@@ -185,11 +185,11 @@ impl crate::DavInner {
         prop.write_ev(&mut emitter)?;
         drop(emitter);
 
-        *res.body_mut() = single_body(buffer.take()?);
+        *res.body_mut() = Body::from(buffer.take()?);
         return Ok(res);
     }
 
-    pub(crate) async fn handle_unlock(self, req: Request<()>) -> DavResult<Response<BoxedByteStream>> {
+    pub(crate) async fn handle_unlock(self, req: Request<()>) -> DavResult<Response<Body>> {
         // must have a locksystem or bail
         let locksystem = match self.ls {
             Some(ref ls) => ls,
@@ -203,7 +203,7 @@ impl crate::DavInner {
             .ok_or(DavError::Status(SC::BAD_REQUEST))?;
         let token = t.0.trim_matches(|c| c == '<' || c == '>');
 
-        let mut res = Response::new(empty_body());
+        let mut res = Response::new(Body::empty());
 
         let mut path = self.path(&req);
         if let Ok(meta) = self.fs.metadata(&path).await {

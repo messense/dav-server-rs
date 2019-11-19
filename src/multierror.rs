@@ -1,8 +1,8 @@
 use std::cell::RefCell;
-use std::io::Write;
+use std::io::{self, Write};
 use std::rc::Rc;
 
-use futures::{Stream, StreamExt, TryStreamExt};
+use futures::{Stream, StreamExt};
 
 use bytes::Bytes;
 use http::{Response, StatusCode};
@@ -13,9 +13,9 @@ use xml::writer::XmlEvent as XmlWEvent;
 use xml::EmitterConfig;
 
 use crate::async_stream::AsyncStream;
-use crate::util::empty_body;
+use crate::body::Body;
 use crate::webpath::WebPath;
-use crate::{BoxedByteStream, DavError};
+use crate::DavError;
 
 type Sender = crate::async_stream::Sender<(WebPath, StatusCode), DavError>;
 
@@ -91,7 +91,7 @@ fn write_response(mut w: &mut XmlWriter, path: &WebPath, sc: StatusCode) -> Resu
 pub(crate) async fn multi_error<S>(
     req_path: WebPath,
     status_stream: S,
-) -> Result<Response<BoxedByteStream>, DavError>
+) -> Result<Response<Body>, DavError>
 where
     S: Stream<Item = Result<(WebPath, StatusCode), DavError>> + Send + 'static,
 {
@@ -114,7 +114,7 @@ where
         match status_stream.next().await {
             None => {
                 // No, this was the first and only item.
-                let resp = Response::builder().status(status).body(empty_body()).unwrap();
+                let resp = Response::builder().status(status).body(Body::empty()).unwrap();
                 return Ok(resp);
             },
             Some(Err(e)) => return Err(e),
@@ -143,8 +143,8 @@ where
             version:    XmlVersion::Version10,
             encoding:   Some("utf-8"),
             standalone: None,
-        })?;
-        xw.write(XmlWEvent::start_element("D:multistatus").ns("D", "DAV:"))?;
+        }).map_err(DavError::from)?;
+        xw.write(XmlWEvent::start_element("D:multistatus").ns("D", "DAV:")).map_err(DavError::from)?;
         let data = buffer.take()?;
         tx.send(data).await;
 
@@ -163,19 +163,18 @@ where
         }
 
         // and finally write the trailer.
-        xw.write(XmlWEvent::end_element())?;
+        xw.write(XmlWEvent::end_element()).map_err(DavError::from)?;
         let data = buffer.take()?;
         tx.send(data).await;
 
-        Ok::<_, DavError>(())
+        Ok::<_, io::Error>(())
     });
 
     // return response.
-    let body: BoxedByteStream = Box::new(body.map_err(|e| e.into()));
     let resp = Response::builder()
         .header("content-type", "application/xml; charset=utf-8")
         .status(StatusCode::MULTI_STATUS)
-        .body(body)
+        .body(Body::from(body))
         .unwrap();
     Ok(resp)
 }

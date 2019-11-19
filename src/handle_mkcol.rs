@@ -1,17 +1,17 @@
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
+use crate::body::Body;
 use crate::conditional::*;
 use crate::davheaders;
 use crate::fs::*;
-use crate::util::empty_body;
-use crate::{BoxedByteStream, DavError, DavResult};
+use crate::{DavError, DavResult};
 
 impl crate::DavInner {
     pub(crate) async fn handle_mkcol(
         self,
         req: Request<()>,
-    ) -> DavResult<Response<BoxedByteStream>>
+    ) -> DavResult<Response<Body>>
     {
         let mut path = self.path(&req);
         let meta = self.fs.metadata(&path).await;
@@ -38,7 +38,7 @@ impl crate::DavInner {
             }
         }
 
-        let mut res = Response::new(empty_body());
+        let mut res = Response::new(Body::empty());
 
         match self.fs.create_dir(&path).await {
             // RFC 4918 9.3.1 MKCOL Status Codes.

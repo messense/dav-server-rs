@@ -6,21 +6,22 @@ use std::error::Error as StdError;
 use std::io;
 use std::sync::Arc;
 
-use bytes;
+use bytes::buf::Buf;
 
 use futures::stream::{Stream, StreamExt};
 
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
+use crate::body::{Body, InBody};
 use crate::davheaders;
-use crate::util::{dav_method, empty_body, notfound, AllowedMethods, Method};
+use crate::util::{dav_method, notfound, AllowedMethods, Method};
 use crate::webpath::WebPath;
 
 use crate::errors::DavError;
 use crate::fs::*;
 use crate::ls::*;
-use crate::{BoxedByteStream, DavResult};
+use crate::DavResult;
 
 /// The webdav handler struct.
 #[derive(Clone)]
@@ -135,13 +136,14 @@ impl DavHandler {
     /// Only one error kind is ever returned: `ErrorKind::BrokenPipe`. In that case we
     /// were not able to generate a response at all, and the server should just
     /// close the connection.
-    pub async fn handle<ReqBody, ReqError>(
+    pub async fn handle<ReqBody, ReqData, ReqError>(
         &self,
         req: Request<ReqBody>,
-    ) -> io::Result<Response<BoxedByteStream>>
+    ) -> io::Result<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + Send,
+        ReqData: Buf + Send + Unpin,
         ReqError: StdError + Send + Sync + 'static,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Unpin + Send,
     {
         if self.config.fs.is_none() {
             return Ok(notfound())
@@ -157,14 +159,15 @@ impl DavHandler {
     /// Or, the default config has no locksystem, and you pass in
     /// a fake locksystem (`FakeLs`) because this is a request from a
     /// windows or osx client that needs to see locking support.
-    pub async fn handle_with<ReqBody, ReqError>(
+    pub async fn handle_with<ReqBody, ReqData, ReqError>(
         &self,
         config: DavConfig,
         req: Request<ReqBody>,
-    ) -> io::Result<Response<BoxedByteStream>>
+    ) -> io::Result<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + Send,
+        ReqData: Buf + Send + Unpin,
         ReqError: StdError + Send + Sync + 'static,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Unpin + Send,
     {
         let orig = &*self.config;
         let newconf = DavConfig {
@@ -200,7 +203,7 @@ impl DavInner {
     // to fixup the path by adding a slash at the end.
     pub(crate) fn fixpath(
         &self,
-        res: &mut Response<BoxedByteStream>,
+        res: &mut Response<Body>,
         path: &mut WebPath,
         meta: Box<dyn DavMetaData>,
     ) -> Box<dyn DavMetaData>
@@ -237,17 +240,18 @@ impl DavInner {
     }
 
     // internal dispatcher.
-    async fn handle<ReqBody, ReqError>(
+    async fn handle<ReqBody, ReqData, ReqError>(
         self,
         req: Request<ReqBody>,
-    ) -> io::Result<Response<BoxedByteStream>>
+    ) -> io::Result<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + Send,
+        ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Unpin + Send,
     {
         let (req, body) = {
             let (parts, body) = req.into_parts();
-            (Request::from_parts(parts, ()), body)
+            (Request::from_parts(parts, ()), InBody::from(body))
         };
 
         let is_ms = req
@@ -286,7 +290,7 @@ impl DavInner {
                 if err.must_close() {
                     resp.header("connection", "close");
                 }
-                let resp = resp.body(empty_body()).unwrap();
+                let resp = resp.body(Body::empty()).unwrap();
                 Ok(resp)
             },
         }
@@ -297,7 +301,7 @@ impl DavInner {
         self,
         req: Request<()>,
         body: ReqBody,
-    ) -> DavResult<Response<BoxedByteStream>>
+    ) -> DavResult<Response<Body>>
     where
         ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin + Send,
         ReqError: StdError + Send + Sync + 'static,

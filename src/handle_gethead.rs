@@ -9,13 +9,14 @@ use time;
 
 use bytes::Bytes;
 
+use crate::body::Body;
 use crate::conditional;
 use crate::async_stream::AsyncStream;
 use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
-use crate::util::{empty_body, systemtime_to_timespec};
-use crate::{BoxedByteStream, Method};
+use crate::util::systemtime_to_timespec;
+use crate::Method;
 
 struct Range {
     start: u64,
@@ -32,7 +33,7 @@ impl crate::DavInner {
     pub(crate) async fn handle_get(
         self,
         req: Request<()>,
-    ) -> Result<Response<BoxedByteStream>, DavError>
+    ) -> DavResult<Response<Body>>
     {
         let path = self.path(&req);
 
@@ -60,7 +61,7 @@ impl crate::DavInner {
             Err(_) => false,
         };
 
-        let mut res = Response::new(empty_body());
+        let mut res = Response::new(Body::empty());
         let mut no_body = false;
 
         // set Last-Modified and ETag headers.
@@ -168,7 +169,7 @@ impl crate::DavInner {
         }
 
         // now just loop and send data.
-        *res.body_mut() = Box::new(AsyncStream::new(|mut tx| async move {
+        *res.body_mut() = Body::from(AsyncStream::new(|mut tx| async move {
             let mut buffer = [0; READ_BUF_SIZE];
             let zero = [0; 4096];
 
@@ -233,9 +234,9 @@ impl crate::DavInner {
         self,
         req: Request<()>,
         head: bool,
-    ) -> Result<Response<BoxedByteStream>, DavError>
+    ) -> DavResult<Response<Body>>
     {
-        let mut res = Response::new(empty_body());
+        let mut res = Response::new(Body::empty());
 
         // This is a directory. If the path doesn't end in "/", send a redir.
         // Most webdav clients handle redirect really bad, but a client asking
@@ -271,7 +272,7 @@ impl crate::DavInner {
         }
 
         // now just loop and send data.
-        *res.body_mut() = Box::new(AsyncStream::new(|mut tx| async move {
+        *res.body_mut() = Body::from(AsyncStream::new(|mut tx| async move {
             // transform all entries into a dirent struct.
             struct Dirent {
                 path: String,

@@ -14,6 +14,7 @@ use xml::writer::XmlEvent as XmlWEvent;
 use xml::EmitterConfig;
 use xmltree::Element;
 
+use crate::body::Body;
 use crate::conditional::if_match_get_tokens;
 use crate::async_stream::AsyncStream;
 use crate::davheaders;
@@ -22,9 +23,9 @@ use crate::fs::*;
 use crate::handle_lock::{list_lockdiscovery, list_supportedlock};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
-use crate::util::{dav_xml_error, empty_body, systemtime_to_httpdate, systemtime_to_rfc3339};
+use crate::util::{dav_xml_error, systemtime_to_httpdate, systemtime_to_rfc3339};
 use crate::webpath::*;
-use crate::{BoxedByteStream, DavInner, DavResult};
+use crate::{DavInner, DavResult};
 
 const NS_APACHE_URI: &'static str = "http://apache.org/dav/props/";
 const NS_DAV_URI: &'static str = "DAV:";
@@ -133,12 +134,12 @@ impl DavInner {
         self,
         req: Request<()>,
         xmldata: Vec<u8>,
-    ) -> DavResult<Response<BoxedByteStream>>
+    ) -> DavResult<Response<Body>>
     {
         // No checks on If: and If-* headers here, because I do not see
         // the point and there's nothing in RFC4918 that indicates we should.
 
-        let mut res = Response::new(empty_body());
+        let mut res = Response::new(Body::empty());
 
         res.headers_mut().typed_insert(headers::CacheControl::new().with_no_cache());
         res.headers_mut().typed_insert(headers::Pragma::no_cache());
@@ -203,7 +204,7 @@ impl DavInner {
 
         let mut pw = PropWriter::new(&req, &mut res, name, props, &self.fs, self.ls.as_ref())?;
 
-        *res.body_mut() = Box::new(AsyncStream::new(|tx| async move {
+        *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
             pw.set_tx(tx);
             let is_dir = meta.is_dir();
             pw.write_props(&path, meta).await?;
@@ -371,9 +372,9 @@ impl DavInner {
         self,
         req: Request<()>,
         xmldata: Vec<u8>,
-    ) -> DavResult<Response<BoxedByteStream>>
+    ) -> DavResult<Response<Body>>
     {
-        let mut res = Response::new(empty_body());
+        let mut res = Response::new(Body::empty());
 
         // file must exist.
         let mut path = self.path(&req);
@@ -473,7 +474,7 @@ impl DavInner {
 
         // And reply.
         let mut pw = PropWriter::new(&req, &mut res, "propertyupdate", Vec::new(), &self.fs, None)?;
-        *res.body_mut() = Box::new(AsyncStream::new(|tx| async move {
+        *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
             pw.set_tx(tx);
             pw.write_propresponse(&path, hm)?;
             pw.close().await?;
@@ -487,7 +488,7 @@ impl DavInner {
 impl PropWriter {
     pub fn new(
         req: &Request<()>,
-        res: &mut Response<BoxedByteStream>,
+        res: &mut Response<Body>,
         name: &str,
         mut props: Vec<Element>,
         fs: &Box<dyn DavFileSystem>,

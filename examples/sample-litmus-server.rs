@@ -6,24 +6,24 @@
 //
 
 use std::error::Error;
+use std::io;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
 #[macro_use]
 extern crate clap;
 
-use bytes::Bytes;
 use env_logger;
+use futures::future::TryFutureExt;
 use hyper;
 
-use futures01 as futures;
-use futures01::{future::Future, stream::Stream};
 use headers::{Authorization, authorization::Basic, HeaderMapExt};
 
 use webdav_handler::{
     localfs,
     ls::DavLockSystem,
     memfs, memls, fakels,
+    body::Body,
     DavConfig, DavHandler,
 };
 
@@ -32,8 +32,6 @@ struct Server {
     dh:   DavHandler,
     auth: bool,
 }
-
-type BoxedFuture = Box<dyn Future<Item = hyper::Response<hyper::Body>, Error = std::io::Error> + Send>;
 
 impl Server {
     pub fn new(directory: String, memls: bool, fakels: bool, auth: bool) -> Self {
@@ -54,22 +52,20 @@ impl Server {
         Server { dh, auth }
     }
 
-    fn handle(&self, req: hyper::Request<hyper::Body>) -> BoxedFuture {
+    async fn handle(self, req: hyper::Request<hyper::Body>) -> io::Result<hyper::Response<Body>> {
+
         let user = if self.auth {
             // we want the client to authenticate.
             match req.headers().typed_get::<Authorization<Basic>>() {
                 Some(Authorization(basic)) => Some(basic.username().to_string()),
                 None => {
                     // return a 401 reply.
-                    let body = futures::stream::once(Ok(Bytes::from("please auth")));
-                    let body: webdav_handler::BoxedByteStream = Box::new(body);
-                    let body = hyper::Body::wrap_stream(body);
                     let response = hyper::Response::builder()
                         .status(401)
                         .header("WWW-Authenticate", "Basic realm=\"foo\"")
-                        .body(body)
+                        .body(Body::from("please auth"))
                         .unwrap();
-                    return Box::new(futures::future::ok(response));
+                    return Ok(response);
                 },
             }
         } else {
@@ -81,17 +77,7 @@ impl Server {
             ..DavConfig::default()
         };
 
-        // transform hyper::Request into http::Request, run handler,
-        // then transform http::Response into hyper::Response.
-        let (parts, body) = req.into_parts();
-        let body = body.map(|item| Bytes::from(item));
-        let req = http::Request::from_parts(parts, body);
-        let fut = self.dh.handle_with(config, req).and_then(|resp| {
-            let (parts, body) = resp.into_parts();
-            let body = hyper::Body::wrap_stream(body);
-            Ok(hyper::Response::from_parts(parts, body))
-        });
-        Box::new(fut)
+        self.dh.handle_with(config, req).await
     }
 }
 
@@ -118,10 +104,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let fakels = matches.is_present("FAKELS");
 
     let dav_server = Server::new(dir.to_string(), memls, fakels, auth);
-    let make_service = move || {
-        let dav_server = dav_server.clone();
-        hyper::service::service_fn(move |req| dav_server.handle(req))
-    };
+    let make_service = hyper::service::make_service_fn(|_| {
+        let dav_server2 = dav_server.clone();
+        async move {
+            let func = move |req| dav_server2.clone().handle(req);
+            Ok::<_, hyper::Error>(hyper::service::service_fn(func))
+        }
+    });
 
     let port = matches.value_of("PORT").unwrap_or("4918");
     let addr = "0.0.0.0:".to_string() + port;
@@ -131,7 +120,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map_err(|e| eprintln!("server error: {}", e));
 
     println!("Serving {} on {}", name, port);
-    hyper::rt::run(server);
+    let runtime = tokio::runtime::Runtime::new()?;
+    let _ = runtime.block_on(server);
 
     Ok(())
 }

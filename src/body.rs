@@ -15,7 +15,7 @@ pub struct Body {
 }
 
 enum BodyType {
-	Stream(Box<dyn Stream<Item = io::Result<Bytes>> + Unpin>),
+	Stream(Box<dyn Stream<Item = io::Result<Bytes>> + Send + Unpin + 'static>),
 	AsyncStream(AsyncStream<Bytes, io::Error>),
     Empty,
 }
@@ -93,7 +93,7 @@ use pin_project::pin_project;
 // A struct that contains a http_body::Body, and implements Stream.
 //
 #[pin_project]
-pub(crate) struct InBody<B, Data, Error>
+pub struct InBody<B, Data, Error>
 where
     Data: Buf + Send,
     Error: std::error::Error + Send + Sync + 'static,
@@ -107,7 +107,7 @@ impl<B, Data, Error> Stream for InBody<B, Data, Error>
 where
     Data: Buf + Send,
     Error: std::error::Error + Send + Sync + 'static,
-    B: HttpBody<Data = Data, Error = Error> + Unpin,
+    B: HttpBody<Data = Data, Error = Error>,
 {
     type Item = Result<Bytes, io::Error>;
 
@@ -126,7 +126,7 @@ impl<B, Data, Error> InBody<B, Data, Error>
 where
     Data: Buf + Send,
     Error: std::error::Error + Send + Sync + 'static,
-    B: HttpBody<Data = Data, Error = Error> + Unpin,
+    B: HttpBody<Data = Data, Error = Error>,
 {
     pub fn from(body: B) -> InBody<B, Data, Error> {
         InBody{ body }

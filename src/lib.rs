@@ -149,17 +149,9 @@ pub mod memfs;
 pub mod memls;
 pub mod webpath;
 
-use std::io;
-
-use bytes::Bytes;
-use futures::stream::Stream;
-
 pub(crate) use crate::davhandler::DavInner;
 pub(crate) use crate::errors::{DavError, DavResult};
 pub(crate) use crate::fs::*;
 
-/// A boxed Stream of Bytes.
-#[allow(unused)]
-pub type BoxedByteStream = Box<dyn Stream<Item = io::Result<Bytes>> + Send + 'static>;
 pub use crate::davhandler::{DavConfig, DavHandler};
 pub use crate::util::{AllowedMethods, Method};
