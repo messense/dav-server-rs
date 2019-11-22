@@ -1,10 +1,17 @@
-//! Fake locksystem (to make OSX/Windows work).
+//! Fake locksystem (to make Windows/MacOS work).
 //!
+//! Several Webdav clients, like the ones on Windows and MacOS, require just
+//! basic functionality to mount the Webdav server in read-only mode. However
+//! to be able to mount the Webdav server in read-write mode, they require the
+//! Webdav server to have Webdav class 2 compliance - that means, LOCK/UNLOCK
+//! support.
+//!
+//! In many cases, this is not actually important. A lot of the current Webdav
+//! server implementations that are used to serve a filesystem just fake it:
 //! LOCK/UNLOCK always succeed, checking for locktokens in
-//! If: headers always succeeds, nothing is every really locked.
+//! If: headers always succeeds, and nothing is every really locked.
 //!
-//! This is enough for OSX/Windows to work without actually having
-//! a working locksystem.
+//! `FakeLs` implements such a fake locksystem.
 use std::time::{Duration, SystemTime};
 
 use uuid::Uuid;

@@ -1,9 +1,7 @@
-//! Contains the structs and traits that define a "filesystem" backend.
+//! Contains the structs and traits that define a filesystem backend.
 //!
 //! You only need this if you are going to implement your own
-//! filesystem backend. Most people just use 'LocalFs' or 'MemFs'.
-//!
-//! The futures/streams used here are the ones from futures 0.3.
+//! filesystem backend. Otherwise, just use 'LocalFs' or 'MemFs'.
 //!
 use std::fmt::Debug;
 use std::io::SeekFrom;
@@ -38,7 +36,7 @@ pub enum FsError {
     GeneralFailure,
     /// tried to create something, but it existed (405 / 412) (yes, 405. RFC4918 says so)
     Exists,
-    /// File / Directory not found (401)
+    /// File / Directory not found (404)
     NotFound,
     /// Not allowed (403)
     Forbidden,
@@ -56,20 +54,26 @@ pub enum FsError {
 /// The Result type.
 pub type FsResult<T> = std::result::Result<T, FsError>;
 
-/// A webdav "property".
+/// A webdav property.
 #[derive(Debug, Clone)]
 pub struct DavProp {
+    /// Name of the property.
     pub name:      String,
+    /// XML prefix.
     pub prefix:    Option<String>,
+    /// XML namespace.
     pub namespace: Option<String>,
+    /// Value of the property as raw XML.
     pub xml:       Option<Vec<u8>>,
 }
 
-/// Future (futures 0.3) returned by almost all of the DavFileSystem methods.
+/// Future returned by almost all of the DavFileSystem methods.
 pub type FsFuture<'a, T> = Pin<Box<dyn Future<Output = FsResult<T>> + Send + 'a>>;
+/// Convenience alias for a boxed Stream.
 pub type FsStream<T> = Pin<Box<dyn Stream<Item = T> + Send>>;
 
-/// Used as argument to the read_dir() method. It is:
+/// Used as argument to the read_dir() method.
+/// It is:
 ///
 /// - an optimization hint (the implementation may call metadata() and
 ///   store the result in the returned directory entry)
@@ -252,14 +256,14 @@ impl<FS: Clone + DavFileSystem + 'static> BoxCloneFs for FS {
 
 /// One directory entry (or child node).
 pub trait DavDirEntry: Send + Sync {
-    /// name of the entry.
+    /// Name of the entry.
     fn name(&self) -> Vec<u8>;
 
-    /// metadata of the entry.
+    /// Metadata of the entry.
     fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>>;
 
-    /// Default implementation of is_dir just returns `self.metadata()?.is_dir()`.
-    /// Implementations can override this if their metadata() method is
+    /// Default implementation of `is_dir` just returns `metadata()?.is_dir()`.
+    /// Implementations can override this if their `metadata()` method is
     /// expensive and there is a cheaper way to provide the same info
     /// (e.g. dirent.d_type in unix filesystems).
     fn is_dir<'a>(&'a self) -> FsFuture<bool> {
@@ -277,8 +281,8 @@ pub trait DavDirEntry: Send + Sync {
     }
 }
 
-/// A DavFile should be readable/writeable/seekable, and be able
-/// to return its metadata.
+/// A `DavFile` is the equivalent of `std::fs::File`, should be
+/// readable/writeable/seekable, and be able to return its metadata.
 pub trait DavFile: Debug + Send + Sync {
     fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>>;
     fn write_bytes<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<usize>;
@@ -288,15 +292,18 @@ pub trait DavFile: Debug + Send + Sync {
     fn flush<'a>(&'a mut self) -> FsFuture<()>;
 }
 
-/// File metadata. Not much more than type, length, and some timestamps.
+/// File metadata. Basically type, length, and some timestamps.
 pub trait DavMetaData: Debug + BoxCloneMd + Send + Sync {
+    /// Size of the file.
     fn len(&self) -> u64;
+    /// `Modified` timestamp.
     fn modified(&self) -> FsResult<SystemTime>;
+    /// File or directory (aka collection).
     fn is_dir(&self) -> bool;
 
-    /// Simplistic implementation of etag()
+    /// Simplistic implementation of `etag()`
     ///
-    /// Returns a simple etag that basically is "\<length\>-\<timestamp_in_ms\>"
+    /// Returns a simple etag that basically is `\<length\>-\<timestamp_in_ms\>`
     /// with the numbers in hex. Enough for most implementations.
     fn etag(&self) -> Option<String> {
         if let Ok(t) = self.modified() {
@@ -313,32 +320,32 @@ pub trait DavMetaData: Debug + BoxCloneMd + Send + Sync {
         None
     }
 
-    /// Default implementation for is_file() is !self.is_dir()
+    /// Is this a file and not a directory. Default: `!s_dir()`.
     fn is_file(&self) -> bool {
         !self.is_dir()
     }
 
-    /// Default implementation for is_symlink() is "false".
+    /// Is this a symbolic link. Default: false.
     fn is_symlink(&self) -> bool {
         false
     }
 
-    /// Last access time (default: notimplemented_fut)
+    /// Last access time. Default: `FsError::NotImplemented`.
     fn accessed(&self) -> FsResult<SystemTime> {
         notimplemented!("access time")
     }
 
-    /// Creation time (default: notimplemented_fut)
+    /// Creation time. Default: `FsError::NotImplemented`.
     fn created(&self) -> FsResult<SystemTime> {
         notimplemented!("creation time")
     }
 
-    /// Inode change time (ctime) (default: notimplemented_fut)
+    /// Inode change time (ctime). Default: `FsError::NotImplemented`.
     fn status_changed(&self) -> FsResult<SystemTime> {
         notimplemented!("status change time")
     }
 
-    /// Is file executable (unix: has "x" mode bit) (default: notimplemented_fut)
+    /// Is file executable (unix: has "x" mode bit). Default: `FsError::NotImplemented`.
     fn executable(&self) -> FsResult<bool> {
         notimplemented!("executable")
     }
@@ -365,7 +372,7 @@ impl<MD: Clone + DavMetaData + 'static> BoxCloneMd for MD {
     }
 }
 
-/// OpenOptions for open().
+/// OpenOptions for `open()`.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OpenOptions {
     /// open for reading

@@ -20,7 +20,7 @@ use crate::davpath::DavPath;
 
 type Tree = tree::Tree<Vec<u8>, Vec<DavLock>>;
 
-/// In-memory LockSystem.
+/// Ephemeral in-memory LockSystem.
 #[derive(Debug, Clone)]
 pub struct MemLs(Arc<Mutex<MemLsInner>>);
 

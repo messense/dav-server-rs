@@ -1,3 +1,5 @@
+//! Definitions for the Request and Response bodies.
+
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -9,7 +11,8 @@ use http_body::Body as HttpBody;
 
 use crate::async_stream::AsyncStream;
 
-/// Body is returned by the handler, and implements both Stream and http_body::Body.
+/// Body is returned by the webdav handler, and implements both `Stream`
+/// and `http_body::Body`.
 pub struct Body {
     inner: BodyType,
 }

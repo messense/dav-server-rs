@@ -23,6 +23,7 @@ use crate::davpath::DavPath;
 
 type Tree = tree::Tree<Vec<u8>, MemFsNode>;
 
+/// Ephemeral in-memory filesystem.
 #[derive(Debug)]
 pub struct MemFs {
     tree: Arc<Mutex<Tree>>,
