@@ -4,23 +4,34 @@
 [![crates.io](https://meritbadge.herokuapp.com/webdav-handler)](https://crates.io/crates/webdav-handler)
 [![Released API docs](https://docs.rs/webdav-handler/badge.svg)](https://docs.rs/webdav-handler)
 
-### Generic async HTTP/WEBDAV handler
+### Generic async HTTP/Webdav handler
 
-[`Webdav`] ([RFC4918]) is HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extra methods.
+[`Webdav`] (RFC4918) is defined as
+HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extension methods (PROPFIND, etc).
+These extension methods are used to manage collections (like unix directories),
+get information on collections (like unix `ls` or `readdir`), rename and
+copy items, lock/unlock items, etc.
 
-This crate implements a futures/stream based webdav handler for Rust, using
-the types from the `http` crate. It comes complete with an async filesystem
-backend, so it can be used as a WEBDAV filesystem server, or just as a
-feature-complete HTTP server.
+A `handler` is a piece of code that takes a `http::Request`, processes it in some
+way, and then generates a `http::Response`. This library is a `handler` that maps
+the HTTP/Webdav protocol to the filesystem. Or actually, "a" filesystem. Included
+is an adapter for the local filesystem (`localfs`), and an adapter for an
+in-memory filesystem (`memfs`).
+
+So this library can be used as a handler for HTTP servers like `hyper`, `actix`,
+`warp`, etc. Either as a correct and complete HTTP handler for files (GET/HEAD)
+or as a handler for the complete Webdav protocol. In the last case, you can
+mount it as a remote filesystem: Linux, Windows, MacOS all have support built-in
+to mount Webdav filesystems.
 
 ### Interface.
 
 It has an interface similar to the Go x/net/webdav package:
 
-- the library contains an [HTTP handler][DavHandler]
+- the library contains an [HTTP handler][DavHandler].
 - you supply a [filesystem][DavFileSystem] for backend storage, which can optionally
   implement reading/writing [DAV properties][DavProp].
-- you can supply a [locksystem][DavLockSystem] that handles the webdav locks
+- you can supply a [locksystem][DavLockSystem] that handles webdav locks.
 
 With some glue code, this handler can be used from HTTP server
 libraries/frameworks such as [hyper].
