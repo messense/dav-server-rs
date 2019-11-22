@@ -1,10 +1,10 @@
-//! Contains the structs and traits that define a "locksystem" backend.
+//! Contains the structs and traits that define a `locksystem` backend.
 //!
 //! Note that the methods DO NOT return futures, they are sychronous.
 //! This is because currently only two locksystems exist, `MemLs` and `FakeLs`.
 //! Both of them do not do any I/O, all methods return instantly.
 //!
-//! If ever anyone implements a locksystem that does I/O (to a filesystem,
+//! If ever a locksystem gets built that does I/O (to a filesystem,
 //! a database, or over the network) we'll need to revisit this.
 //!
 use crate::davpath::DavPath;
@@ -15,20 +15,28 @@ use xmltree::Element;
 /// Type of the locks returned by DavLockSystem methods.
 #[derive(Debug, Clone)]
 pub struct DavLock {
+    /// Token.
     pub token:      String,
+    /// Path/
     pub path:       DavPath,
+    /// Principal.
     pub principal:  Option<String>,
+    /// Owner.
     pub owner:      Option<Element>,
+    /// When the lock turns stale (absolute).
     pub timeout_at: Option<SystemTime>,
+    /// When the lock turns stale (relative).
     pub timeout:    Option<Duration>,
+    /// Shared.
     pub shared:     bool,
+    /// Deep.
     pub deep:       bool,
 }
 
 /// The trait that defines a locksystem.
 pub trait DavLockSystem: Debug + Sync + Send + BoxCloneLs {
-    /// Lock a node. Returns Ok(new_lock) if succeeded,
-    /// or Err(conflicting_lock) if failed.
+    /// Lock a node. Returns `Ok(new_lock)` if succeeded,
+    /// or `Err(conflicting_lock)` if failed.
     fn lock(
         &self,
         path: &DavPath,
@@ -39,7 +47,7 @@ pub trait DavLockSystem: Debug + Sync + Send + BoxCloneLs {
         deep: bool,
     ) -> Result<DavLock, DavLock>;
 
-    /// Unlock a node. Returns empty Ok if succeeded, empty Err if failed
+    /// Unlock a node. Returns `Ok(())` if succeeded, `Err (())` if failed
     /// (because lock doesn't exist)
     fn unlock(&self, path: &DavPath, token: &str) -> Result<(), ()>;
 
