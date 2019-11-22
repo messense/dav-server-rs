@@ -14,7 +14,7 @@ use crate::errors::*;
 use crate::fs::{FsError, OpenOptions};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 use crate::xmltree_ext::{self, ElementExt};
 use crate::DavResult;
 
@@ -215,7 +215,7 @@ impl crate::DavInner {
     }
 }
 
-pub(crate) fn list_lockdiscovery(ls: Option<&Box<dyn DavLockSystem>>, path: &WebPath) -> Element {
+pub(crate) fn list_lockdiscovery(ls: Option<&Box<dyn DavLockSystem>>, path: &DavPath) -> Element {
     let mut elem = Element::new2("D:lockdiscovery");
 
     // must have a locksystem or bail

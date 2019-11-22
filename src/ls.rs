@@ -7,7 +7,7 @@
 //! If ever anyone implements a locksystem that does I/O (to a filesystem,
 //! a database, or over the network) we'll need to revisit this.
 //!
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 use std::fmt::Debug;
 use std::time::{Duration, SystemTime};
 use xmltree::Element;
@@ -16,7 +16,7 @@ use xmltree::Element;
 #[derive(Debug, Clone)]
 pub struct DavLock {
     pub token:      String,
-    pub path:       WebPath,
+    pub path:       DavPath,
     pub principal:  Option<String>,
     pub owner:      Option<Element>,
     pub timeout_at: Option<SystemTime>,
@@ -31,7 +31,7 @@ pub trait DavLockSystem: Debug + Sync + Send + BoxCloneLs {
     /// or Err(conflicting_lock) if failed.
     fn lock(
         &self,
-        path: &WebPath,
+        path: &DavPath,
         principal: Option<&str>,
         owner: Option<&Element>,
         timeout: Option<Duration>,
@@ -41,16 +41,16 @@ pub trait DavLockSystem: Debug + Sync + Send + BoxCloneLs {
 
     /// Unlock a node. Returns empty Ok if succeeded, empty Err if failed
     /// (because lock doesn't exist)
-    fn unlock(&self, path: &WebPath, token: &str) -> Result<(), ()>;
+    fn unlock(&self, path: &DavPath, token: &str) -> Result<(), ()>;
 
     /// Refresh lock. Returns updated lock if succeeded.
-    fn refresh(&self, path: &WebPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()>;
+    fn refresh(&self, path: &DavPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()>;
 
     /// Check if node is locked and if so, if we own all the locks.
     /// If not, returns as Err one conflicting lock.
     fn check(
         &self,
-        path: &WebPath,
+        path: &DavPath,
         principal: Option<&str>,
         ignore_principal: bool,
         deep: bool,
@@ -58,10 +58,10 @@ pub trait DavLockSystem: Debug + Sync + Send + BoxCloneLs {
     ) -> Result<(), DavLock>;
 
     /// Find and return all locks that cover a given path.
-    fn discover(&self, path: &WebPath) -> Vec<DavLock>;
+    fn discover(&self, path: &DavPath) -> Vec<DavLock>;
 
     /// Delete all locks at this path and below (after MOVE or DELETE)
-    fn delete(&self, path: &WebPath) -> Result<(), ()>;
+    fn delete(&self, path: &DavPath) -> Result<(), ()>;
 }
 
 #[doc(hidden)]

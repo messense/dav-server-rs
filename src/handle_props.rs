@@ -24,7 +24,7 @@ use crate::handle_lock::{list_lockdiscovery, list_supportedlock};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
 use crate::util::{dav_xml_error, systemtime_to_httpdate, systemtime_to_rfc3339};
-use crate::webpath::*;
+use crate::davpath::*;
 use crate::{DavInner, DavResult};
 
 const NS_APACHE_URI: &'static str = "http://apache.org/dav/props/";
@@ -226,7 +226,7 @@ impl DavInner {
 
     fn propfind_directory<'a>(
         &'a self,
-        path: &'a WebPath,
+        path: &'a DavPath,
         depth: davheaders::Depth,
         propwriter: &'a mut PropWriter,
     ) -> BoxFuture<'a, DavResult<()>>
@@ -616,7 +616,7 @@ impl PropWriter {
     async fn get_quota<'a>(
         &'a self,
         qc: &'a mut QuotaCache,
-        path: &'a WebPath,
+        path: &'a DavPath,
         meta: &'a dyn DavMetaData,
     ) -> FsResult<(u64, Option<u64>)>
     {
@@ -657,7 +657,7 @@ impl PropWriter {
     async fn build_prop<'a>(
         &'a self,
         prop: &'a Element,
-        path: &'a WebPath,
+        path: &'a DavPath,
         meta: &'a dyn DavMetaData,
         qc: &'a mut QuotaCache,
         docontent: bool,
@@ -856,7 +856,7 @@ impl PropWriter {
 
     pub async fn write_props<'a>(
         &'a mut self,
-        path: &'a WebPath,
+        path: &'a DavPath,
         meta: Box<dyn DavMetaData + 'static>,
     ) -> Result<(), DavError>
     {
@@ -888,7 +888,7 @@ impl PropWriter {
 
     pub fn write_propresponse(
         &mut self,
-        path: &WebPath,
+        path: &DavPath,
         props: HashMap<StatusCode, Vec<Element>>,
     ) -> Result<(), DavError>
     {

@@ -13,7 +13,7 @@ use crate::DavError;
 
 /// Path information relative to a prefix.
 #[derive(Clone)]
-pub struct WebPath {
+pub struct DavPath {
     pub(crate) path:   Vec<u8>,
     pub(crate) prefix: Vec<u8>,
 }
@@ -38,19 +38,19 @@ impl pct::EncodeSet for ENCODE_SET {
     }
 }
 
-impl std::fmt::Display for WebPath {
+impl std::fmt::Display for DavPath {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:?}", &self.as_url_string_with_prefix_debug())
     }
 }
 
-impl std::fmt::Debug for WebPath {
+impl std::fmt::Debug for DavPath {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:?}", &self.as_url_string_with_prefix_debug())
     }
 }
 
-/// Error returned by some of the WebPath methods.
+/// Error returned by some of the DavPath methods.
 #[derive(Debug)]
 pub enum ParseError {
     /// cannot parse
@@ -63,7 +63,7 @@ pub enum ParseError {
 
 impl Error for ParseError {
     fn description(&self) -> &str {
-        "WebPath parse error"
+        "DavPath parse error"
     }
     fn cause(&self) -> Option<&dyn Error> {
         None
@@ -161,8 +161,8 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
 }
 
 /// Comparision ignores any trailing slash, so /foo == /foo/
-impl PartialEq for WebPath {
-    fn eq(&self, rhs: &WebPath) -> bool {
+impl PartialEq for DavPath {
+    fn eq(&self, rhs: &DavPath) -> bool {
         let mut a = self.path.as_slice();
         if a.len() > 1 && a.ends_with(b"/") {
             a = &a[..a.len() - 1];
@@ -175,9 +175,9 @@ impl PartialEq for WebPath {
     }
 }
 
-impl WebPath {
+impl DavPath {
     /// from URL encoded strings: path and prefix.
-    pub fn from_str(src: &str, prefix: &str) -> Result<WebPath, ParseError> {
+    pub fn from_str(src: &str, prefix: &str) -> Result<DavPath, ParseError> {
         let b = src.as_bytes();
         let path = normalize_path(b)?;
         let mut prefix = prefix.as_bytes();
@@ -190,7 +190,7 @@ impl WebPath {
         } else if path.len() != pflen && (path.len() < pflen || path[pflen] != b'/') {
             return Err(ParseError::IllegalPath);
         }
-        Ok(WebPath {
+        Ok(DavPath {
             path:   path[prefix.len()..].to_vec(),
             prefix: prefix.to_vec(),
         })
@@ -200,19 +200,19 @@ impl WebPath {
     pub fn from_uri(uri: &http::uri::Uri, prefix: &str) -> Result<Self, ParseError> {
         match uri.path() {
             "*" => {
-                Ok(WebPath {
+                Ok(DavPath {
                     prefix: b"".to_vec(),
                     path:   b"*".to_vec(),
                 })
             },
-            path if path.starts_with("/") => WebPath::from_str(path, prefix),
+            path if path.starts_with("/") => DavPath::from_str(path, prefix),
             _ => Err(ParseError::InvalidPath),
         }
     }
 
     /// from url::Url and (not-url-encoded) prefix string.
     pub fn from_url(url: &url::Url, prefix: &str) -> Result<Self, ParseError> {
-        WebPath::from_str(url.path(), prefix)
+        DavPath::from_str(url.path(), prefix)
     }
 
     // is this a "star" request (only used with OPTIONS)
@@ -272,7 +272,7 @@ impl WebPath {
         PathBuf::from(os_string)
     }
 
-    /// prefix the WebPath with a Path and return a PathBuf
+    /// prefix the DavPath with a Path and return a PathBuf
     pub fn as_pathbuf_with_prefix<P: AsRef<Path>>(&self, path: P) -> PathBuf {
         let mut p = path.as_ref().to_path_buf();
         p.push(self.as_rel_pathbuf());
@@ -329,7 +329,7 @@ impl WebPath {
     }
 
     // get parent.
-    pub(crate) fn parent(&self) -> WebPath {
+    pub(crate) fn parent(&self) -> DavPath {
         let mut segs = self
             .path
             .split(|&c| c == b'/')
@@ -340,7 +340,7 @@ impl WebPath {
             segs.push(b"");
         }
         segs.insert(0, b"");
-        WebPath {
+        DavPath {
             prefix: self.prefix.clone(),
             path:   segs.join(&b'/').to_vec(),
         }

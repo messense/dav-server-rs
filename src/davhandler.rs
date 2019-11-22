@@ -16,7 +16,7 @@ use http::{Request, Response, StatusCode};
 use crate::body::{Body, InBody};
 use crate::davheaders;
 use crate::util::{dav_method, notfound, AllowedMethods, Method};
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 
 use crate::errors::DavError;
 use crate::fs::*;
@@ -193,15 +193,15 @@ impl DavHandler {
 
 impl DavInner {
     // helper.
-    pub(crate) async fn has_parent<'a>(&'a self, path: &'a WebPath) -> bool {
+    pub(crate) async fn has_parent<'a>(&'a self, path: &'a DavPath) -> bool {
         let p = path.parent();
         self.fs.metadata(&p).await.map(|m| m.is_dir()).unwrap_or(false)
     }
 
     // helper.
-    pub(crate) fn path(&self, req: &Request<()>) -> WebPath {
+    pub(crate) fn path(&self, req: &Request<()>) -> DavPath {
         // This never fails (has been checked before)
-        WebPath::from_uri(req.uri(), &self.prefix).unwrap()
+        DavPath::from_uri(req.uri(), &self.prefix).unwrap()
     }
 
     // See if this is a directory and if so, if we have
@@ -209,7 +209,7 @@ impl DavInner {
     pub(crate) fn fixpath(
         &self,
         res: &mut Response<Body>,
-        path: &mut WebPath,
+        path: &mut DavPath,
         meta: Box<dyn DavMetaData>,
     ) -> Box<dyn DavMetaData>
     {
@@ -331,7 +331,7 @@ impl DavInner {
         }
 
         // make sure the request path is valid.
-        let path = WebPath::from_uri(req.uri(), &self.prefix)?;
+        let path = DavPath::from_uri(req.uri(), &self.prefix)?;
 
         // PUT is the only handler that reads the body itself. All the
         // other handlers either expected no body, or a pre-read Vec<u8>.

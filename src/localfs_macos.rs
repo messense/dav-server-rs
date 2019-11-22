@@ -21,7 +21,7 @@ use parking_lot::Mutex;
 
 use crate::fs::*;
 use crate::localfs::LocalFs;
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 
 const DU_CACHE_ENTRIES: usize = 4096;
 const DU_CACHE_MAX_AGE: u64 = 60;
@@ -231,7 +231,7 @@ impl DavMetaData for EmptyMetaData {
 impl LocalFs {
     // Is this a virtualfile ?
     #[inline]
-    pub(crate) fn is_virtual(&self, path: &WebPath) -> Option<Box<dyn DavMetaData>> {
+    pub(crate) fn is_virtual(&self, path: &DavPath) -> Option<Box<dyn DavMetaData>> {
         if !self.inner.macos {
             return None;
         }
@@ -245,7 +245,7 @@ impl LocalFs {
 
     // This file can never exist.
     #[inline]
-    pub(crate) fn is_forbidden(&self, path: &WebPath) -> bool {
+    pub(crate) fn is_forbidden(&self, path: &DavPath) -> bool {
         if !self.inner.macos {
             return false;
         }

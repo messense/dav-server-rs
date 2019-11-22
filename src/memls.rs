@@ -16,7 +16,7 @@ use xmltree::Element;
 use crate::fs::FsResult;
 use crate::ls::*;
 use crate::tree;
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 
 type Tree = tree::Tree<Vec<u8>, Vec<DavLock>>;
 
@@ -44,7 +44,7 @@ impl MemLs {
 impl DavLockSystem for MemLs {
     fn lock(
         &self,
-        path: &WebPath,
+        path: &DavPath,
         principal: Option<&str>,
         owner: Option<&Element>,
         timeout: Option<Duration>,
@@ -88,7 +88,7 @@ impl DavLockSystem for MemLs {
         Ok(lock)
     }
 
-    fn unlock(&self, path: &WebPath, token: &str) -> Result<(), ()> {
+    fn unlock(&self, path: &DavPath, token: &str) -> Result<(), ()> {
         let inner = &mut *self.0.lock().unwrap();
         let node_id = match lookup_lock(&inner.tree, path, token) {
             None => {
@@ -109,7 +109,7 @@ impl DavLockSystem for MemLs {
         Ok(())
     }
 
-    fn refresh(&self, path: &WebPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()> {
+    fn refresh(&self, path: &DavPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()> {
         debug!("refresh lock {}", token);
         let inner = &mut *self.0.lock().unwrap();
         let node_id = match lookup_lock(&inner.tree, path, token) {
@@ -133,7 +133,7 @@ impl DavLockSystem for MemLs {
 
     fn check(
         &self,
-        path: &WebPath,
+        path: &DavPath,
         principal: Option<&str>,
         ignore_principal: bool,
         deep: bool,
@@ -169,12 +169,12 @@ impl DavLockSystem for MemLs {
         Ok(())
     }
 
-    fn discover(&self, path: &WebPath) -> Vec<DavLock> {
+    fn discover(&self, path: &DavPath) -> Vec<DavLock> {
         let inner = &*self.0.lock().unwrap();
         list_locks(&inner.tree, path)
     }
 
-    fn delete(&self, path: &WebPath) -> Result<(), ()> {
+    fn delete(&self, path: &DavPath) -> Result<(), ()> {
         let inner = &mut *self.0.lock().unwrap();
         if let Some(node_id) = lookup_node(&inner.tree, path) {
             (&mut inner.tree).delete_subtree(node_id).ok();
@@ -186,7 +186,7 @@ impl DavLockSystem for MemLs {
 // check if there are any locks along the path.
 fn check_locks_to_path(
     tree: &Tree,
-    path: &WebPath,
+    path: &DavPath,
     principal: Option<&str>,
     ignore_principal: bool,
     submitted_tokens: &Vec<&str>,
@@ -246,7 +246,7 @@ fn check_locks_to_path(
 // See if there are locks in any path below this collection.
 fn check_locks_from_path(
     tree: &Tree,
-    path: &WebPath,
+    path: &DavPath,
     principal: Option<&str>,
     ignore_principal: bool,
     submitted_tokens: &Vec<&str>,
@@ -308,7 +308,7 @@ fn check_locks_from_node(
 }
 
 // Find or create node.
-fn get_or_create_path_node<'a>(tree: &'a mut Tree, path: &WebPath) -> &'a mut Vec<DavLock> {
+fn get_or_create_path_node<'a>(tree: &'a mut Tree, path: &DavPath) -> &'a mut Vec<DavLock> {
     let mut node_id = tree::ROOT_ID;
     for seg in path_to_segs(path, false) {
         node_id = match tree.get_child(node_id, seg) {
@@ -320,7 +320,7 @@ fn get_or_create_path_node<'a>(tree: &'a mut Tree, path: &WebPath) -> &'a mut Ve
 }
 
 // Find lock in path.
-fn lookup_lock(tree: &Tree, path: &WebPath, token: &str) -> Option<u64> {
+fn lookup_lock(tree: &Tree, path: &DavPath, token: &str) -> Option<u64> {
     debug!("lookup_lock: {}", token);
 
     let mut node_id = tree::ROOT_ID;
@@ -345,7 +345,7 @@ fn lookup_lock(tree: &Tree, path: &WebPath, token: &str) -> Option<u64> {
 }
 
 // Find node ID for path.
-fn lookup_node(tree: &Tree, path: &WebPath) -> Option<u64> {
+fn lookup_node(tree: &Tree, path: &DavPath) -> Option<u64> {
     let mut node_id = tree::ROOT_ID;
     for seg in path_to_segs(path, false) {
         node_id = match tree.get_child(node_id, seg) {
@@ -357,7 +357,7 @@ fn lookup_node(tree: &Tree, path: &WebPath) -> Option<u64> {
 }
 
 // Find all locks in a path
-fn list_locks(tree: &Tree, path: &WebPath) -> Vec<DavLock> {
+fn list_locks(tree: &Tree, path: &DavPath) -> Vec<DavLock> {
     let mut locks = Vec::new();
 
     let mut node_id = tree::ROOT_ID;
@@ -376,7 +376,7 @@ fn list_locks(tree: &Tree, path: &WebPath) -> Vec<DavLock> {
     locks
 }
 
-fn path_to_segs(path: &WebPath, include_root: bool) -> Vec<&[u8]> {
+fn path_to_segs(path: &DavPath, include_root: bool) -> Vec<&[u8]> {
     let path = path.as_bytes();
     let mut segs: Vec<&[u8]> = path.split(|&c| c == b'/').filter(|s| s.len() > 0).collect();
     if include_root {

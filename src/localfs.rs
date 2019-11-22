@@ -27,7 +27,7 @@ use libc;
 
 use crate::fs::*;
 use crate::localfs_macos::DUCacheBuilder;
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 
 // Run some code via tokio_executor::threadpool::blocking().
 //
@@ -133,11 +133,11 @@ impl LocalFs {
         })
     }
 
-    fn fspath_dbg(&self, path: &WebPath) -> PathBuf {
+    fn fspath_dbg(&self, path: &DavPath) -> PathBuf {
         path.as_pathbuf_with_prefix(&self.inner.basedir)
     }
 
-    fn fspath(&self, path: &WebPath) -> PathBuf {
+    fn fspath(&self, path: &DavPath) -> PathBuf {
         crate::localfs_windows::resolve(&self.inner.basedir, path.as_bytes(), self.inner.case_insensitive)
     }
 
@@ -163,12 +163,12 @@ impl LocalFs {
 // This implementation is basically a bunch of boilerplate to
 // wrap the std::fs call in self.blocking() calls.
 impl DavFileSystem for LocalFs {
-    fn metadata<'a>(&'a self, webpath: &'a WebPath) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata<'a>(&'a self, davpath: &'a DavPath) -> FsFuture<Box<dyn DavMetaData>> {
         self.blocking(move || {
-            if let Some(meta) = self.is_virtual(webpath) {
+            if let Some(meta) = self.is_virtual(davpath) {
                 return Ok(meta);
             }
-            let path = self.fspath(webpath);
+            let path = self.fspath(davpath);
             if self.is_notfound(&path) {
                 return Err(FsError::NotFound);
             }
@@ -180,12 +180,12 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn symlink_metadata<'a>(&'a self, webpath: &'a WebPath) -> FsFuture<Box<dyn DavMetaData>> {
+    fn symlink_metadata<'a>(&'a self, davpath: &'a DavPath) -> FsFuture<Box<dyn DavMetaData>> {
         self.blocking(move || {
-            if let Some(meta) = self.is_virtual(webpath) {
+            if let Some(meta) = self.is_virtual(davpath) {
                 return Ok(meta);
             }
-            let path = self.fspath(webpath);
+            let path = self.fspath(davpath);
             if self.is_notfound(&path) {
                 return Err(FsError::NotFound);
             }
@@ -201,13 +201,13 @@ impl DavFileSystem for LocalFs {
     // because it returns a stream.
     fn read_dir<'a>(
         &'a self,
-        webpath: &'a WebPath,
+        davpath: &'a DavPath,
         meta: ReadDirMeta,
     ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>>
     {
-        debug!("FS: read_dir {:?}", self.fspath_dbg(webpath));
+        debug!("FS: read_dir {:?}", self.fspath_dbg(davpath));
         self.blocking(move || {
-            let path = self.fspath(webpath);
+            let path = self.fspath(davpath);
             match std::fs::read_dir(&path) {
                 Ok(iterator) => {
                     let strm = LocalFsReadDir {
@@ -225,7 +225,7 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<dyn DavFile>> {
+    fn open<'a>(&'a self, path: &'a DavPath, options: OpenOptions) -> FsFuture<Box<dyn DavFile>> {
         debug!("FS: open {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             if self.is_forbidden(path) {
@@ -248,7 +248,7 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn create_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
+    fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
         debug!("FS: create_dir {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             if self.is_forbidden(path) {
@@ -262,13 +262,13 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn remove_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
+    fn remove_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
         debug!("FS: remove_dir {:?}", self.fspath_dbg(path));
         self.blocking(move || std::fs::remove_dir(self.fspath(path)).map_err(|e| e.into()))
             .boxed()
     }
 
-    fn remove_file<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
+    fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
         debug!("FS: remove_file {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             if self.is_forbidden(path) {
@@ -279,7 +279,7 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn rename<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
+    fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
         debug!("FS: rename {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
         self.blocking(move || {
             if self.is_forbidden(from) || self.is_forbidden(to) {
@@ -306,7 +306,7 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn copy<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
+    fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
         debug!("FS: copy {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
         self.blocking(move || {
             if self.is_forbidden(from) || self.is_forbidden(to) {

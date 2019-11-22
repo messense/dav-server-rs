@@ -9,11 +9,11 @@ use crate::davheaders::Depth;
 use crate::errors::*;
 use crate::fs::*;
 use crate::multierror::{multi_error, MultiError};
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 use crate::DavResult;
 
 // map_err helper.
-async fn add_status<'a>(m_err: &'a mut MultiError, path: &'a WebPath, e: FsError) -> DavError {
+async fn add_status<'a>(m_err: &'a mut MultiError, path: &'a DavPath, e: FsError) -> DavError {
     let status = DavError::FsError(e).statuscode();
     if let Err(x) = m_err.add_status(path, status).await {
         return x.into();
@@ -23,7 +23,7 @@ async fn add_status<'a>(m_err: &'a mut MultiError, path: &'a WebPath, e: FsError
 
 // map_err helper for directories, the result statuscode
 // mappings are not 100% the same.
-async fn dir_status<'a>(res: &'a mut MultiError, path: &'a WebPath, e: FsError) -> DavError {
+async fn dir_status<'a>(res: &'a mut MultiError, path: &'a DavPath, e: FsError) -> DavError {
     let status = match e {
         FsError::Exists => StatusCode::CONFLICT,
         e => DavError::FsError(e).statuscode(),
@@ -40,7 +40,7 @@ impl crate::DavInner {
         mut res: &'a mut MultiError,
         depth: Depth,
         meta: Box<dyn DavMetaData + 'a>,
-        path: &'a WebPath,
+        path: &'a DavPath,
     ) -> BoxFuture<'a, DavResult<()>>
     {
         async move {

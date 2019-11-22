@@ -9,13 +9,13 @@ use crate::davheaders::{self, Depth};
 use crate::errors::*;
 use crate::fs::*;
 use crate::multierror::{multi_error, MultiError};
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 use crate::{util::Method, DavResult};
 
 // map_err helper.
 async fn add_status<'a>(
     m_err: &'a mut MultiError,
-    path: &'a WebPath,
+    path: &'a DavPath,
     e: impl Into<DavError> + 'static,
 ) -> DavResult<()>
 {
@@ -29,9 +29,9 @@ async fn add_status<'a>(
 impl crate::DavInner {
     pub(crate) fn do_copy<'a>(
         &'a self,
-        source: &'a WebPath,
-        topdest: &'a WebPath,
-        dest: &'a WebPath,
+        source: &'a DavPath,
+        topdest: &'a DavPath,
+        dest: &'a DavPath,
         depth: Depth,
         mut multierror: &'a mut MultiError,
     ) -> BoxFuture<'a, DavResult<()>>
@@ -128,8 +128,8 @@ impl crate::DavInner {
     //
     pub(crate) async fn do_move<'a>(
         &'a self,
-        source: &'a WebPath,
-        dest: &'a WebPath,
+        source: &'a DavPath,
+        dest: &'a DavPath,
         mut multierror: &'a mut MultiError,
     ) -> DavResult<()>
     {
@@ -154,7 +154,7 @@ impl crate::DavInner {
 
         // decode and validate destination.
         let dest = match req.headers().typed_get::<davheaders::Destination>() {
-            Some(dest) => WebPath::from_str(&dest.0, &self.prefix)?,
+            Some(dest) => DavPath::from_str(&dest.0, &self.prefix)?,
             None => return Err(StatusCode::BAD_REQUEST.into()),
         };
 

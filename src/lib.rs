@@ -146,7 +146,7 @@ mod localfs_windows;
 pub mod ls;
 pub mod memfs;
 pub mod memls;
-pub mod webpath;
+pub mod davpath;
 
 pub(crate) use crate::davhandler::DavInner;
 pub(crate) use crate::errors::{DavError, DavResult};

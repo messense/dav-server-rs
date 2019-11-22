@@ -7,7 +7,7 @@ use http::{self, Method};
 use crate::davheaders::{self, ETag};
 use crate::fs::{DavFileSystem, DavMetaData};
 use crate::ls::DavLockSystem;
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 
 type Request = http::Request<()>;
 
@@ -117,7 +117,7 @@ pub(crate) async fn dav_if_match<'a>(
     req: &'a Request,
     fs: &'a Box<dyn DavFileSystem + 'static>,
     ls: &'a Option<Box<dyn DavLockSystem + 'static>>,
-    path: &'a WebPath,
+    path: &'a DavPath,
 ) -> (bool, Vec<String>)
 {
     let mut tokens: Vec<String> = Vec::new();
@@ -144,13 +144,13 @@ pub(crate) async fn dav_if_match<'a>(
         }
 
         // find the resource that this list is about.
-        let mut pa: Option<WebPath> = None;
+        let mut pa: Option<DavPath> = None;
         let (p, valid) = match iflist.resource_tag {
             Some(ref url) => {
-                match WebPath::from_url(url, std::str::from_utf8(&path.prefix).unwrap()) {
+                match DavPath::from_url(url, std::str::from_utf8(&path.prefix).unwrap()) {
                     Ok(p) => {
-                        // anchor webpath in pa.
-                        let p: &WebPath = pa.get_or_insert(p);
+                        // anchor davpath in pa.
+                        let p: &DavPath = pa.get_or_insert(p);
                         (p, true)
                     },
                     Err(_) => (path, false),
@@ -218,7 +218,7 @@ pub(crate) async fn if_match<'a>(
     meta: Option<&'a Box<dyn DavMetaData + 'static>>,
     fs: &'a Box<dyn DavFileSystem + 'static>,
     ls: &'a Option<Box<dyn DavLockSystem + 'static>>,
-    path: &'a WebPath,
+    path: &'a DavPath,
 ) -> Option<StatusCode>
 {
     match dav_if_match(req, fs, ls, path).await {
@@ -234,7 +234,7 @@ pub(crate) async fn if_match_get_tokens<'a>(
     meta: Option<&'a Box<dyn DavMetaData + 'static>>,
     fs: &'a Box<dyn DavFileSystem + 'static>,
     ls: &'a Option<Box<dyn DavLockSystem + 'static>>,
-    path: &'a WebPath,
+    path: &'a DavPath,
 ) -> Result<Vec<String>, StatusCode>
 {
     if let Some(code) = http_if_match(req, meta) {

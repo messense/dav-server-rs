@@ -19,7 +19,7 @@ use http::StatusCode;
 
 use crate::fs::*;
 use crate::tree;
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 
 type Tree = tree::Tree<Vec<u8>, MemFsNode>;
 
@@ -118,7 +118,7 @@ impl Clone for MemFs {
 }
 
 impl DavFileSystem for MemFs {
-    fn metadata<'a>(&'a self, path: &'a WebPath) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<Box<dyn DavMetaData>> {
         async move {
             let tree = &*self.tree.lock().unwrap();
             let node_id = tree.lookup(path.as_bytes())?;
@@ -130,7 +130,7 @@ impl DavFileSystem for MemFs {
 
     fn read_dir<'a>(
         &'a self,
-        path: &'a WebPath,
+        path: &'a DavPath,
         _meta: ReadDirMeta,
     ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>>
     {
@@ -152,7 +152,7 @@ impl DavFileSystem for MemFs {
         .boxed()
     }
 
-    fn open<'a>(&'a self, path: &'a WebPath, options: OpenOptions) -> FsFuture<Box<dyn DavFile>> {
+    fn open<'a>(&'a self, path: &'a DavPath, options: OpenOptions) -> FsFuture<Box<dyn DavFile>> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             self.do_open(tree, path.as_bytes(), options)
@@ -160,7 +160,7 @@ impl DavFileSystem for MemFs {
         .boxed()
     }
 
-    fn create_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
+    fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
         async move {
             debug!("FS: create_dir {:?}", path);
             let tree = &mut *self.tree.lock().unwrap();
@@ -173,7 +173,7 @@ impl DavFileSystem for MemFs {
         .boxed()
     }
 
-    fn remove_file<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
+    fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             let parent_id = tree.lookup_parent(path.as_bytes())?;
@@ -185,7 +185,7 @@ impl DavFileSystem for MemFs {
         .boxed()
     }
 
-    fn remove_dir<'a>(&'a self, path: &'a WebPath) -> FsFuture<()> {
+    fn remove_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             let parent_id = tree.lookup_parent(path.as_bytes())?;
@@ -197,7 +197,7 @@ impl DavFileSystem for MemFs {
         .boxed()
     }
 
-    fn rename<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
+    fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             let node_id = tree.lookup(from.as_bytes())?;
@@ -211,7 +211,7 @@ impl DavFileSystem for MemFs {
         .boxed()
     }
 
-    fn copy<'a>(&'a self, from: &'a WebPath, to: &'a WebPath) -> FsFuture<()> {
+    fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
 
@@ -239,13 +239,13 @@ impl DavFileSystem for MemFs {
         .boxed()
     }
 
-    fn have_props<'a>(&'a self, _path: &'a WebPath) -> BoxFuture<'a, bool> {
+    fn have_props<'a>(&'a self, _path: &'a DavPath) -> BoxFuture<'a, bool> {
         future::ready(true).boxed()
     }
 
     fn patch_props<'a>(
         &'a self,
-        path: &'a WebPath,
+        path: &'a DavPath,
         mut patch: Vec<(bool, DavProp)>,
     ) -> FsFuture<Vec<(StatusCode, DavProp)>>
     {
@@ -278,7 +278,7 @@ impl DavFileSystem for MemFs {
         .boxed()
     }
 
-    fn get_props<'a>(&'a self, path: &'a WebPath, do_content: bool) -> FsFuture<Vec<DavProp>> {
+    fn get_props<'a>(&'a self, path: &'a DavPath, do_content: bool) -> FsFuture<Vec<DavProp>> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             let node_id = tree.lookup(path.as_bytes())?;
@@ -292,7 +292,7 @@ impl DavFileSystem for MemFs {
         .boxed()
     }
 
-    fn get_prop<'a>(&'a self, path: &'a WebPath, prop: DavProp) -> FsFuture<Vec<u8>> {
+    fn get_prop<'a>(&'a self, path: &'a DavPath, prop: DavProp) -> FsFuture<Vec<u8>> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             let node_id = tree.lookup(path.as_bytes())?;

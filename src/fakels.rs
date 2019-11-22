@@ -11,7 +11,7 @@ use uuid::Uuid;
 use xmltree::Element;
 
 use crate::ls::*;
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 
 /// Fake locksystem implementation.
 #[derive(Debug, Clone)]
@@ -40,7 +40,7 @@ fn tm_limit(d: Option<Duration>) -> Duration {
 impl DavLockSystem for FakeLs {
     fn lock(
         &self,
-        path: &WebPath,
+        path: &DavPath,
         principal: Option<&str>,
         owner: Option<&Element>,
         timeout: Option<Duration>,
@@ -69,11 +69,11 @@ impl DavLockSystem for FakeLs {
         Ok(lock)
     }
 
-    fn unlock(&self, _path: &WebPath, _token: &str) -> Result<(), ()> {
+    fn unlock(&self, _path: &DavPath, _token: &str) -> Result<(), ()> {
         Ok(())
     }
 
-    fn refresh(&self, path: &WebPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()> {
+    fn refresh(&self, path: &DavPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()> {
         debug!("refresh lock {}", token);
         let v: Vec<&str> = token.split('/').collect();
         let deep = v.len() > 1 && v[1] == "I";
@@ -97,7 +97,7 @@ impl DavLockSystem for FakeLs {
 
     fn check(
         &self,
-        _path: &WebPath,
+        _path: &DavPath,
         _principal: Option<&str>,
         _ignore_principal: bool,
         _deep: bool,
@@ -107,11 +107,11 @@ impl DavLockSystem for FakeLs {
         Ok(())
     }
 
-    fn discover(&self, _path: &WebPath) -> Vec<DavLock> {
+    fn discover(&self, _path: &DavPath) -> Vec<DavLock> {
         Vec::new()
     }
 
-    fn delete(&self, _path: &WebPath) -> Result<(), ()> {
+    fn delete(&self, _path: &DavPath) -> Result<(), ()> {
         Ok(())
     }
 }

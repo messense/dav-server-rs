@@ -14,10 +14,10 @@ use xml::EmitterConfig;
 
 use crate::async_stream::AsyncStream;
 use crate::body::Body;
-use crate::webpath::WebPath;
+use crate::davpath::DavPath;
 use crate::DavError;
 
-type Sender = crate::async_stream::Sender<(WebPath, StatusCode), DavError>;
+type Sender = crate::async_stream::Sender<(DavPath, StatusCode), DavError>;
 
 pub(crate) struct MultiError(Sender);
 
@@ -28,7 +28,7 @@ impl MultiError {
 
     pub async fn add_status<'a>(
         &'a mut self,
-        path: &'a WebPath,
+        path: &'a DavPath,
         status: impl Into<DavError> + 'static,
     ) -> Result<(), futures::channel::mpsc::SendError>
     {
@@ -79,7 +79,7 @@ where S: Into<xml::name::Name<'b>> {
     Ok(())
 }
 
-fn write_response(mut w: &mut XmlWriter, path: &WebPath, sc: StatusCode) -> Result<(), DavError> {
+fn write_response(mut w: &mut XmlWriter, path: &DavPath, sc: StatusCode) -> Result<(), DavError> {
     w.write(XmlWEvent::start_element("D:response"))?;
     let p = path.as_url_string_with_prefix();
     write_elem(&mut w, "D:href", &p)?;
@@ -88,8 +88,8 @@ fn write_response(mut w: &mut XmlWriter, path: &WebPath, sc: StatusCode) -> Resu
     Ok(())
 }
 
-pub(crate) async fn multi_error<S>(req_path: WebPath, status_stream: S) -> Result<Response<Body>, DavError>
-where S: Stream<Item = Result<(WebPath, StatusCode), DavError>> + Send + 'static {
+pub(crate) async fn multi_error<S>(req_path: DavPath, status_stream: S) -> Result<Response<Body>, DavError>
+where S: Stream<Item = Result<(DavPath, StatusCode), DavError>> + Send + 'static {
     // read the first path/status item
     let mut status_stream = Box::pin(status_stream);
     let (path, status) = match status_stream.next().await {
