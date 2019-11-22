@@ -1,4 +1,4 @@
-//! Use an [async closure][async] to produce items for a stream.
+//! Use an [async block][async] to produce items for a stream.
 //!
 //! Example:
 //!
