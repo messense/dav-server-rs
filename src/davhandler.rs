@@ -24,6 +24,10 @@ use crate::ls::*;
 use crate::DavResult;
 
 /// The webdav handler struct.
+///
+/// The `new` and `build` etc methods are used to instantiate a handler.
+///
+/// The `handle` and `handle_with` methods are the methods that do the actual work.
 #[derive(Clone)]
 pub struct DavHandler {
     config: Arc<DavConfig>,

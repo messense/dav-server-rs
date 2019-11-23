@@ -13,7 +13,7 @@
 //! is an adapter for the local filesystem (`localfs`), and an adapter for an
 //! in-memory filesystem (`memfs`).
 //!
-//! So this library can be used as a handler for HTTP servers like [hyper], `actix`,
+//! So this library can be used as a handler with HTTP servers like [hyper], `actix`,
 //! `warp`, etc. Either as a correct and complete HTTP handler for files (GET/HEAD)
 //! or as a handler for the entire Webdav protocol. In the latter case, you can
 //! mount it as a remote filesystem: Linux, Windows, MacOS can all mount Webdav filesystems.
