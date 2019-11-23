@@ -163,7 +163,7 @@ impl DavHandler {
     ///
     /// Or, the default config has no locksystem, and you pass in
     /// a fake locksystem (`FakeLs`) because this is a request from a
-    /// windows or osx client that needs to see locking support.
+    /// windows or macos client that needs to see locking support.
     pub async fn handle_with<ReqBody, ReqData, ReqError>(
         &self,
         config: DavConfig,

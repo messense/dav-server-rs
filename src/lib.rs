@@ -13,24 +13,23 @@
 //! is an adapter for the local filesystem (`localfs`), and an adapter for an
 //! in-memory filesystem (`memfs`).
 //!
-//! So this library can be used as a handler for HTTP servers like `hyper`, `actix`,
+//! So this library can be used as a handler for HTTP servers like [hyper], `actix`,
 //! `warp`, etc. Either as a correct and complete HTTP handler for files (GET/HEAD)
-//! or as a handler for the complete Webdav protocol. In the last case, you can
-//! mount it as a remote filesystem: Linux, Windows, MacOS all have support built-in
-//! to mount Webdav filesystems.
+//! or as a handler for the entire Webdav protocol. In the latter case, you can
+//! mount it as a remote filesystem: Linux, Windows, MacOS can all mount Webdav filesystems.
 //!
-//! ## Interface.
+//! ## Backend interfaces.
 //!
-//! It has an interface similar to the Go x/net/webdav package:
+//! The backend interfaces are similar to the ones from the Go `x/net/webdav package`:
 //!
-//! - the library contains an [HTTP handler][DavHandler].
+//! - the library contains a [HTTP handler][DavHandler].
 //! - you supply a [filesystem][DavFileSystem] for backend storage, which can optionally
 //!   implement reading/writing [DAV properties][DavProp].
 //! - you can supply a [locksystem][DavLockSystem] that handles webdav locks.
 //!
-//! With some glue code, this handler can be used from HTTP server
-//! libraries/frameworks such as [hyper].
-//! (See [examples/hyper.rs][hyper_example]).
+//! The handler in the library itself accepts/implements several traits such as
+//! a `Stream` of `Byte`s and `http_body::Body` so that it can work with several server
+//! libraries/frameworks like [hyper]. (See [examples/hyper.rs][hyper_example]).
 //!
 //! ## Implemented standards.
 //!
@@ -60,12 +59,12 @@
 //! Also included are two locksystems:
 //!
 //! - [`MemLs`]: ephemeral in-memory locksystem.
-//! - [`FakeLs`]: fake locksystem. just enough LOCK/UNLOCK support for OSX/Windows.
+//! - [`FakeLs`]: fake locksystem. just enough LOCK/UNLOCK support for MacOS/Windows.
 //!
 //! ## Example.
 //!
 //! Example server that serves the /tmp directory in r/w mode. You should be
-//! able to mount this network share from Linux, OSX and Windows.
+//! able to mount this network share from Linux, MacOS and Windows.
 //!
 //! ```no_run
 //! use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};

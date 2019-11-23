@@ -748,7 +748,7 @@ impl PropWriter {
                         let mut qc = qc;
                         if let Ok((used, _)) = self.get_quota(&mut qc, path, meta).await {
                             let used = if self.useragent.contains("WebDAVFS") {
-                                // Need this on OSX, otherwise the value is off
+                                // Need this on MacOs, otherwise the value is off
                                 // by a factor of 10 or so .. ?!?!!?
                                 format!("{:014}", used)
                             } else {
