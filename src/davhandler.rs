@@ -51,6 +51,61 @@ pub struct DavConfig {
     pub hide_symlinks: Option<bool>,
 }
 
+impl DavConfig {
+    /// Create a new configuration builder.
+    pub fn new() -> DavConfig {
+        DavConfig::default()
+    }
+
+    /// Use the configuration that was built to generate a DavConfig.
+    pub fn build_handler(self) -> DavHandler {
+        DavHandler{ config: Arc::new(self) }
+    }
+
+    /// Prefix to be stripped off before translating the rest of
+    /// the request path to a filesystem path.
+    pub fn strip_prefix(self, prefix: String) -> Self {
+        let mut this = self;
+        this.prefix = Some(prefix);
+        this
+    }
+
+    /// Set the filesystem to use.
+    pub fn filesystem(self, fs: Box<dyn DavFileSystem>) -> Self {
+        let mut this = self;
+        this.fs = Some(fs);
+        this
+    }
+
+    /// Set the locksystem to use.
+    pub fn locksystem(self, ls: Box<dyn DavLockSystem>) -> Self {
+        let mut this = self;
+        this.ls = Some(ls);
+        this
+    }
+
+    /// Which methods to allow (default is all methods).
+    pub fn allow_methods(self, allow: AllowedMethods) -> Self {
+        let mut this = self;
+        this.allow = Some(allow);
+        this
+    }
+
+    /// Set the name of the "webdav principal". This will be the owner of any created locks.
+    pub fn principal(self, principal: String) -> Self {
+        let mut this = self;
+        this.principal = Some(principal);
+        this
+    }
+
+    /// Hide symbolic links (default is true)
+    pub fn hide_symlinks(self, hide: bool) -> Self {
+        let mut this = self;
+        this.hide_symlinks = Some(hide);
+        this
+    }
+}
+
 // The actual inner struct.
 //
 // At the start of the request, DavConfig is used to generate
@@ -109,35 +164,18 @@ impl Clone for DavInner {
 
 impl DavHandler {
     /// Create a new `DavHandler`.
-    /// - `prefix`: URL prefix to be stripped off.
-    /// - `fs:` The filesystem backend.
-    /// - `ls:` Optional locksystem backend
-    pub fn new(
-        prefix: Option<&str>,
-        fs: Box<dyn DavFileSystem>,
-        ls: Option<Box<dyn DavLockSystem>>,
-    ) -> DavHandler
-    {
-        let config = DavConfig {
-            prefix:        prefix.map(|s| s.to_string()),
-            fs:            Some(fs),
-            ls:            ls,
-            allow:         None,
-            principal:     None,
-            hide_symlinks: None,
-        };
-        DavHandler {
-            config: Arc::new(config),
-        }
+    ///
+    /// This returns a DavHandler with an empty configuration. That's only
+    /// useful if you use the `handle_with` method instead of `handle`.
+    /// Normally you should create a new `DavHandler` using `DavHandler::build`
+    /// and configure at least a filesystem.
+    pub fn new() -> DavHandler {
+        DavHandler{ config: Arc::new(DavConfig::default()) }
     }
 
-    /// Create a new `DavHandler` with a more detailed configuration.
-    ///
-    /// For example, pass in a specific `AllowedMethods` set.
-    pub fn new_with(config: DavConfig) -> DavHandler {
-        DavHandler {
-            config: Arc::new(config),
-        }
+    /// Return a configuration builder.
+    pub fn builder() -> DavConfig {
+        DavConfig::new()
     }
 
     /// Handle a webdav request.

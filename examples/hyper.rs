@@ -6,7 +6,10 @@ async fn main() {
     let dir = "/tmp";
     let addr = ([127, 0, 0, 1], 4918).into();
 
-    let dav_server = DavHandler::new(None, LocalFs::new(dir, false, false, false), Some(FakeLs::new()));
+    let dav_server = DavHandler::builder()
+        .filesystem(LocalFs::new(dir, false, false, false))
+        .locksystem(FakeLs::new())
+        .build_handler();
 
     let make_service = hyper::service::make_service_fn(move |_| {
         let dav_server = dav_server.clone();

@@ -19,7 +19,7 @@ use hyper;
 
 use headers::{authorization::Basic, Authorization, HeaderMapExt};
 
-use webdav_handler::{body::Body, fakels, localfs, ls::DavLockSystem, memfs, memls, DavConfig, DavHandler};
+use webdav_handler::{body::Body, fakels, localfs, memfs, memls, DavConfig, DavHandler};
 
 #[derive(Clone)]
 struct Server {
@@ -29,21 +29,20 @@ struct Server {
 
 impl Server {
     pub fn new(directory: String, memls: bool, fakels: bool, auth: bool) -> Self {
-        let ls: Option<Box<dyn DavLockSystem>> = if fakels {
-            Some(fakels::FakeLs::new())
-        } else if memls {
-            Some(memls::MemLs::new())
+        let mut config = DavHandler::builder();
+        if directory != "" {
+            config = config.filesystem(localfs::LocalFs::new(directory, true, true, true));
         } else {
-            None
+            config = config.filesystem(memfs::MemFs::new());
         };
-        let dh = if directory != "" {
-            let fs = localfs::LocalFs::new(directory, true, true, true);
-            DavHandler::new(None, fs, ls)
-        } else {
-            let fs = memfs::MemFs::new();
-            DavHandler::new(None, fs, ls)
-        };
-        Server { dh, auth }
+        if fakels {
+            config = config.locksystem(fakels::FakeLs::new());
+        }
+        if memls {
+            config = config.locksystem(memls::MemLs::new());
+        }
+
+        Server { dh: config.build_handler(), auth }
     }
 
     async fn handle(&self, req: hyper::Request<hyper::Body>) -> io::Result<hyper::Response<Body>> {
