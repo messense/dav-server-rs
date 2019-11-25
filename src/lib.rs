@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/webdav-handler/0.2.0-alpha.2")]
+#![doc(html_root_url = "https://docs.rs/webdav-handler/0.2.0-alpha.3")]
 //! ## Generic async HTTP/Webdav handler
 //!
 //! [`Webdav`] (RFC4918) is defined as
@@ -13,10 +13,10 @@
 //! is an adapter for the local filesystem (`localfs`), and an adapter for an
 //! in-memory filesystem (`memfs`).
 //!
-//! So this library can be used as a handler with HTTP servers like [hyper], `actix`,
+//! So this library can be used as a handler with HTTP servers like [hyper],
 //! `warp`, etc. Either as a correct and complete HTTP handler for files (GET/HEAD)
 //! or as a handler for the entire Webdav protocol. In the latter case, you can
-//! mount it as a remote filesystem: Linux, Windows, MacOS can all mount Webdav filesystems.
+//! mount it as a remote filesystem: Linux, Windows, macOS can all mount Webdav filesystems.
 //!
 //! ## Backend interfaces.
 //!
@@ -59,12 +59,12 @@
 //! Also included are two locksystems:
 //!
 //! - [`MemLs`]: ephemeral in-memory locksystem.
-//! - [`FakeLs`]: fake locksystem. just enough LOCK/UNLOCK support for MacOS/Windows.
+//! - [`FakeLs`]: fake locksystem. just enough LOCK/UNLOCK support for macOS/Windows.
 //!
 //! ## Example.
 //!
 //! Example server that serves the /tmp directory in r/w mode. You should be
-//! able to mount this network share from Linux, MacOS and Windows.
+//! able to mount this network share from Linux, macOS and Windows.
 //!
 //! ```no_run
 //! use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};

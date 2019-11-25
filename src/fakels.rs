@@ -1,6 +1,6 @@
-//! Fake locksystem (to make Windows/MacOS work).
+//! Fake locksystem (to make Windows/macOS work).
 //!
-//! Several Webdav clients, like the ones on Windows and MacOS, require just
+//! Several Webdav clients, like the ones on Windows and macOS, require just
 //! basic functionality to mount the Webdav server in read-only mode. However
 //! to be able to mount the Webdav server in read-write mode, they require the
 //! Webdav server to have Webdav class 2 compliance - that means, LOCK/UNLOCK

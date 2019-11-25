@@ -18,24 +18,23 @@ the HTTP/Webdav protocol to the filesystem. Or actually, "a" filesystem. Include
 is an adapter for the local filesystem (`localfs`), and an adapter for an
 in-memory filesystem (`memfs`).
 
-So this library can be used as a handler for HTTP servers like `hyper`, `actix`,
+So this library can be used as a handler with HTTP servers like [hyper],
 `warp`, etc. Either as a correct and complete HTTP handler for files (GET/HEAD)
-or as a handler for the complete Webdav protocol. In the last case, you can
-mount it as a remote filesystem: Linux, Windows, MacOS all have support built-in
-to mount Webdav filesystems.
+or as a handler for the entire Webdav protocol. In the latter case, you can
+mount it as a remote filesystem: Linux, Windows, macOS can all mount Webdav filesystems.
 
-### Interface.
+### Backend interfaces.
 
-It has an interface similar to the Go x/net/webdav package:
+The backend interfaces are similar to the ones from the Go `x/net/webdav package`:
 
-- the library contains an [HTTP handler][DavHandler].
+- the library contains a [HTTP handler][DavHandler].
 - you supply a [filesystem][DavFileSystem] for backend storage, which can optionally
   implement reading/writing [DAV properties][DavProp].
 - you can supply a [locksystem][DavLockSystem] that handles webdav locks.
 
-With some glue code, this handler can be used from HTTP server
-libraries/frameworks such as [hyper].
-(See [examples/hyper.rs][hyper_example]).
+The handler in the library itself accepts/implements several traits such as
+a `Stream` of `Byte`s and `http_body::Body` so that it can work with several server
+libraries/frameworks like [hyper]. (See [examples/hyper.rs][hyper_example]).
 
 ### Implemented standards.
 
@@ -65,12 +64,12 @@ Included are two filesystems:
 Also included are two locksystems:
 
 - [`MemLs`]: ephemeral in-memory locksystem.
-- [`FakeLs`]: fake locksystem. just enough LOCK/UNLOCK support for OSX/Windows.
+- [`FakeLs`]: fake locksystem. just enough LOCK/UNLOCK support for macOS/Windows.
 
 ### Example.
 
 Example server that serves the /tmp directory in r/w mode. You should be
-able to mount this network share from Linux, OSX and Windows.
+able to mount this network share from Linux, macOS and Windows.
 
 ```rust
 use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
@@ -80,7 +79,11 @@ async fn main() {
     let dir = "/tmp";
     let addr = ([127, 0, 0, 1], 4918).into();
 
-    let dav_server = DavHandler::new(None, LocalFs::new(dir, false, false, false), Some(FakeLs::new()));
+    let dav_server = DavHandler::builder()
+        .filesystem(LocalFs::new(dir, false, false, false))
+        .locksystem(FakeLs::new())
+        .build_handler();
+
     let make_service = hyper::service::make_service_fn(move |_| {
         let dav_server = dav_server.clone();
         async move {
@@ -101,16 +104,16 @@ async fn main() {
         .map_err(|e| eprintln!("server error: {}", e));
 }
 ```
-[DavHandler]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/struct.DavHandler.html
-[DavFileSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/fs/index.html
-[DavLockSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/ls/index.html
-[DavProp]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/fs/struct.DavProp.html
+[DavHandler]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/struct.DavHandler.html
+[DavFileSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/fs/index.html
+[DavLockSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/ls/index.html
+[DavProp]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/fs/struct.DavProp.html
 [`WebDav`]: https://tools.ietf.org/html/rfc4918
 [RFC4918]: https://tools.ietf.org/html/rfc4918
-[`MemLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/memls/index.html
-[`MemFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/memfs/index.html
-[`LocalFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/localfs/index.html
-[`FakeLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.1/webdav_handler/fakels/index.html
+[`MemLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/memls/index.html
+[`MemFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/memfs/index.html
+[`LocalFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/localfs/index.html
+[`FakeLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/fakels/index.html
 [README_litmus]: https://github.com/miquels/webdav-handler-rs/blob/master/README.litmus-test.md
 [hyper_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/hyper.rs
 [PartialPut]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
