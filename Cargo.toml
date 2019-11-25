@@ -51,12 +51,9 @@ pin-utils = "0.1.0-alpha.4"
 tokio-executor = "=0.2.0-alpha.6"
 
 [dev-dependencies]
-#actix = "0.7.9"
-#actix-web = "0.7.19"
-#tokio-current-thread = "0.1.6"
+#actix-web = "2.0.0-alpha.1"
 clap = "2.33.0"
 env_logger = "0.6.1"
 failure = "0.1.5"
 hyper = "=0.13.0-alpha.4"
 tokio = "=0.2.0-alpha.6"
-

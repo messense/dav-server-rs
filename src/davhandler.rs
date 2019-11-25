@@ -238,6 +238,7 @@ impl DavHandler {
     /// Handles a request with a `Stream` body instead of a `http_body::Body`.
     /// Used with webserver frameworks that have not
     /// opted to use the `http_body` crate just yet.
+    #[doc(hidden)]
     pub async fn handle_stream<ReqBody, ReqData, ReqError>(
         &self,
         req: Request<ReqBody>,
@@ -256,6 +257,7 @@ impl DavHandler {
     }
 
     /// Handles a request with a `Stream` body instead of a `http_body::Body`.
+    #[doc(hidden)]
     pub async fn handle_stream_with<ReqBody, ReqData, ReqError>(
         &self,
         config: DavConfig,
