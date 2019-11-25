@@ -124,7 +124,6 @@ extern crate lazy_static;
 
 #[doc(hidden)]
 pub mod async_stream;
-pub mod body;
 mod conditional;
 mod davhandler;
 mod davheaders;
@@ -137,20 +136,22 @@ mod handle_mkcol;
 mod handle_options;
 mod handle_props;
 mod handle_put;
+mod localfs_macos;
+mod localfs_windows;
 mod multierror;
 mod tree;
 mod util;
+mod voidfs;
 mod xmltree_ext;
 
+pub mod body;
+pub mod davpath;
 pub mod fakels;
 pub mod fs;
 pub mod localfs;
-mod localfs_macos;
-mod localfs_windows;
 pub mod ls;
 pub mod memfs;
 pub mod memls;
-pub mod davpath;
 
 pub(crate) use crate::davhandler::DavInner;
 pub(crate) use crate::errors::{DavError, DavResult};

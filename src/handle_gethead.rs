@@ -30,18 +30,20 @@ const BOUNDARY_END: &str = "\n--BOUNDARY--\n";
 const READ_BUF_SIZE: usize = 16384;
 
 impl crate::DavInner {
-    pub(crate) async fn handle_get(self, req: Request<()>) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_get(&self, req: Request<()>) -> DavResult<Response<Body>> {
+        //let filesystem = self.fs.as_ref().ok_or(DavError::Status(StatusCode::METHOD_NOT_ALLOWED))?;
+        let filesystem = &self.fs;
         let path = self.path(&req);
 
         // check if it's a directory.
         let head = req.method() == &http::Method::HEAD;
-        let meta = self.fs.metadata(&path).await?;
+        let meta = filesystem.metadata(&path).await?;
         if meta.is_dir() {
-            return self.handle_dirlist(req, head).await;
+            return self.handle_dirlist(req, head, filesystem).await;
         }
 
         // double check, is it a regular file.
-        let mut file = self.fs.open(&path, OpenOptions::read()).await?;
+        let mut file = filesystem.open(&path, OpenOptions::read()).await?;
         let meta = file.metadata().await?;
         if !meta.is_file() {
             return Err(DavError::Status(StatusCode::METHOD_NOT_ALLOWED));
@@ -75,7 +77,7 @@ impl crate::DavInner {
         res.headers_mut().typed_insert(headers::AcceptRanges::bytes());
 
         // handle the if-headers.
-        if let Some(s) = conditional::if_match(&req, Some(&meta), &self.fs, &self.ls, &path).await {
+        if let Some(s) = conditional::if_match(&req, Some(&meta), filesystem, &self.ls, &path).await {
             *res.status_mut() = s;
             no_body = true;
             do_range = false;
@@ -224,7 +226,7 @@ impl crate::DavInner {
         Ok(res)
     }
 
-    pub(crate) async fn handle_dirlist(self, req: Request<()>, head: bool) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_dirlist(&self, req: Request<()>, head: bool, filesystem: &Box<dyn DavFileSystem>) -> DavResult<Response<Body>> {
         let mut res = Response::new(Body::empty());
 
         // This is a directory. If the path doesn't end in "/", send a redir.
@@ -250,7 +252,7 @@ impl crate::DavInner {
         }
 
         // read directory or bail.
-        let mut entries = self.fs.read_dir(&path, ReadDirMeta::Data).await?;
+        let mut entries = filesystem.read_dir(&path, ReadDirMeta::Data).await?;
 
         // start output
         res.headers_mut()

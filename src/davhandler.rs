@@ -6,21 +6,20 @@ use std::error::Error as StdError;
 use std::io;
 use std::sync::Arc;
 
-use bytes::buf::Buf;
-
-use futures::stream::{Stream, StreamExt};
-
+use bytes::{self, Bytes, buf::Buf, buf::FromBuf, buf::IntoBuf};
+use futures::stream::{Stream, StreamExt, TryStreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
 use crate::body::{Body, InBody};
 use crate::davheaders;
-use crate::util::{dav_method, notfound, AllowedMethods, Method};
+use crate::util::{dav_method, AllowedMethods, Method};
 use crate::davpath::DavPath;
 
 use crate::errors::DavError;
 use crate::fs::*;
 use crate::ls::*;
+use crate::voidfs::{VoidFs, is_voidfs};
 use crate::DavResult;
 
 /// The webdav handler struct.
@@ -104,6 +103,17 @@ impl DavConfig {
         this.hide_symlinks = Some(hide);
         this
     }
+
+    fn merge(&self, new: DavConfig) -> DavConfig {
+        DavConfig {
+            prefix:        new.prefix.or(self.prefix.clone()),
+            fs:            new.fs.or(self.fs.clone()),
+            ls:            new.ls.or(self.ls.clone()),
+            allow:         new.allow.or(self.allow.clone()),
+            principal:     new.principal.or(self.principal.clone()),
+            hide_symlinks: new.hide_symlinks.or(self.hide_symlinks.clone()),
+        }
+    }
 }
 
 // The actual inner struct.
@@ -123,7 +133,7 @@ impl From<DavConfig> for DavInner {
     fn from(cfg: DavConfig) -> Self {
         DavInner {
             prefix:        cfg.prefix.unwrap_or("".to_string()),
-            fs:            cfg.fs.unwrap(),
+            fs:            cfg.fs.unwrap_or(VoidFs::new()),
             ls:            cfg.ls,
             allow:         cfg.allow,
             principal:     cfg.principal,
@@ -168,7 +178,7 @@ impl DavHandler {
     /// This returns a DavHandler with an empty configuration. That's only
     /// useful if you use the `handle_with` method instead of `handle`.
     /// Normally you should create a new `DavHandler` using `DavHandler::build`
-    /// and configure at least a filesystem.
+    /// and configure at least the filesystem, and probably the strip_prefix.
     pub fn new() -> DavHandler {
         DavHandler{ config: Arc::new(DavConfig::default()) }
     }
@@ -192,11 +202,12 @@ impl DavHandler {
         ReqError: StdError + Send + Sync + 'static,
         ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
     {
-        if self.config.fs.is_none() {
-            return Ok(notfound());
-        }
+        let (req, body) = {
+            let (parts, body) = req.into_parts();
+            (Request::from_parts(parts, ()), InBody::from(body))
+        };
         let inner = DavInner::from(&*self.config);
-        inner.handle(req).await
+        inner.handle(req, body).await
     }
 
     /// Handle a webdav request, overriding parts of the config.
@@ -216,20 +227,51 @@ impl DavHandler {
         ReqError: StdError + Send + Sync + 'static,
         ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
     {
-        let orig = &*self.config;
-        let newconf = DavConfig {
-            prefix:        config.prefix.or(orig.prefix.clone()),
-            fs:            config.fs.or(orig.fs.clone()),
-            ls:            config.ls.or(orig.ls.clone()),
-            allow:         config.allow.or(orig.allow.clone()),
-            principal:     config.principal.or(orig.principal.clone()),
-            hide_symlinks: config.hide_symlinks.or(orig.hide_symlinks.clone()),
+        let (req, body) = {
+            let (parts, body) = req.into_parts();
+            (Request::from_parts(parts, ()), InBody::from(body))
         };
-        if newconf.fs.is_none() {
-            return Ok(notfound());
-        }
-        let inner = DavInner::from(newconf);
-        inner.handle(req).await
+        let inner = DavInner::from(self.config.merge(config));
+        inner.handle(req, body).await
+    }
+
+    /// Handles a request with a `Stream` body instead of a `http_body::Body`.
+    /// Used with webserver frameworks that have not
+    /// opted to use the `http_body` crate just yet.
+    pub async fn handle_stream<ReqBody, ReqData, ReqError>(
+        &self,
+        req: Request<ReqBody>,
+    ) -> io::Result<Response<Body>>
+    where
+        ReqData: IntoBuf + Send,
+        ReqError: StdError + Send + Sync + 'static,
+        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send,
+    {
+        let (req, body) = {
+            let (parts, body) = req.into_parts();
+            (Request::from_parts(parts, ()), body.map_ok(|buf| Bytes::from_buf(buf.into_buf())))
+        };
+        let inner = DavInner::from(&*self.config);
+        inner.handle(req, body).await
+    }
+
+    /// Handles a request with a `Stream` body instead of a `http_body::Body`.
+    pub async fn handle_stream_with<ReqBody, ReqData, ReqError>(
+        &self,
+        config: DavConfig,
+        req: Request<ReqBody>,
+    ) -> io::Result<Response<Body>>
+    where
+        ReqData: IntoBuf + Send,
+        ReqError: StdError + Send + Sync + 'static,
+        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send,
+    {
+        let (req, body) = {
+            let (parts, body) = req.into_parts();
+            (Request::from_parts(parts, ()), body.map_ok(|buf| Bytes::from_buf(buf.into_buf())))
+        };
+        let inner = DavInner::from(self.config.merge(config));
+        inner.handle(req, body).await
     }
 }
 
@@ -271,7 +313,7 @@ impl DavInner {
         max_size: usize,
     ) -> DavResult<Vec<u8>>
     where
-        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Send + 'a,
+        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send + 'a,
         ReqError: StdError + Send + Sync + 'static,
     {
         let mut data = Vec::new();
@@ -289,17 +331,11 @@ impl DavInner {
     }
 
     // internal dispatcher.
-    async fn handle<ReqBody, ReqData, ReqError>(self, req: Request<ReqBody>) -> io::Result<Response<Body>>
+    async fn handle<ReqBody, ReqError>(self, req: Request<()>, body: ReqBody) -> io::Result<Response<Body>>
     where
-        ReqData: Buf + Send,
+        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
     {
-        let (req, body) = {
-            let (parts, body) = req.into_parts();
-            (Request::from_parts(parts, ()), InBody::from(body))
-        };
-
         let is_ms = req
             .headers()
             .get("user-agent")
@@ -343,9 +379,9 @@ impl DavInner {
     }
 
     // internal dispatcher part 2.
-    async fn handle2<ReqBody, ReqError>(self, req: Request<()>, body: ReqBody) -> DavResult<Response<Body>>
+    async fn handle2<ReqBody, ReqError>(mut self, req: Request<()>, body: ReqBody) -> DavResult<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Send,
+        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
         // debug when running the webdav litmus tests.
@@ -363,6 +399,23 @@ impl DavInner {
                 return Err(e);
             },
         };
+
+        // See if method makes sense if we do not have a fileystem.
+        if is_voidfs(&self.fs) {
+            match method {
+                Method::Options => {
+                    if self.allow.as_ref().map(|a| a.allowed(Method::Options)).unwrap_or(true) {
+                        let mut a = AllowedMethods::none();
+                        a.add(Method::Options);
+                        self.allow = Some(a);
+                    }
+                },
+                _ => {
+                    debug!("no filesystem: method not allowed on request {}", req.uri());
+                    return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
+                }
+            }
+        }
 
         // see if method is allowed.
         if let Some(ref a) = self.allow {
