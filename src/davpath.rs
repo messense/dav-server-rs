@@ -177,7 +177,7 @@ impl PartialEq for DavPath {
 
 impl DavPath {
     /// from URL encoded strings: path and prefix.
-    pub fn from_str(src: &str, prefix: &str) -> Result<DavPath, ParseError> {
+    pub(crate) fn from_str(src: &str, prefix: &str) -> Result<DavPath, ParseError> {
         let b = src.as_bytes();
         let path = normalize_path(b)?;
         let mut prefix = prefix.as_bytes();
@@ -197,7 +197,7 @@ impl DavPath {
     }
 
     /// from request.uri
-    pub fn from_uri(uri: &http::uri::Uri, prefix: &str) -> Result<Self, ParseError> {
+    pub(crate) fn from_uri(uri: &http::uri::Uri, prefix: &str) -> Result<Self, ParseError> {
         match uri.path() {
             "*" => {
                 Ok(DavPath {
@@ -211,7 +211,7 @@ impl DavPath {
     }
 
     /// from url::Url and (not-url-encoded) prefix string.
-    pub fn from_url(url: &url::Url, prefix: &str) -> Result<Self, ParseError> {
+    pub(crate) fn from_url(url: &url::Url, prefix: &str) -> Result<Self, ParseError> {
         DavPath::from_str(url.path(), prefix)
     }
 
@@ -273,14 +273,14 @@ impl DavPath {
     }
 
     /// prefix the DavPath with a Path and return a PathBuf
-    pub fn as_pathbuf_with_prefix<P: AsRef<Path>>(&self, path: P) -> PathBuf {
+    pub(crate) fn as_pathbuf_with_prefix<P: AsRef<Path>>(&self, path: P) -> PathBuf {
         let mut p = path.as_ref().to_path_buf();
         p.push(self.as_rel_pathbuf());
         p
     }
 
     /// as OS specific Path, relative (remove first slash)
-    pub fn as_rel_pathbuf(&self) -> PathBuf {
+    pub(crate) fn as_rel_pathbuf(&self) -> PathBuf {
         let mut path = if self.path.len() > 0 {
             &self.path[1..]
         } else {
@@ -315,7 +315,7 @@ impl DavPath {
     }
 
     /// add a slash to the end of the path (if not already present).
-    pub fn add_slash(&mut self) {
+    pub(crate) fn add_slash(&mut self) {
         if !self.is_collection() {
             self.path.push(b'/');
         }
@@ -347,7 +347,7 @@ impl DavPath {
     }
 
     /// The filename is the last segment of the path. Can be empty.
-    pub fn file_name(&self) -> &[u8] {
+    pub(crate) fn file_name(&self) -> &[u8] {
         let segs = self
             .path
             .split(|&c| c == b'/')
@@ -361,12 +361,13 @@ impl DavPath {
     }
 
     /// Count the number of segments the path has. "/" has 0.
+    #[doc(hidden)]
     pub fn num_segments(&self) -> usize {
         self.path.split(|&c| c == b'/').filter(|e| e.len() > 0).count()
     }
 
     /// Add a segment to the end of the path.
-    pub fn push_segment(&mut self, b: &[u8]) {
+    pub(crate) fn push_segment(&mut self, b: &[u8]) {
         if !self.is_collection() {
             self.path.push(b'/');
         }
