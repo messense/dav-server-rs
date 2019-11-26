@@ -134,7 +134,9 @@ impl LocalFs {
     }
 
     fn fspath_dbg(&self, path: &DavPath) -> PathBuf {
-        path.as_pathbuf_with_prefix(&self.inner.basedir)
+        let mut pathbuf = self.inner.basedir.clone();
+        pathbuf.push(path.as_rel_ospath());
+        pathbuf
     }
 
     fn fspath(&self, path: &DavPath) -> PathBuf {

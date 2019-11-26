@@ -17,10 +17,10 @@ pub struct DavPath {
     pfxlen:   Option<usize>,
 }
 
-/// Reference.
-#[derive(Clone)]
-pub struct DavPathRel<'a> {
-    fullpath:   &'a [u8],
+/// Reference to DavPath, no prefix.
+/// It's what you get when you `Deref` `DavPath`, and returned by `DavPath::with_prefix()`.
+pub struct DavPathRef {
+    fullpath:   [u8],
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -205,88 +205,9 @@ impl DavPath {
         Ok(())
     }
 
-    /// add a slash to the end of the path (if not already present).
-    pub(crate) fn add_slash(&mut self) {
-        if !self.is_collection() {
-            self.fullpath.push(b'/');
-        }
-    }
-
-    // add a slash
-    pub(crate) fn add_slash_if(&mut self, b: bool) {
-        if b && !self.is_collection() {
-            self.fullpath.push(b'/');
-        }
-    }
-
-    /// Add a segment to the end of the path.
-    pub(crate) fn push_segment(&mut self, b: &[u8]) {
-        if !self.is_collection() {
-            self.fullpath.push(b'/');
-        }
-        self.fullpath.extend_from_slice(b);
-    }
-}
-
-impl DavPath {
-
-    /// as utf8 string, with prefix. uses String::from_utf8_lossy.
-    pub fn as_utf8_string_with_prefix(&self) -> String {
-        return String::from_utf8_lossy(&self.fullpath).to_string();
-    }
-
-    /// as raw bytes, not encoded, no prefix.
-    pub fn as_bytes(&self) -> &[u8] {
-        self.get_path()
-    }
-
-    /// as OS specific Path. never ends in "/".
-    pub fn as_pathbuf(&self) -> PathBuf {
-        let mut b = self.get_path();
-        if b.len() > 1 && b.ends_with(b"/") {
-            b = &b[..b.len() - 1];
-        }
-        let os_string = OsStr::from_bytes(b).to_owned();
-        PathBuf::from(os_string)
-    }
-
-    /// as URL encoded string, with prefix.
-    pub fn as_url_string_with_prefix(&self) -> String {
-        let p = encode_path(&self.fullpath);
-        std::string::String::from_utf8(p).unwrap()
-    }
-
-    /// is this a collection i.e. does the original URL path end in "/".
-    pub fn is_collection(&self) -> bool {
-        self.get_path().ends_with(b"/")
-    }
-
-    /// return the URL prefix.
-    pub fn prefix(&self) -> &str {
-        std::str::from_utf8(self.get_prefix()).unwrap()
-    }
-
-    /// Count the number of segments the path has. "/" has 0.
-    #[doc(hidden)]
-    pub fn num_segments(&self) -> usize {
-        self.get_path().split(|&c| c == b'/').filter(|e| e.len() > 0).count()
-    }
-
-    //
-    // non-public functions
-    //
-
-    // as URL encoded string, with prefix.
-    pub(crate) fn as_url_string_with_prefix_debug(&self) -> String {
-        let mut p = encode_path(self.get_path());
-        if self.get_prefix().len() > 0 {
-            let mut u = encode_path(self.get_prefix());
-            u.extend_from_slice(b"[");
-            u.extend_from_slice(&p);
-            u.extend_from_slice(b"]");
-            p = u;
-        }
-        std::string::String::from_utf8(p).unwrap()
+    /// Return a DavPathRef that refers to the entire URL path with prefix.
+    pub fn with_prefix(&self) -> &DavPathRef {
+        DavPathRef::new(&self.fullpath)
     }
 
     /// from URL encoded path and non-encoded prefix.
@@ -311,9 +232,39 @@ impl DavPath {
         }
     }
 
-    // Return the path.
-    fn get_path(&self) -> &[u8] {
-        &self.fullpath[self.pfxlen.unwrap_or(0)..]
+    /// add a slash to the end of the path (if not already present).
+    pub(crate) fn add_slash(&mut self) {
+        if !self.is_collection() {
+            self.fullpath.push(b'/');
+        }
+    }
+
+    // add a slash
+    pub(crate) fn add_slash_if(&mut self, b: bool) {
+        if b && !self.is_collection() {
+            self.fullpath.push(b'/');
+        }
+    }
+
+    /// Add a segment to the end of the path.
+    pub(crate) fn push_segment(&mut self, b: &[u8]) {
+        if !self.is_collection() {
+            self.fullpath.push(b'/');
+        }
+        self.fullpath.extend_from_slice(b);
+    }
+
+    // as URL encoded string, with prefix.
+    pub(crate) fn as_url_string_with_prefix_debug(&self) -> String {
+        let mut p = encode_path(self.get_path());
+        if self.get_prefix().len() > 0 {
+            let mut u = encode_path(self.get_prefix());
+            u.extend_from_slice(b"[");
+            u.extend_from_slice(&p);
+            u.extend_from_slice(b"]");
+            p = u;
+        }
+        std::string::String::from_utf8(p).unwrap()
     }
 
     // Return the prefix.
@@ -321,40 +272,12 @@ impl DavPath {
         &self.fullpath[..self.pfxlen.unwrap_or(0)]
     }
 
-    // is this a "star" request (only used with OPTIONS)
-    pub(crate) fn is_star(&self) -> bool {
-        self.get_path() == b"*"
+    /// return the URL prefix.
+    pub fn prefix(&self) -> &str {
+        std::str::from_utf8(self.get_prefix()).unwrap()
     }
 
-    // as URL encoded string.
-    pub(crate) fn as_url_string(&self) -> String {
-        let p = encode_path(self.get_path());
-        std::string::String::from_utf8(p).unwrap()
-    }
-
-    /// prefix the DavPath with a Path and return a PathBuf
-    pub(crate) fn as_pathbuf_with_prefix<P: AsRef<Path>>(&self, path: P) -> PathBuf {
-        let mut p = path.as_ref().to_path_buf();
-        p.push(self.as_rel_pathbuf());
-        p
-    }
-
-    /// as OS specific Path, relative (remove first slash)
-    pub(crate) fn as_rel_pathbuf(&self) -> PathBuf {
-        let spath = self.get_path();
-        let mut path = if spath.len() > 0 {
-            &spath[1..]
-        } else {
-            spath
-        };
-        if path.ends_with(b"/") {
-            path = &path[..path.len() - 1];
-        }
-        let os_string = OsStr::from_bytes(path).to_owned();
-        PathBuf::from(os_string)
-    }
-
-    // get parent.
+    /// Return the parent directory.
     pub(crate) fn parent(&self) -> DavPath {
         let mut segs = self
             .get_path()
@@ -370,6 +293,105 @@ impl DavPath {
             pfxlen:   self.pfxlen,
             fullpath: segs.join(&b'/').to_vec(),
         }
+    }
+}
+
+impl std::ops::Deref for DavPath {
+    type Target = DavPathRef;
+
+    fn deref(&self) -> &DavPathRef {
+        DavPathRef::new(&self.fullpath)
+    }
+}
+
+impl DavPathRef {
+
+    fn new(path: &[u8]) -> &DavPathRef {
+        unsafe { &*(path as *const [u8] as *const DavPathRef) }
+    }
+
+    /// as utf8 string, with prefix. uses String::from_utf8_lossy.
+    pub fn as_utf8_string(&self) -> String {
+        return String::from_utf8_lossy(&self.get_path()).to_string();
+    }
+
+    /// as raw bytes, not encoded, no prefix.
+    pub fn as_bytes(&self) -> &[u8] {
+        self.get_path()
+    }
+
+    /// as OS specific Path. never ends in "/".
+    pub fn as_pathbuf(&self) -> PathBuf {
+        let mut b = self.get_path();
+        if b.len() > 1 && b.ends_with(b"/") {
+            b = &b[..b.len() - 1];
+        }
+        let os_string = OsStr::from_bytes(b).to_owned();
+        PathBuf::from(os_string)
+    }
+
+    /// as URL encoded string, with prefix.
+    pub fn as_url_string(&self) -> String {
+        let p = encode_path(self.get_path());
+        std::string::String::from_utf8(p).unwrap()
+    }
+
+    /// is this a collection i.e. does the original URL path end in "/".
+    pub fn is_collection(&self) -> bool {
+        self.get_path().ends_with(b"/")
+    }
+
+    /// Count the number of segments the path has. "/" has 0.
+    #[doc(hidden)]
+    pub fn num_segments(&self) -> usize {
+        self.get_path().split(|&c| c == b'/').filter(|e| e.len() > 0).count()
+    }
+
+    //
+    // non-public functions
+    //
+
+    // Return the path.
+    fn get_path(&self) -> &[u8] {
+        &self.fullpath
+    }
+
+    // is this a "star" request (only used with OPTIONS)
+    pub(crate) fn is_star(&self) -> bool {
+        self.get_path() == b"*"
+    }
+
+    /// as OS specific Path, relative (remove first slash)
+    pub(crate) fn as_rel_ospath(&self) -> &Path {
+        let spath = self.get_path();
+        let mut path = if spath.len() > 0 {
+            &spath[1..]
+        } else {
+            spath
+        };
+        if path.ends_with(b"/") {
+            path = &path[..path.len() - 1];
+        }
+        let os_string = OsStr::from_bytes(path);
+        Path::new(os_string)
+    }
+
+    // get parent.
+    #[allow(dead_code)]
+    pub(crate) fn parent(&self) -> &DavPathRef {
+        let path = self.get_path();
+
+        let mut end = path.len();
+        while end > 0 {
+            end -= 1;
+            if path[end] == b'/' {
+                if end == 0 {
+                    end = 1;
+                }
+                break;
+            }
+        }
+        DavPathRef::new(&path[..end])
     }
 
     /// The filename is the last segment of the path. Can be empty.

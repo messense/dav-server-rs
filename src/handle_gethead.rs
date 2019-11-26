@@ -235,7 +235,7 @@ impl crate::DavInner {
             let mut path = path.clone();
             path.add_slash();
             res.headers_mut()
-                .insert("Location", path.as_utf8_string_with_prefix().parse().unwrap());
+                .insert("Location", path.with_prefix().as_utf8_string().parse().unwrap());
             res.headers_mut().typed_insert(headers::ContentLength(0));
             *res.status_mut() = StatusCode::FOUND;
             return Ok(res);
@@ -284,7 +284,7 @@ impl crate::DavInner {
                             npath.add_slash();
                         }
                         dirents.push(Dirent {
-                            path: npath.as_url_string_with_prefix(),
+                            path: npath.with_prefix().as_url_string(),
                             name: String::from_utf8_lossy(&name).to_string(),
                             meta: meta,
                         });
@@ -305,7 +305,7 @@ impl crate::DavInner {
                 });
 
                 // and output html
-                let upath = htmlescape::encode_minimal(&path.as_url_string_with_prefix());
+                let upath = htmlescape::encode_minimal(&path.with_prefix().as_url_string());
                 let mut w = String::new();
                 w.push_str("<html><head>");
                 w.push_str(&format!("<title>Index of {}</title>", upath));

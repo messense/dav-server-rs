@@ -301,7 +301,7 @@ impl DavInner {
     {
         if meta.is_dir() && !path.is_collection() {
             path.add_slash();
-            let newloc = path.as_url_string_with_prefix();
+            let newloc = path.with_prefix().as_url_string();
             res.headers_mut()
                 .typed_insert(davheaders::ContentLocation(newloc));
         }

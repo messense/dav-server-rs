@@ -893,7 +893,7 @@ impl PropWriter {
     ) -> Result<(), DavError>
     {
         self.emitter.write(XmlWEvent::start_element("D:response"))?;
-        let p = path.as_url_string_with_prefix();
+        let p = path.with_prefix().as_url_string();
         Element::new2("D:href").text(p).write_ev(&mut self.emitter)?;
 
         let mut keys = props.keys().collect::<Vec<_>>();

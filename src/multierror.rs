@@ -81,7 +81,7 @@ where S: Into<xml::name::Name<'b>> {
 
 fn write_response(mut w: &mut XmlWriter, path: &DavPath, sc: StatusCode) -> Result<(), DavError> {
     w.write(XmlWEvent::start_element("D:response"))?;
-    let p = path.as_url_string_with_prefix();
+    let p = path.with_prefix().as_url_string();
     write_elem(&mut w, "D:href", &p)?;
     write_elem(&mut w, "D:status", &format!("HTTP/1.1 {}", sc))?;
     w.write(XmlWEvent::end_element())?;
