@@ -6,11 +6,12 @@ use crate::util::{dav_method, Method};
 use crate::DavResult;
 
 impl crate::DavInner {
-    pub(crate) async fn handle_options(&self, req: Request<()>) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_options(&self, req: &Request<()>) -> DavResult<Response<Body>> {
         let mut res = Response::new(Body::empty());
 
         let h = res.headers_mut();
-        let dav = if self.ls.is_some() {
+        let lock_allowed = self.allow.map(|x| x.allowed(Method::Lock)).unwrap_or(true);
+        let dav = if self.ls.is_some() && lock_allowed {
             "1,2,3,sabredav-partialupdate"
         } else {
             "1,3,sabredav-partialupdate"

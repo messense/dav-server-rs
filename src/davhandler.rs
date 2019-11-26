@@ -200,7 +200,7 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send + Unpin,
     {
         let (req, body) = {
             let (parts, body) = req.into_parts();
@@ -225,7 +225,7 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send + Unpin,
     {
         let (req, body) = {
             let (parts, body) = req.into_parts();
@@ -246,7 +246,7 @@ impl DavHandler {
     where
         ReqData: IntoBuf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send,
+        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + Unpin,
     {
         let (req, body) = {
             let (parts, body) = req.into_parts();
@@ -266,7 +266,7 @@ impl DavHandler {
     where
         ReqData: IntoBuf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send,
+        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + Unpin,
     {
         let (req, body) = {
             let (parts, body) = req.into_parts();
@@ -335,7 +335,7 @@ impl DavInner {
     // internal dispatcher.
     async fn handle<ReqBody, ReqError>(self, req: Request<()>, body: ReqBody) -> io::Result<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send,
+        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send + Unpin,
         ReqError: StdError + Send + Sync + 'static,
     {
         let is_ms = req
@@ -383,7 +383,7 @@ impl DavInner {
     // internal dispatcher part 2.
     async fn handle2<ReqBody, ReqError>(mut self, req: Request<()>, body: ReqBody) -> DavResult<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send,
+        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send + Unpin,
         ReqError: StdError + Send + Sync + 'static,
     {
         // debug when running the webdav litmus tests.
@@ -450,16 +450,16 @@ impl DavInner {
         debug!("== START REQUEST {:?} {}", method, path);
 
         let res = match method {
-            Method::Options => self.handle_options(req).await,
-            Method::PropFind => self.handle_propfind(req, body_data).await,
-            Method::PropPatch => self.handle_proppatch(req, body_data).await,
-            Method::MkCol => self.handle_mkcol(req).await,
-            Method::Delete => self.handle_delete(req).await,
-            Method::Lock => self.handle_lock(req, body_data).await,
-            Method::Unlock => self.handle_unlock(req).await,
-            Method::Head | Method::Get => self.handle_get(req).await,
-            Method::Put | Method::Patch => self.handle_put(req, body_strm.unwrap()).await,
-            Method::Copy | Method::Move => self.handle_copymove(req, method).await,
+            Method::Options => self.handle_options(&req).await,
+            Method::PropFind => self.handle_propfind(&req, &body_data).await,
+            Method::PropPatch => self.handle_proppatch(&req,&body_data).await,
+            Method::MkCol => self.handle_mkcol(&req).await,
+            Method::Delete => self.handle_delete(&req).await,
+            Method::Lock => self.handle_lock(&req, &body_data).await,
+            Method::Unlock => self.handle_unlock(&req).await,
+            Method::Head | Method::Get => self.handle_get(&req).await,
+            Method::Put | Method::Patch => self.handle_put(&req, &mut body_strm.unwrap()).await,
+            Method::Copy | Method::Move => self.handle_copymove(&req, method).await,
         };
         res
     }

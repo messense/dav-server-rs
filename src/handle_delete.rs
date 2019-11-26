@@ -106,7 +106,7 @@ impl crate::DavInner {
         .boxed()
     }
 
-    pub(crate) async fn handle_delete(self, req: Request<()>) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_delete(self, req: &Request<()>) -> DavResult<Response<Body>> {
         // RFC4918 9.6.1 DELETE for Collections.
         // Note that allowing Depth: 0 is NOT RFC compliant.
         let depth = match req.headers().typed_get::<Depth>() {

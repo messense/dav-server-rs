@@ -30,7 +30,7 @@ const BOUNDARY_END: &str = "\n--BOUNDARY--\n";
 const READ_BUF_SIZE: usize = 16384;
 
 impl crate::DavInner {
-    pub(crate) async fn handle_get(&self, req: Request<()>) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_get(&self, req: &Request<()>) -> DavResult<Response<Body>> {
         let path = self.path(&req);
 
         // check if it's a directory.
@@ -224,7 +224,7 @@ impl crate::DavInner {
         Ok(res)
     }
 
-    pub(crate) async fn handle_dirlist(&self, req: Request<()>, head: bool) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_dirlist(&self, req: &Request<()>, head: bool) -> DavResult<Response<Body>> {
         let mut res = Response::new(Body::empty());
 
         // This is a directory. If the path doesn't end in "/", send a redir.

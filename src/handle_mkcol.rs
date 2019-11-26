@@ -8,7 +8,7 @@ use crate::fs::*;
 use crate::{DavError, DavResult};
 
 impl crate::DavInner {
-    pub(crate) async fn handle_mkcol(&self, req: Request<()>) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_mkcol(&self, req: &Request<()>) -> DavResult<Response<Body>> {
         let mut path = self.path(&req);
         let meta = self.fs.metadata(&path).await;
 

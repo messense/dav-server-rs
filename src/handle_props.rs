@@ -132,8 +132,8 @@ fn init_staticprop(p: &[&str]) -> Vec<Element> {
 impl DavInner {
     pub(crate) async fn handle_propfind(
         self,
-        req: Request<()>,
-        xmldata: Vec<u8>,
+        req: &Request<()>,
+        xmldata: &[u8],
     ) -> DavResult<Response<Body>>
     {
         // No checks on If: and If-* headers here, because I do not see
@@ -374,8 +374,8 @@ impl DavInner {
 
     pub(crate) async fn handle_proppatch(
         self,
-        req: Request<()>,
-        xmldata: Vec<u8>,
+        req: &Request<()>,
+        xmldata: &[u8],
     ) -> DavResult<Response<Body>>
     {
         let mut res = Response::new(Body::empty());

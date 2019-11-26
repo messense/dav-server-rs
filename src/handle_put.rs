@@ -56,11 +56,11 @@ where E: StdError + Sync + Send + 'static {
 impl crate::DavInner {
     pub(crate) async fn handle_put<ReqBody, ReqError>(
         self,
-        req: Request<()>,
-        body: ReqBody,
+        req: &Request<()>,
+        body: &mut ReqBody,
     ) -> DavResult<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>>,
+        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin,
         ReqError: StdError + Sync + Send + 'static,
     {
         let mut start = 0;
@@ -207,7 +207,6 @@ impl crate::DavInner {
 
         // loop, read body, write to file.
         let mut bad = false;
-        pin_utils::pin_mut!(body);
 
         while let Some(buffer) = body.next().await {
             let buffer = buffer.map_err(|e| to_ioerror(e))?;

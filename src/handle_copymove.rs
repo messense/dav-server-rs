@@ -140,7 +140,7 @@ impl crate::DavInner {
         }
     }
 
-    pub(crate) async fn handle_copymove(self, req: Request<()>, method: Method) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_copymove(self, req: &Request<()>, method: Method) -> DavResult<Response<Body>> {
         // get and check headers.
         let overwrite = req
             .headers()
