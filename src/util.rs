@@ -2,6 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use headers::Header;
 use http::Method as httpMethod;
+use http::method::InvalidMethod;
 
 use crate::body::Body;
 use crate::errors::DavError;
@@ -85,6 +86,43 @@ impl AllowedMethods {
     /// Check if method is allowed.
     pub fn allowed(&self, m: Method) -> bool {
         self.0 & (m as u32) > 0
+    }
+
+    /// Generate an AllowedMethods from a list of words.
+    pub fn from_vec(v: Vec<impl AsRef<str>>) -> Result<AllowedMethods, InvalidMethod> {
+        const HTTP_RO: u32 = Method::Get as u32 | Method::Head as u32 | Method::Options  as u32;
+        const HTTP_RW: u32 = HTTP_RO | Method::Put as u32;
+        const WEBDAV_RO: u32 = HTTP_RO | Method::PropFind as u32;
+        const WEBDAV_RW: u32 = 0xffffffff;
+
+        let mut m: u32 = 0;
+        for w in &v {
+            m |= match w.as_ref().to_lowercase().as_str() {
+                "head" => Method::Head as u32,
+                "get" => Method::Get as u32,
+                "put" => Method::Put as u32,
+                "patch" => Method::Patch as u32,
+                "delete" => Method::Delete as u32,
+                "options" => Method::Options as u32,
+                "propfind" => Method::PropFind as u32,
+                "proppatch" => Method::PropPatch as u32,
+                "mkcol" => Method::MkCol as u32,
+                "copy" => Method::Copy as u32,
+                "move" => Method::Move as u32,
+                "lock" => Method::Lock as u32,
+                "unlock" => Method::Unlock as u32,
+                "http-ro" => HTTP_RO,
+                "http-rw" => HTTP_RW,
+                "webdav-ro" => WEBDAV_RO,
+                "webdav-rw" => WEBDAV_RW,
+                _ => {
+                    // A trick to get at the value of http::method::InvalidMethod.
+                    let invalid_method = http::method::Method::from_bytes(b"").unwrap_err();
+                    return Err(invalid_method);
+                }
+            };
+        }
+        Ok(AllowedMethods(m))
     }
 }
 
