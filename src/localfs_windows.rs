@@ -6,7 +6,6 @@
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::ErrorKind;
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
@@ -14,6 +13,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use lru::LruCache;
 use parking_lot::Mutex;
+
+use crate::davpath::DavPath;
 
 const CACHE_ENTRIES: usize = 4096;
 const CACHE_MAX_AGE: u64 = (15 * 60);
@@ -24,24 +25,9 @@ lazy_static! {
 }
 
 // Do a case-insensitive path lookup.
-pub(crate) fn resolve<'a>(base: impl Into<PathBuf>, path: &[u8], case_insensitive: bool) -> PathBuf {
+pub(crate) fn resolve<'a>(base: impl Into<PathBuf>, path: &DavPath) -> PathBuf {
     let base = base.into();
-    let mut path = Path::new(OsStr::from_bytes(path));
-
-    // make "path" relative.
-    while path.starts_with("/") {
-        path = match path.strip_prefix("/") {
-            Ok(p) => p,
-            Err(_) => break,
-        };
-    }
-
-    // if not case-mangling, return now.
-    if !case_insensitive {
-        let mut newpath = base;
-        newpath.push(&path);
-        return newpath;
-    }
+    let path = path.as_rel_ospath();
 
     // must be rooted, and valid UTF-8.
     let mut fullpath = base.clone();

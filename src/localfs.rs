@@ -140,7 +140,13 @@ impl LocalFs {
     }
 
     fn fspath(&self, path: &DavPath) -> PathBuf {
-        crate::localfs_windows::resolve(&self.inner.basedir, path.as_bytes(), self.inner.case_insensitive)
+        if self.inner.case_insensitive {
+            crate::localfs_windows::resolve(&self.inner.basedir, &path)
+        } else {
+            let mut pathbuf = self.inner.basedir.clone();
+            pathbuf.push(path.as_rel_ospath());
+            pathbuf
+        }
     }
 
     // threadpool::blocking() adapter, also runs the before/after hooks.
