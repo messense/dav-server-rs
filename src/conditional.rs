@@ -147,7 +147,7 @@ pub(crate) async fn dav_if_match<'a>(
         let mut pa: Option<DavPath> = None;
         let (p, valid) = match iflist.resource_tag {
             Some(ref url) => {
-                match DavPath::from_url(url, std::str::from_utf8(&path.prefix).unwrap()) {
+                match DavPath::from_str_and_prefix(url.path(), path.prefix()) {
                     Ok(p) => {
                         // anchor davpath in pa.
                         let p: &DavPath = pa.get_or_insert(p);

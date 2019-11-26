@@ -7,15 +7,20 @@ use std::path::{Path, PathBuf};
 
 use mime_guess;
 use percent_encoding as pct;
-use url;
 
 use crate::DavError;
 
-/// Path information relative to a prefix.
+/// URL path, with hidden prefix.
 #[derive(Clone)]
 pub struct DavPath {
-    pub(crate) path:   Vec<u8>,
-    pub(crate) prefix: Vec<u8>,
+    fullpath: Vec<u8>,
+    pfxlen:   Option<usize>,
+}
+
+/// Reference.
+#[derive(Clone)]
+pub struct DavPathRel<'a> {
+    fullpath:   &'a [u8],
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -56,7 +61,7 @@ pub enum ParseError {
     /// cannot parse
     InvalidPath,
     /// outside of prefix
-    IllegalPath,
+    PrefixMismatch,
     /// too many dotdots
     ForbiddenPath,
 }
@@ -80,7 +85,7 @@ impl From<ParseError> for DavError {
     fn from(e: ParseError) -> Self {
         match e {
             ParseError::InvalidPath => DavError::InvalidPath,
-            ParseError::IllegalPath => DavError::IllegalPath,
+            ParseError::PrefixMismatch => DavError::IllegalPath,
             ParseError::ForbiddenPath => DavError::ForbiddenPath,
         }
     }
@@ -163,85 +168,119 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
 /// Comparision ignores any trailing slash, so /foo == /foo/
 impl PartialEq for DavPath {
     fn eq(&self, rhs: &DavPath) -> bool {
-        let mut a = self.path.as_slice();
+        let mut a = self.fullpath.as_slice();
         if a.len() > 1 && a.ends_with(b"/") {
             a = &a[..a.len() - 1];
         }
-        let mut b = rhs.path.as_slice();
+        let mut b = rhs.fullpath.as_slice();
         if b.len() > 1 && b.ends_with(b"/") {
             b = &b[..b.len() - 1];
         }
-        self.prefix == rhs.prefix && a == b
+        a == b
     }
 }
 
 impl DavPath {
-    /// from URL encoded strings: path and prefix.
-    pub(crate) fn from_str(src: &str, prefix: &str) -> Result<DavPath, ParseError> {
-        let b = src.as_bytes();
-        let path = normalize_path(b)?;
-        let mut prefix = prefix.as_bytes();
+
+    /// from URL encoded path
+    pub fn new(src: &str) -> Result<DavPath, ParseError> {
+        let path = normalize_path(src.as_bytes())?;
+        Ok(DavPath{ fullpath: path.to_vec(), pfxlen: None })
+    }
+
+    /// Set prefix.
+    pub fn set_prefix(&mut self, prefix: &str) -> Result<(), ParseError> {
+        let path = &self.fullpath;
+        let prefix = prefix.as_bytes();
         if !path.starts_with(prefix) {
-            return Err(ParseError::IllegalPath);
+            return Err(ParseError::PrefixMismatch);
         }
-        let pflen = prefix.len();
+        let mut pfxlen = prefix.len();
         if prefix.ends_with(b"/") {
-            prefix = &prefix[..pflen - 1];
-        } else if path.len() != pflen && (path.len() < pflen || path[pflen] != b'/') {
-            return Err(ParseError::IllegalPath);
+            pfxlen -= 1;
+        } else if path.len() != pfxlen && (path.len() < pfxlen || path[pfxlen] != b'/') {
+            return Err(ParseError::PrefixMismatch);
         }
-        Ok(DavPath {
-            path:   path[prefix.len()..].to_vec(),
-            prefix: prefix.to_vec(),
-        })
+        self.pfxlen = Some(pfxlen);
+        Ok(())
     }
 
-    /// from request.uri
-    pub(crate) fn from_uri(uri: &http::uri::Uri, prefix: &str) -> Result<Self, ParseError> {
-        match uri.path() {
-            "*" => {
-                Ok(DavPath {
-                    prefix: b"".to_vec(),
-                    path:   b"*".to_vec(),
-                })
-            },
-            path if path.starts_with("/") => DavPath::from_str(path, prefix),
-            _ => Err(ParseError::InvalidPath),
+    /// add a slash to the end of the path (if not already present).
+    pub(crate) fn add_slash(&mut self) {
+        if !self.is_collection() {
+            self.fullpath.push(b'/');
         }
     }
 
-    /// from url::Url and (not-url-encoded) prefix string.
-    pub(crate) fn from_url(url: &url::Url, prefix: &str) -> Result<Self, ParseError> {
-        DavPath::from_str(url.path(), prefix)
+    // add a slash
+    pub(crate) fn add_slash_if(&mut self, b: bool) {
+        if b && !self.is_collection() {
+            self.fullpath.push(b'/');
+        }
     }
 
-    // is this a "star" request (only used with OPTIONS)
-    pub(crate) fn is_star(&self) -> bool {
-        self.path == b"*"
+    /// Add a segment to the end of the path.
+    pub(crate) fn push_segment(&mut self, b: &[u8]) {
+        if !self.is_collection() {
+            self.fullpath.push(b'/');
+        }
+        self.fullpath.extend_from_slice(b);
+    }
+}
+
+impl DavPath {
+
+    /// as utf8 string, with prefix. uses String::from_utf8_lossy.
+    pub fn as_utf8_string_with_prefix(&self) -> String {
+        return String::from_utf8_lossy(&self.fullpath).to_string();
     }
 
-    // as URL encoded string.
-    pub(crate) fn as_url_string(&self) -> String {
-        let p = encode_path(&self.path);
-        std::string::String::from_utf8(p).unwrap()
+    /// as raw bytes, not encoded, no prefix.
+    pub fn as_bytes(&self) -> &[u8] {
+        self.get_path()
+    }
+
+    /// as OS specific Path. never ends in "/".
+    pub fn as_pathbuf(&self) -> PathBuf {
+        let mut b = self.get_path();
+        if b.len() > 1 && b.ends_with(b"/") {
+            b = &b[..b.len() - 1];
+        }
+        let os_string = OsStr::from_bytes(b).to_owned();
+        PathBuf::from(os_string)
     }
 
     /// as URL encoded string, with prefix.
     pub fn as_url_string_with_prefix(&self) -> String {
-        let mut p = encode_path(&self.path);
-        if self.prefix.len() > 0 {
-            let mut u = encode_path(&self.prefix);
-            u.extend_from_slice(&p);
-            p = u;
-        }
+        let p = encode_path(&self.fullpath);
         std::string::String::from_utf8(p).unwrap()
     }
 
+    /// is this a collection i.e. does the original URL path end in "/".
+    pub fn is_collection(&self) -> bool {
+        self.get_path().ends_with(b"/")
+    }
+
+    /// return the URL prefix.
+    pub fn prefix(&self) -> &str {
+        std::str::from_utf8(self.get_prefix()).unwrap()
+    }
+
+    /// Count the number of segments the path has. "/" has 0.
+    #[doc(hidden)]
+    pub fn num_segments(&self) -> usize {
+        self.get_path().split(|&c| c == b'/').filter(|e| e.len() > 0).count()
+    }
+
+    //
+    // non-public functions
+    //
+
     // as URL encoded string, with prefix.
     pub(crate) fn as_url_string_with_prefix_debug(&self) -> String {
-        let mut p = encode_path(&self.path);
-        if self.prefix.len() > 0 {
-            let mut u = encode_path(&self.prefix);
+        let mut p = encode_path(self.get_path());
+        if self.get_prefix().len() > 0 {
+            let mut u = encode_path(self.get_prefix());
             u.extend_from_slice(b"[");
             u.extend_from_slice(&p);
             u.extend_from_slice(b"]");
@@ -250,26 +289,47 @@ impl DavPath {
         std::string::String::from_utf8(p).unwrap()
     }
 
-    /// as utf8 string, with prefix. uses String::from_utf8_lossy.
-    pub fn as_utf8_string_with_prefix(&self) -> String {
-        let mut p = self.prefix.clone();
-        p.extend_from_slice(&self.path);
-        return String::from_utf8_lossy(&p).to_string();
+    /// from URL encoded path and non-encoded prefix.
+    pub(crate) fn from_str_and_prefix(src: &str, prefix: &str) -> Result<DavPath, ParseError> {
+        let path = normalize_path(src.as_bytes())?;
+        let mut davpath = DavPath{ fullpath: path.to_vec(), pfxlen: None };
+        davpath.set_prefix(prefix)?;
+        Ok(davpath)
     }
 
-    /// as raw bytes, not encoded, no prefix.
-    pub fn as_bytes(&self) -> &[u8] {
-        self.path.as_slice()
-    }
-
-    /// as OS specific Path. never ends in "/".
-    pub fn as_pathbuf(&self) -> PathBuf {
-        let mut b = self.path.as_slice();
-        if b.len() > 1 && b.ends_with(b"/") {
-            b = &b[..b.len() - 1];
+    /// from request.uri
+    pub(crate) fn from_uri(uri: &http::uri::Uri, prefix: &str) -> Result<Self, ParseError> {
+        match uri.path() {
+            "*" => {
+                Ok(DavPath {
+                    fullpath: b"*".to_vec(),
+                    pfxlen:   None,
+                })
+            },
+            path if path.starts_with("/") => DavPath::from_str_and_prefix(path, prefix),
+            _ => Err(ParseError::InvalidPath),
         }
-        let os_string = OsStr::from_bytes(b).to_owned();
-        PathBuf::from(os_string)
+    }
+
+    // Return the path.
+    fn get_path(&self) -> &[u8] {
+        &self.fullpath[self.pfxlen.unwrap_or(0)..]
+    }
+
+    // Return the prefix.
+    fn get_prefix(&self) -> &[u8] {
+        &self.fullpath[..self.pfxlen.unwrap_or(0)]
+    }
+
+    // is this a "star" request (only used with OPTIONS)
+    pub(crate) fn is_star(&self) -> bool {
+        self.get_path() == b"*"
+    }
+
+    // as URL encoded string.
+    pub(crate) fn as_url_string(&self) -> String {
+        let p = encode_path(self.get_path());
+        std::string::String::from_utf8(p).unwrap()
     }
 
     /// prefix the DavPath with a Path and return a PathBuf
@@ -281,10 +341,11 @@ impl DavPath {
 
     /// as OS specific Path, relative (remove first slash)
     pub(crate) fn as_rel_pathbuf(&self) -> PathBuf {
-        let mut path = if self.path.len() > 0 {
-            &self.path[1..]
+        let spath = self.get_path();
+        let mut path = if spath.len() > 0 {
+            &spath[1..]
         } else {
-            &self.path
+            spath
         };
         if path.ends_with(b"/") {
             path = &path[..path.len() - 1];
@@ -293,45 +354,10 @@ impl DavPath {
         PathBuf::from(os_string)
     }
 
-    /// is this a collection i.e. does the original URL path end in "/".
-    pub fn is_collection(&self) -> bool {
-        let l = self.path.len();
-        l > 0 && self.path[l - 1] == b'/'
-    }
-
-    /// return the URL prefix.
-    pub fn prefix(&self) -> &str {
-        std::str::from_utf8(&self.prefix).unwrap()
-    }
-
-    // remove trailing slash
-    #[allow(unused)]
-    pub(crate) fn remove_slash(&mut self) {
-        let mut l = self.path.len();
-        while l > 1 && self.path[l - 1] == b'/' {
-            l -= 1;
-        }
-        self.path.truncate(l);
-    }
-
-    /// add a slash to the end of the path (if not already present).
-    pub(crate) fn add_slash(&mut self) {
-        if !self.is_collection() {
-            self.path.push(b'/');
-        }
-    }
-
-    // add a slash
-    pub(crate) fn add_slash_if(&mut self, b: bool) {
-        if b && !self.is_collection() {
-            self.path.push(b'/');
-        }
-    }
-
     // get parent.
     pub(crate) fn parent(&self) -> DavPath {
         let mut segs = self
-            .path
+            .get_path()
             .split(|&c| c == b'/')
             .filter(|e| e.len() > 0)
             .collect::<Vec<&[u8]>>();
@@ -341,15 +367,15 @@ impl DavPath {
         }
         segs.insert(0, b"");
         DavPath {
-            prefix: self.prefix.clone(),
-            path:   segs.join(&b'/').to_vec(),
+            pfxlen:   self.pfxlen,
+            fullpath: segs.join(&b'/').to_vec(),
         }
     }
 
     /// The filename is the last segment of the path. Can be empty.
     pub(crate) fn file_name(&self) -> &[u8] {
         let segs = self
-            .path
+            .get_path()
             .split(|&c| c == b'/')
             .filter(|e| e.len() > 0)
             .collect::<Vec<&[u8]>>();
@@ -358,20 +384,6 @@ impl DavPath {
         } else {
             b""
         }
-    }
-
-    /// Count the number of segments the path has. "/" has 0.
-    #[doc(hidden)]
-    pub fn num_segments(&self) -> usize {
-        self.path.split(|&c| c == b'/').filter(|e| e.len() > 0).count()
-    }
-
-    /// Add a segment to the end of the path.
-    pub(crate) fn push_segment(&mut self, b: &[u8]) {
-        if !self.is_collection() {
-            self.path.push(b'/');
-        }
-        self.path.extend_from_slice(b);
     }
 
     pub(crate) fn get_mime_type_str(&self) -> &'static str {

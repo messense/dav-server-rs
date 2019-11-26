@@ -84,7 +84,7 @@ impl DavConfig {
     }
 
     /// Which methods to allow (default is all methods).
-    pub fn allow_methods(self, allow: AllowedMethods) -> Self {
+    pub fn methods(self, allow: AllowedMethods) -> Self {
         let mut this = self;
         this.allow = Some(allow);
         this

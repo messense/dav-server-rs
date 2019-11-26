@@ -154,7 +154,7 @@ impl crate::DavInner {
 
         // decode and validate destination.
         let dest = match req.headers().typed_get::<davheaders::Destination>() {
-            Some(dest) => DavPath::from_str(&dest.0, &self.prefix)?,
+            Some(dest) => DavPath::from_str_and_prefix(&dest.0, &self.prefix)?,
             None => return Err(StatusCode::BAD_REQUEST.into()),
         };
 
