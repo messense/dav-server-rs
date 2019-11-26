@@ -37,7 +37,7 @@ impl crate::DavInner {
         let head = req.method() == &http::Method::HEAD;
         let meta = self.fs.metadata(&path).await?;
         if meta.is_dir() {
-            return self.handle_dirlist(req, head).await;
+            return self.handle_autoindex(req, head).await;
         }
 
         // double check, is it a regular file.
@@ -224,7 +224,7 @@ impl crate::DavInner {
         Ok(res)
     }
 
-    pub(crate) async fn handle_dirlist(&self, req: &Request<()>, head: bool) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_autoindex(&self, req: &Request<()>, head: bool) -> DavResult<Response<Body>> {
         let mut res = Response::new(Body::empty());
 
         // This is a directory. If the path doesn't end in "/", send a redir.
@@ -241,12 +241,14 @@ impl crate::DavInner {
             return Ok(res);
         }
 
-        // If we do not allow PROPFIND, we don't allow directory indexes either.
-        if let Some(ref a) = self.allow {
-            if !a.allowed(Method::PropFind) {
-                debug!("method {} not allowed on request {}", req.method(), req.uri());
-                return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
-            }
+        // Is PROPFIND explicitly allowed?
+        let allow_propfind = self.allow.map(|x| x.allowed(Method::PropFind)).unwrap_or(false);
+
+        // Only allow index generation if explicitly set to true, _or_ if it was
+        // unset, and PROPFIND is explicitly allowed.
+        if !self.autoindex.unwrap_or(allow_propfind) {
+            debug!("method {} not allowed on request {}", req.method(), req.uri());
+            return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
         }
 
         // read directory or bail.

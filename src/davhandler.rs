@@ -35,19 +35,21 @@ pub struct DavHandler {
 /// Configuration of the handler.
 #[derive(Default)]
 pub struct DavConfig {
-    /// Prefix to be stripped off when handling request.
-    pub prefix: Option<String>,
-    /// Filesystem backend.
-    pub fs: Option<Box<dyn DavFileSystem>>,
-    /// Locksystem backend.
-    pub ls: Option<Box<dyn DavLockSystem>>,
-    /// Set of allowed methods (None means "all methods")
-    pub allow: Option<AllowedMethods>,
-    /// Principal is webdav speak for "user", used to give locks an owner (if a locksystem is
-    /// active).
-    pub principal: Option<String>,
-    /// Hide symbolic links? `None` maps to `true`.
-    pub hide_symlinks: Option<bool>,
+    // Prefix to be stripped off when handling request.
+    prefix: Option<String>,
+    // Filesystem backend.
+    fs: Option<Box<dyn DavFileSystem>>,
+    // Locksystem backend.
+    ls: Option<Box<dyn DavLockSystem>>,
+    // Set of allowed methods (None means "all methods")
+    allow: Option<AllowedMethods>,
+    // Principal is webdav speak for "user", used to give locks an owner (if a locksystem is
+    // active).
+    principal: Option<String>,
+    // Hide symbolic links? `None` maps to `true`.
+    hide_symlinks: Option<bool>,
+    // Does GET on a directory return indexes.
+    autoindex: Option<bool>,
 }
 
 impl DavConfig {
@@ -104,6 +106,13 @@ impl DavConfig {
         this
     }
 
+    /// Does a GET on a directory produce a directory index.
+    pub fn autoindex(self, autoindex: bool) -> Self {
+        let mut this = self;
+        this.autoindex = Some(autoindex);
+        this
+    }
+
     fn merge(&self, new: DavConfig) -> DavConfig {
         DavConfig {
             prefix:        new.prefix.or(self.prefix.clone()),
@@ -112,6 +121,7 @@ impl DavConfig {
             allow:         new.allow.or(self.allow.clone()),
             principal:     new.principal.or(self.principal.clone()),
             hide_symlinks: new.hide_symlinks.or(self.hide_symlinks.clone()),
+            autoindex:     new.autoindex.or(self.autoindex.clone()),
         }
     }
 }
@@ -127,6 +137,7 @@ pub(crate) struct DavInner {
     pub allow:         Option<AllowedMethods>,
     pub principal:     Option<String>,
     pub hide_symlinks: Option<bool>,
+    pub autoindex:     Option<bool>,
 }
 
 impl From<DavConfig> for DavInner {
@@ -138,6 +149,7 @@ impl From<DavConfig> for DavInner {
             allow:         cfg.allow,
             principal:     cfg.principal,
             hide_symlinks: cfg.hide_symlinks,
+            autoindex:     cfg.autoindex,
         }
     }
 }
@@ -155,6 +167,7 @@ impl From<&DavConfig> for DavInner {
             allow:         cfg.allow,
             principal:     cfg.principal.clone(),
             hide_symlinks: cfg.hide_symlinks.clone(),
+            autoindex:     cfg.autoindex.clone(),
         }
     }
 }
@@ -168,6 +181,7 @@ impl Clone for DavInner {
             allow:         self.allow.clone(),
             principal:     self.principal.clone(),
             hide_symlinks: self.hide_symlinks.clone(),
+            autoindex:     self.autoindex.clone(),
         }
     }
 }
