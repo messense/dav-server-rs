@@ -25,9 +25,9 @@ use tokio_executor::threadpool;
 
 use libc;
 
+use crate::davpath::DavPath;
 use crate::fs::*;
 use crate::localfs_macos::DUCacheBuilder;
-use crate::davpath::DavPath;
 
 // Run some code via tokio_executor::threadpool::blocking().
 //

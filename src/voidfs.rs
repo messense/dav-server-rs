@@ -1,8 +1,8 @@
 //! Placeholder filesystem. Returns FsError::NotImplemented on every method.
 //!
 
-use crate::fs::*;
 use crate::davpath::DavPath;
+use crate::fs::*;
 use std::any::Any;
 
 /// Placeholder filesystem.
@@ -21,7 +21,7 @@ impl VoidFs {
 
 impl DavFileSystem for VoidFs {
     fn metadata<'a>(&'a self, _path: &'a DavPath) -> FsFuture<Box<dyn DavMetaData>> {
-        Box::pin (async { Err(FsError::NotImplemented) })
+        Box::pin(async { Err(FsError::NotImplemented) })
     }
 
     fn read_dir<'a>(
@@ -30,11 +30,11 @@ impl DavFileSystem for VoidFs {
         _meta: ReadDirMeta,
     ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>>
     {
-        Box::pin (async { Err(FsError::NotImplemented) })
+        Box::pin(async { Err(FsError::NotImplemented) })
     }
 
     fn open<'a>(&'a self, _path: &'a DavPath, _options: OpenOptions) -> FsFuture<Box<dyn DavFile>> {
-        Box::pin (async { Err(FsError::NotImplemented) })
+        Box::pin(async { Err(FsError::NotImplemented) })
     }
 }
 
@@ -49,4 +49,3 @@ mod tests {
         assert!(!is_voidfs(&MemFs::new()));
     }
 }
-

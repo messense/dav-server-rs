@@ -18,13 +18,13 @@ use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::conditional::if_match_get_tokens;
 use crate::davheaders;
+use crate::davpath::*;
 use crate::errors::*;
 use crate::fs::*;
 use crate::handle_lock::{list_lockdiscovery, list_supportedlock};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
 use crate::util::{dav_xml_error, systemtime_to_httpdate, systemtime_to_rfc3339};
-use crate::davpath::*;
 use crate::{DavInner, DavResult};
 
 const NS_APACHE_URI: &'static str = "http://apache.org/dav/props/";

@@ -10,11 +10,11 @@ use xmltree::{self, Element};
 use crate::body::Body;
 use crate::conditional::{dav_if_match, if_match};
 use crate::davheaders::{self, DavTimeout};
+use crate::davpath::DavPath;
 use crate::errors::*;
 use crate::fs::{FsError, OpenOptions};
 use crate::ls::*;
 use crate::multierror::MultiBuf;
-use crate::davpath::DavPath;
 use crate::xmltree_ext::{self, ElementExt};
 use crate::DavResult;
 

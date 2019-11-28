@@ -1,8 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use headers::Header;
-use http::Method as httpMethod;
 use http::method::InvalidMethod;
+use http::Method as httpMethod;
 
 use crate::body::Body;
 use crate::errors::DavError;
@@ -90,7 +90,7 @@ impl AllowedMethods {
 
     /// Generate an AllowedMethods from a list of words.
     pub fn from_vec(v: Vec<impl AsRef<str>>) -> Result<AllowedMethods, InvalidMethod> {
-        const HTTP_RO: u32 = Method::Get as u32 | Method::Head as u32 | Method::Options  as u32;
+        const HTTP_RO: u32 = Method::Get as u32 | Method::Head as u32 | Method::Options as u32;
         const HTTP_RW: u32 = HTTP_RO | Method::Put as u32;
         const WEBDAV_RO: u32 = HTTP_RO | Method::PropFind as u32;
         const WEBDAV_RW: u32 = 0xffffffff;
@@ -119,7 +119,7 @@ impl AllowedMethods {
                     // A trick to get at the value of http::method::InvalidMethod.
                     let invalid_method = http::method::Method::from_bytes(b"").unwrap_err();
                     return Err(invalid_method);
-                }
+                },
             };
         }
         Ok(AllowedMethods(m))

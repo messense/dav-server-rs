@@ -58,13 +58,13 @@ pub type FsResult<T> = std::result::Result<T, FsError>;
 #[derive(Debug, Clone)]
 pub struct DavProp {
     /// Name of the property.
-    pub name:      String,
+    pub name: String,
     /// XML prefix.
-    pub prefix:    Option<String>,
+    pub prefix: Option<String>,
     /// XML namespace.
     pub namespace: Option<String>,
     /// Value of the property as raw XML.
-    pub xml:       Option<Vec<u8>>,
+    pub xml: Option<Vec<u8>>,
 }
 
 /// Future returned by almost all of the DavFileSystem methods.

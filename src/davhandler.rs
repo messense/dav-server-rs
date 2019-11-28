@@ -6,20 +6,20 @@ use std::error::Error as StdError;
 use std::io;
 use std::sync::Arc;
 
-use bytes::{self, Bytes, buf::Buf, buf::FromBuf, buf::IntoBuf};
+use bytes::{self, buf::Buf, buf::FromBuf, buf::IntoBuf, Bytes};
 use futures::stream::{Stream, StreamExt, TryStreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
 use crate::body::{Body, InBody};
 use crate::davheaders;
-use crate::util::{dav_method, AllowedMethods, Method};
 use crate::davpath::DavPath;
+use crate::util::{dav_method, AllowedMethods, Method};
 
 use crate::errors::DavError;
 use crate::fs::*;
 use crate::ls::*;
-use crate::voidfs::{VoidFs, is_voidfs};
+use crate::voidfs::{is_voidfs, VoidFs};
 use crate::DavResult;
 
 /// The webdav handler struct.
@@ -60,7 +60,9 @@ impl DavConfig {
 
     /// Use the configuration that was built to generate a DavConfig.
     pub fn build_handler(self) -> DavHandler {
-        DavHandler{ config: Arc::new(self) }
+        DavHandler {
+            config: Arc::new(self),
+        }
     }
 
     /// Prefix to be stripped off before translating the rest of
@@ -194,7 +196,9 @@ impl DavHandler {
     /// Normally you should create a new `DavHandler` using `DavHandler::build`
     /// and configure at least the filesystem, and probably the strip_prefix.
     pub fn new() -> DavHandler {
-        DavHandler{ config: Arc::new(DavConfig::default()) }
+        DavHandler {
+            config: Arc::new(DavConfig::default()),
+        }
     }
 
     /// Return a configuration builder.
@@ -264,7 +268,10 @@ impl DavHandler {
     {
         let (req, body) = {
             let (parts, body) = req.into_parts();
-            (Request::from_parts(parts, ()), body.map_ok(|buf| Bytes::from_buf(buf.into_buf())))
+            (
+                Request::from_parts(parts, ()),
+                body.map_ok(|buf| Bytes::from_buf(buf.into_buf())),
+            )
         };
         let inner = DavInner::from(&*self.config);
         inner.handle(req, body).await
@@ -284,7 +291,10 @@ impl DavHandler {
     {
         let (req, body) = {
             let (parts, body) = req.into_parts();
-            (Request::from_parts(parts, ()), body.map_ok(|buf| Bytes::from_buf(buf.into_buf())))
+            (
+                Request::from_parts(parts, ()),
+                body.map_ok(|buf| Bytes::from_buf(buf.into_buf())),
+            )
         };
         let inner = DavInner::from(self.config.merge(config));
         inner.handle(req, body).await
@@ -395,7 +405,11 @@ impl DavInner {
     }
 
     // internal dispatcher part 2.
-    async fn handle2<ReqBody, ReqError>(mut self, req: Request<()>, body: ReqBody) -> DavResult<Response<Body>>
+    async fn handle2<ReqBody, ReqError>(
+        mut self,
+        req: Request<()>,
+        body: ReqBody,
+    ) -> DavResult<Response<Body>>
     where
         ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send + Unpin,
         ReqError: StdError + Send + Sync + 'static,
@@ -420,7 +434,12 @@ impl DavInner {
         if is_voidfs(&self.fs) {
             match method {
                 Method::Options => {
-                    if self.allow.as_ref().map(|a| a.allowed(Method::Options)).unwrap_or(true) {
+                    if self
+                        .allow
+                        .as_ref()
+                        .map(|a| a.allowed(Method::Options))
+                        .unwrap_or(true)
+                    {
                         let mut a = AllowedMethods::none();
                         a.add(Method::Options);
                         self.allow = Some(a);
@@ -429,7 +448,7 @@ impl DavInner {
                 _ => {
                     debug!("no filesystem: method not allowed on request {}", req.uri());
                     return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
-                }
+                },
             }
         }
 
@@ -466,7 +485,7 @@ impl DavInner {
         let res = match method {
             Method::Options => self.handle_options(&req).await,
             Method::PropFind => self.handle_propfind(&req, &body_data).await,
-            Method::PropPatch => self.handle_proppatch(&req,&body_data).await,
+            Method::PropPatch => self.handle_proppatch(&req, &body_data).await,
             Method::MkCol => self.handle_mkcol(&req).await,
             Method::Delete => self.handle_delete(&req).await,
             Method::Lock => self.handle_lock(&req, &body_data).await,

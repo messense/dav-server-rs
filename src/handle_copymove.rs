@@ -6,10 +6,10 @@ use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::conditional::*;
 use crate::davheaders::{self, Depth};
+use crate::davpath::DavPath;
 use crate::errors::*;
 use crate::fs::*;
 use crate::multierror::{multi_error, MultiError};
-use crate::davpath::DavPath;
 use crate::{util::Method, DavResult};
 
 // map_err helper.
@@ -140,7 +140,12 @@ impl crate::DavInner {
         }
     }
 
-    pub(crate) async fn handle_copymove(self, req: &Request<()>, method: Method) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_copymove(
+        self,
+        req: &Request<()>,
+        method: Method,
+    ) -> DavResult<Response<Body>>
+    {
         // get and check headers.
         let overwrite = req
             .headers()

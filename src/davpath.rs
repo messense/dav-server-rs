@@ -20,7 +20,7 @@ pub struct DavPath {
 /// Reference to DavPath, no prefix.
 /// It's what you get when you `Deref` `DavPath`, and returned by `DavPath::with_prefix()`.
 pub struct DavPathRef {
-    fullpath:   [u8],
+    fullpath: [u8],
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -181,11 +181,13 @@ impl PartialEq for DavPath {
 }
 
 impl DavPath {
-
     /// from URL encoded path
     pub fn new(src: &str) -> Result<DavPath, ParseError> {
         let path = normalize_path(src.as_bytes())?;
-        Ok(DavPath{ fullpath: path.to_vec(), pfxlen: None })
+        Ok(DavPath {
+            fullpath: path.to_vec(),
+            pfxlen:   None,
+        })
     }
 
     /// Set prefix.
@@ -213,7 +215,10 @@ impl DavPath {
     /// from URL encoded path and non-encoded prefix.
     pub(crate) fn from_str_and_prefix(src: &str, prefix: &str) -> Result<DavPath, ParseError> {
         let path = normalize_path(src.as_bytes())?;
-        let mut davpath = DavPath{ fullpath: path.to_vec(), pfxlen: None };
+        let mut davpath = DavPath {
+            fullpath: path.to_vec(),
+            pfxlen:   None,
+        };
         davpath.set_prefix(prefix)?;
         Ok(davpath)
     }
@@ -305,7 +310,6 @@ impl std::ops::Deref for DavPath {
 }
 
 impl DavPathRef {
-
     fn new(path: &[u8]) -> &DavPathRef {
         unsafe { &*(path as *const [u8] as *const DavPathRef) }
     }
@@ -344,7 +348,10 @@ impl DavPathRef {
     /// Count the number of segments the path has. "/" has 0.
     #[doc(hidden)]
     pub fn num_segments(&self) -> usize {
-        self.get_path().split(|&c| c == b'/').filter(|e| e.len() > 0).count()
+        self.get_path()
+            .split(|&c| c == b'/')
+            .filter(|e| e.len() > 0)
+            .count()
     }
 
     //
@@ -364,11 +371,7 @@ impl DavPathRef {
     /// as OS specific Path, relative (remove first slash)
     pub(crate) fn as_rel_ospath(&self) -> &Path {
         let spath = self.get_path();
-        let mut path = if spath.len() > 0 {
-            &spath[1..]
-        } else {
-            spath
-        };
+        let mut path = if spath.len() > 0 { &spath[1..] } else { spath };
         if path.ends_with(b"/") {
             path = &path[..path.len() - 1];
         }

@@ -17,8 +17,8 @@ use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 use xmltree::Element;
 
-use crate::ls::*;
 use crate::davpath::DavPath;
+use crate::ls::*;
 
 /// Fake locksystem implementation.
 #[derive(Debug, Clone)]

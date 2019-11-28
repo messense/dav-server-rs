@@ -6,10 +6,10 @@ use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::conditional::if_match_get_tokens;
 use crate::davheaders::Depth;
+use crate::davpath::DavPath;
 use crate::errors::*;
 use crate::fs::*;
 use crate::multierror::{multi_error, MultiError};
-use crate::davpath::DavPath;
 use crate::DavResult;
 
 // map_err helper.

@@ -42,7 +42,10 @@ impl Server {
             config = config.locksystem(memls::MemLs::new());
         }
 
-        Server { dh: config.build_handler(), auth }
+        Server {
+            dh: config.build_handler(),
+            auth,
+        }
     }
 
     async fn handle(&self, req: hyper::Request<hyper::Body>) -> io::Result<hyper::Response<Body>> {

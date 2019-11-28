@@ -13,10 +13,10 @@ use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 use xmltree::Element;
 
+use crate::davpath::DavPath;
 use crate::fs::FsResult;
 use crate::ls::*;
 use crate::tree;
-use crate::davpath::DavPath;
 
 type Tree = tree::Tree<Vec<u8>, Vec<DavLock>>;
 

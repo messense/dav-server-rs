@@ -5,9 +5,9 @@ use http::StatusCode;
 use http::{self, Method};
 
 use crate::davheaders::{self, ETag};
+use crate::davpath::DavPath;
 use crate::fs::{DavFileSystem, DavMetaData};
 use crate::ls::DavLockSystem;
-use crate::davpath::DavPath;
 
 type Request = http::Request<()>;
 

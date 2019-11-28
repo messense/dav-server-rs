@@ -17,9 +17,9 @@ use futures::{
 };
 use http::StatusCode;
 
+use crate::davpath::DavPath;
 use crate::fs::*;
 use crate::tree;
-use crate::davpath::DavPath;
 
 type Tree = tree::Tree<Vec<u8>, MemFsNode>;
 
