@@ -21,7 +21,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures::{future, FutureExt, Stream};
 use pin_utils::pin_mut;
-use tokio_executor::threadpool;
+use tokio::task::block_in_place;
 
 use libc;
 
@@ -33,14 +33,9 @@ use crate::localfs_macos::DUCacheBuilder;
 //
 // There's also a method on LocalFs for this, use the freestanding
 // function if you do not want the fs_access_guard() closure to be used.
-async fn blocking<F, T>(func: F) -> T
-where F: FnOnce() -> T {
-    let mut func = Some(func);
-    let r = future::poll_fn(move |_cx| threadpool::blocking(|| (func.take().unwrap())())).await;
-    match r {
-        Ok(x) => x,
-        Err(_) => panic!("the thread pool has shut down"),
-    }
+async fn blocking<F, R>(func: F) -> R
+where F: FnOnce() -> R {
+    block_in_place(func)
 }
 
 #[derive(Debug, Clone)]
@@ -151,20 +146,12 @@ impl LocalFs {
 
     // threadpool::blocking() adapter, also runs the before/after hooks.
     #[doc(hidden)]
-    pub async fn blocking<F, T>(&self, func: F) -> T
-    where F: FnOnce() -> T {
-        let mut func = Some(func);
-        let r = future::poll_fn(move |_cx| {
-            threadpool::blocking(|| {
-                let _guard = self.inner.fs_access_guard.as_ref().map(|f| f());
-                (func.take().unwrap())()
-            })
+    pub async fn blocking<F, R>(&self, func: F) -> R
+    where F: FnOnce() -> R {
+        block_in_place(move || {
+            let _guard = self.inner.fs_access_guard.as_ref().map(|f| f());
+            func()
         })
-        .await;
-        match r {
-            Ok(x) => x,
-            Err(_) => panic!("the thread pool has shut down"),
-        }
     }
 }
 

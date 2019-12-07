@@ -4,7 +4,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use bytes::{buf::FromBuf, buf::IntoBuf, Buf, Bytes};
+use bytes::{Buf, Bytes};
 use futures::{future, stream, stream::Stream};
 use http::header::HeaderMap;
 use http_body::Body as HttpBody;
@@ -14,10 +14,10 @@ use crate::async_stream::AsyncStream;
 /// Body is returned by the webdav handler, and implements both `Stream`
 /// and `http_body::Body`.
 pub struct Body {
-    inner: BodyType,
+    pub(crate) inner: BodyType,
 }
 
-enum BodyType {
+pub(crate) enum BodyType {
     Stream(Box<dyn Stream<Item = io::Result<Bytes>> + Send + Unpin + 'static>),
     AsyncStream(AsyncStream<Bytes, io::Error>),
     Empty,
@@ -53,16 +53,11 @@ impl Stream for Body {
 }
 
 impl HttpBody for Body {
-    type Data = io::Cursor<Bytes>;
+    type Data = Bytes;
     type Error = io::Error;
 
     fn poll_data(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        match self.poll_next(cx) {
-            Poll::Ready(Some(Ok(item))) => Poll::Ready(Some(Ok(item.into_buf()))),
-            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
-        }
+        self.poll_next(cx)
     }
 
     fn poll_trailers(
@@ -87,7 +82,7 @@ macro_rules! into_body {
 }
 
 into_body!(String);
-into_body!(&str);
+//into_body!(&str);
 into_body!(Bytes);
 
 impl From<AsyncStream<Bytes, io::Error>> for Body {
@@ -125,7 +120,7 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
         match this.body.poll_data(cx) {
-            Poll::Ready(Some(Ok(item))) => Poll::Ready(Some(Ok(Bytes::from_buf(item)))),
+            Poll::Ready(Some(Ok(mut item))) => Poll::Ready(Some(Ok(item.to_bytes()))),
             Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(io::Error::new(io::ErrorKind::Other, e)))),
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,

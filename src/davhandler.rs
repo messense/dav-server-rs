@@ -6,12 +6,12 @@ use std::error::Error as StdError;
 use std::io;
 use std::sync::Arc;
 
-use bytes::{self, buf::Buf, buf::FromBuf, buf::IntoBuf, Bytes};
+use bytes::{self, buf::Buf, Bytes};
 use futures::stream::{Stream, StreamExt, TryStreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
-use crate::body::{Body, InBody};
+use crate::body::{Body, BodyType, InBody};
 use crate::davheaders;
 use crate::davpath::DavPath;
 use crate::util::{dav_method, AllowedMethods, Method};
@@ -220,12 +220,8 @@ impl DavHandler {
         ReqError: StdError + Send + Sync + 'static,
         ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send + Unpin,
     {
-        let (req, body) = {
-            let (parts, body) = req.into_parts();
-            (Request::from_parts(parts, ()), InBody::from(body))
-        };
         let inner = DavInner::from(&*self.config);
-        inner.handle(req, body).await
+        inner.handle(req).await
     }
 
     /// Handle a webdav request, overriding parts of the config.
@@ -245,12 +241,8 @@ impl DavHandler {
         ReqError: StdError + Send + Sync + 'static,
         ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send + Unpin,
     {
-        let (req, body) = {
-            let (parts, body) = req.into_parts();
-            (Request::from_parts(parts, ()), InBody::from(body))
-        };
         let inner = DavInner::from(self.config.merge(config));
-        inner.handle(req, body).await
+        inner.handle(req).await
     }
 
     /// Handles a request with a `Stream` body instead of a `http_body::Body`.
@@ -262,19 +254,23 @@ impl DavHandler {
         req: Request<ReqBody>,
     ) -> io::Result<Response<Body>>
     where
-        ReqData: IntoBuf + Send,
+        ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + Unpin,
+        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + Unpin + 'static,
     {
-        let (req, body) = {
+        // XXX FIXME this is likely not very efficient. We can do better.
+        let req = {
             let (parts, body) = req.into_parts();
-            (
-                Request::from_parts(parts, ()),
-                body.map_ok(|buf| Bytes::from_buf(buf.into_buf())),
-            )
+            let stream = body
+                .map_ok(|mut buf| buf.to_bytes())
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+            let body = Body {
+                inner: BodyType::Stream(Box::new(stream)),
+            };
+            Request::from_parts(parts, body)
         };
         let inner = DavInner::from(&*self.config);
-        inner.handle(req, body).await
+        inner.handle(req).await
     }
 
     /// Handles a request with a `Stream` body instead of a `http_body::Body`.
@@ -285,19 +281,23 @@ impl DavHandler {
         req: Request<ReqBody>,
     ) -> io::Result<Response<Body>>
     where
-        ReqData: IntoBuf + Send,
+        ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + Unpin,
+        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + Unpin + 'static,
     {
-        let (req, body) = {
+        // XXX FIXME this is likely not very efficient. We can do better.
+        let req = {
             let (parts, body) = req.into_parts();
-            (
-                Request::from_parts(parts, ()),
-                body.map_ok(|buf| Bytes::from_buf(buf.into_buf())),
-            )
+            let stream = body
+                .map_ok(|mut buf| buf.to_bytes())
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+            let body = Body {
+                inner: BodyType::Stream(Box::new(stream)),
+            };
+            Request::from_parts(parts, body)
         };
         let inner = DavInner::from(self.config.merge(config));
-        inner.handle(req, body).await
+        inner.handle(req).await
     }
 }
 
@@ -357,11 +357,17 @@ impl DavInner {
     }
 
     // internal dispatcher.
-    async fn handle<ReqBody, ReqError>(self, req: Request<()>, body: ReqBody) -> io::Result<Response<Body>>
+    async fn handle<ReqBody, ReqData, ReqError>(self, req: Request<ReqBody>) -> io::Result<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send + Unpin,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send + Unpin,
+        ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
+        let (req, body) = {
+            let (parts, body) = req.into_parts();
+            (Request::from_parts(parts, ()), InBody::from(body))
+        };
+
         let is_ms = req
             .headers()
             .get("user-agent")
@@ -388,15 +394,15 @@ impl DavInner {
                     // will fail.
                     //
                     // Ofcourse the below is not sufficient. Fixes welcome.
-                    resp.header("Cache-Control", "no-store, no-cache, must-revalidate");
-                    resp.header("Progma", "no-cache");
-                    resp.header("Expires", "0");
-                    resp.header("Vary", "*");
+                    resp = resp
+                        .header("Cache-Control", "no-store, no-cache, must-revalidate")
+                        .header("Progma", "no-cache")
+                        .header("Expires", "0")
+                        .header("Vary", "*");
                 }
-                resp.header("Content-Length", "0");
-                resp.status(err.statuscode());
+                resp = resp.header("Content-Length", "0").status(err.statuscode());
                 if err.must_close() {
-                    resp.header("connection", "close");
+                    resp = resp.header("connection", "close");
                 }
                 let resp = resp.body(Body::empty()).unwrap();
                 Ok(resp)

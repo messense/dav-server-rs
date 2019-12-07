@@ -211,7 +211,7 @@ impl crate::DavInner {
                         count -= n as u64;
                         curpos += n as u64;
                         debug!("sending {} bytes", data.len());
-                        tx.send(Bytes::from(data)).await;
+                        tx.send(Bytes::copy_from_slice(data)).await;
                     }
                 }
                 if multipart {

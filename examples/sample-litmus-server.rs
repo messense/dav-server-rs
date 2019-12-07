@@ -58,7 +58,7 @@ impl Server {
                     let response = hyper::Response::builder()
                         .status(401)
                         .header("WWW-Authenticate", "Basic realm=\"foo\"")
-                        .body(Body::from("please auth"))
+                        .body(Body::from("please auth".to_string()))
                         .unwrap();
                     return Ok(response);
                 },
@@ -67,12 +67,12 @@ impl Server {
             None
         };
 
-        let config = DavConfig {
-            principal: user,
-            ..DavConfig::default()
-        };
-
-        self.dh.handle_with(config, req).await
+        if let Some(user) = user {
+            let config = DavConfig::new().principal(user);
+            self.dh.handle_with(config, req).await
+        } else {
+            self.dh.handle(req).await
+        }
     }
 }
 
@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map_err(|e| eprintln!("server error: {}", e));
 
     println!("Serving {} on {}", name, port);
-    let runtime = tokio::runtime::Runtime::new()?;
+    let mut runtime = tokio::runtime::Runtime::new()?;
     let _ = runtime.block_on(server);
 
     Ok(())
