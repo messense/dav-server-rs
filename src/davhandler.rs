@@ -219,7 +219,7 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
     {
         let inner = DavInner::from(&*self.config);
         inner.handle(req).await
@@ -240,7 +240,7 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
     {
         let inner = DavInner::from(self.config.merge(config));
         inner.handle(req).await
@@ -257,7 +257,7 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + 'static,
+        ReqBody: Stream<Item = Result<ReqData, ReqError>>,
     {
         let req = {
             let (parts, body) = req.into_parts();
@@ -277,7 +277,7 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + 'static,
+        ReqBody: Stream<Item = Result<ReqData, ReqError>>,
     {
         let req = {
             let (parts, body) = req.into_parts();
@@ -326,7 +326,7 @@ impl DavInner {
         max_size: usize,
     ) -> DavResult<Vec<u8>>
     where
-        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
@@ -351,7 +351,7 @@ impl DavInner {
     // internal dispatcher.
     async fn handle<ReqBody, ReqData, ReqError>(self, req: Request<ReqBody>) -> io::Result<Response<Body>>
     where
-        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
@@ -403,7 +403,7 @@ impl DavInner {
         req: Request<ReqBody>,
     ) -> DavResult<Response<Body>>
     where
-        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
     {

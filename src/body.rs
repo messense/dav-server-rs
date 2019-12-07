@@ -98,7 +98,7 @@ use pin_project::pin_project;
 // A struct that contains a Stream, and implements http_body::Body.
 //
 #[pin_project]
-pub(crate) struct StreamBody<B> {
+pub struct StreamBody<B> {
     #[pin]
     body: B,
 }
@@ -107,7 +107,7 @@ impl<ReqBody, ReqData, ReqError> HttpBody for StreamBody<ReqBody>
 where
     ReqData: Buf + Send,
     ReqError: StdError + Send + Sync + 'static,
-    ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + 'static,
+    ReqBody: Stream<Item = Result<ReqData, ReqError>>,
 {
     type Data = ReqData;
     type Error = ReqError;
@@ -130,7 +130,7 @@ impl<ReqBody, ReqData, ReqError> StreamBody<ReqBody>
 where
     ReqData: Buf + Send,
     ReqError: StdError + Send + Sync + 'static,
-    ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + 'static,
+    ReqBody: Stream<Item = Result<ReqData, ReqError>>,
 {
     pub fn new(body: ReqBody) -> StreamBody<ReqBody> {
         StreamBody { body }

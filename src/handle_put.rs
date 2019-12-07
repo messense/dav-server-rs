@@ -61,7 +61,7 @@ impl crate::DavInner {
         body: ReqBody,
     ) -> DavResult<Response<Body>>
     where
-        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
