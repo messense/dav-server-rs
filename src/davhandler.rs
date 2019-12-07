@@ -6,12 +6,13 @@ use std::error::Error as StdError;
 use std::io;
 use std::sync::Arc;
 
-use bytes::{self, buf::Buf, Bytes};
-use futures::stream::{Stream, StreamExt, TryStreamExt};
+use bytes::{self, buf::Buf};
+use futures::stream::Stream;
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
+use http_body::Body as HttpBody;
 
-use crate::body::{Body, BodyType, InBody};
+use crate::body::{Body, StreamBody};
 use crate::davheaders;
 use crate::davpath::DavPath;
 use crate::util::{dav_method, AllowedMethods, Method};
@@ -218,7 +219,7 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
     {
         let inner = DavInner::from(&*self.config);
         inner.handle(req).await
@@ -239,13 +240,13 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
     {
         let inner = DavInner::from(self.config.merge(config));
         inner.handle(req).await
     }
 
-    /// Handles a request with a `Stream` body instead of a `http_body::Body`.
+    /// Handles a request with a `Stream` body instead of a `HttpBody`.
     /// Used with webserver frameworks that have not
     /// opted to use the `http_body` crate just yet.
     #[doc(hidden)]
@@ -256,24 +257,17 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + Unpin + 'static,
+        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + 'static,
     {
-        // XXX FIXME this is likely not very efficient. We can do better.
         let req = {
             let (parts, body) = req.into_parts();
-            let stream = body
-                .map_ok(|mut buf| buf.to_bytes())
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
-            let body = Body {
-                inner: BodyType::Stream(Box::new(stream)),
-            };
-            Request::from_parts(parts, body)
+            Request::from_parts(parts, StreamBody::new(body))
         };
         let inner = DavInner::from(&*self.config);
         inner.handle(req).await
     }
 
-    /// Handles a request with a `Stream` body instead of a `http_body::Body`.
+    /// Handles a request with a `Stream` body instead of a `HttpBody`.
     #[doc(hidden)]
     pub async fn handle_stream_with<ReqBody, ReqData, ReqError>(
         &self,
@@ -283,18 +277,11 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + Unpin + 'static,
+        ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + 'static,
     {
-        // XXX FIXME this is likely not very efficient. We can do better.
         let req = {
             let (parts, body) = req.into_parts();
-            let stream = body
-                .map_ok(|mut buf| buf.to_bytes())
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
-            let body = Body {
-                inner: BodyType::Stream(Box::new(stream)),
-            };
-            Request::from_parts(parts, body)
+            Request::from_parts(parts, StreamBody::new(body))
         };
         let inner = DavInner::from(self.config.merge(config));
         inner.handle(req).await
@@ -333,25 +320,30 @@ impl DavInner {
     }
 
     // drain request body and return length.
-    pub(crate) async fn read_request<'a, ReqBody, ReqError>(
+    pub(crate) async fn read_request<'a, ReqBody, ReqData, ReqError>(
         &'a self,
         body: ReqBody,
         max_size: usize,
     ) -> DavResult<Vec<u8>>
     where
-        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send + 'a,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
+        ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
         let mut data = Vec::new();
         pin_utils::pin_mut!(body);
-        while let Some(res) = body.next().await {
-            let chunk = res.map_err(|_| {
+        while let Some(res) = body.data().await {
+            let mut buf = res.map_err(|_| {
                 DavError::IoError(io::Error::new(io::ErrorKind::UnexpectedEof, "UnexpectedEof"))
             })?;
-            if data.len() + chunk.len() > max_size {
-                return Err(StatusCode::PAYLOAD_TOO_LARGE.into());
+            while buf.has_remaining() {
+                let datalen = data.len();
+                if datalen + buf.remaining() > max_size {
+                    return Err(StatusCode::PAYLOAD_TOO_LARGE.into());
+                }
+                data.extend_from_slice(buf.bytes());
+                buf.advance(datalen);
             }
-            data.extend_from_slice(&chunk);
         }
         Ok(data)
     }
@@ -359,15 +351,10 @@ impl DavInner {
     // internal dispatcher.
     async fn handle<ReqBody, ReqData, ReqError>(self, req: Request<ReqBody>) -> io::Result<Response<Body>>
     where
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
-        let (req, body) = {
-            let (parts, body) = req.into_parts();
-            (Request::from_parts(parts, ()), InBody::from(body))
-        };
-
         let is_ms = req
             .headers()
             .get("user-agent")
@@ -376,7 +363,7 @@ impl DavInner {
             .unwrap_or(false);
 
         // Turn any DavError results into a HTTP error response.
-        match self.handle2(req, body).await {
+        match self.handle2(req).await {
             Ok(resp) => {
                 debug!("== END REQUEST result OK");
                 Ok(resp)
@@ -411,15 +398,20 @@ impl DavInner {
     }
 
     // internal dispatcher part 2.
-    async fn handle2<ReqBody, ReqError>(
+    async fn handle2<ReqBody, ReqData, ReqError>(
         mut self,
-        req: Request<()>,
-        body: ReqBody,
+        req: Request<ReqBody>,
     ) -> DavResult<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
+        ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
+        let (req, body) = {
+            let (parts, body) = req.into_parts();
+            (Request::from_parts(parts, ()), body)
+        };
+
         // debug when running the webdav litmus tests.
         if log_enabled!(log::Level::Debug) {
             if let Some(t) = req.headers().typed_get::<davheaders::XLitmus>() {

@@ -2,10 +2,11 @@ use std::any::Any;
 use std::error::Error as StdError;
 use std::io;
 
-use futures::{Stream, StreamExt};
+use bytes::Buf;
 use headers::HeaderMapExt;
 use http::StatusCode as SC;
 use http::{self, Request, Response};
+use http_body::Body as HttpBody;
 
 use crate::body::Body;
 use crate::conditional::if_match_get_tokens;
@@ -54,14 +55,15 @@ where E: StdError + Sync + Send + 'static {
 }
 
 impl crate::DavInner {
-    pub(crate) async fn handle_put<ReqBody, ReqError>(
+    pub(crate) async fn handle_put<ReqBody, ReqData, ReqError>(
         self,
         req: &Request<()>,
         body: ReqBody,
     ) -> DavResult<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>>,
-        ReqError: StdError + Sync + Send + 'static,
+        ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send,
+        ReqData: Buf + Send,
+        ReqError: StdError + Send + Sync + 'static,
     {
         let mut start = 0;
         let mut count = 0;
@@ -208,33 +210,35 @@ impl crate::DavInner {
 
         // loop, read body, write to file.
         let mut bad = false;
+        let mut total = 0u64;
 
-        while let Some(buffer) = body.next().await {
-            let buffer = buffer.map_err(|e| to_ioerror(e))?;
-            let mut n = buffer.len();
-            if have_count {
-                // bunch of consistency checks.
-                if n > 0 && count == 0 {
-                    error!("PUT file: sender is sending more than promised");
+        while let Some(data) = body.data().await {
+            let mut buf = data.map_err(|e| to_ioerror(e))?;
+            while buf.has_remaining() {
+                let data = buf.bytes();
+                let datalen = data.len();
+                total += datalen as u64;
+                // consistency check.
+                if have_count && total > count {
                     bad = true;
                     break;
                 }
-                if n > count as usize {
-                    n = count as usize;
-                }
-                if n == 0 && count > 0 {
-                    error!("PUT file: premature EOF on input");
-                    bad = true;
-                }
-                count -= n as u64;
+                file.write_all(data).await?;
+                buf.advance(datalen);
             }
-            if n == 0 {
+            if bad {
                 break;
             }
-            file.write_all(&buffer).await?;
         }
         file.flush().await?;
-        if bad {
+
+        if have_count && total > count {
+            error!("PUT file: sender is sending more bytes than expected");
+            return Err(DavError::StatusClose(SC::BAD_REQUEST));
+        }
+
+        if have_count && total < count {
+            error!("PUT file: premature EOF on input");
             return Err(DavError::StatusClose(SC::BAD_REQUEST));
         }
 

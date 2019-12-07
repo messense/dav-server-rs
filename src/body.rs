@@ -1,11 +1,12 @@
 //! Definitions for the Request and Response bodies.
 
 use std::io;
+use std::error::Error as StdError;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use bytes::{Buf, Bytes};
-use futures::{future, stream, stream::Stream};
+use futures::stream::Stream;
 use http::header::HeaderMap;
 use http_body::Body as HttpBody;
 
@@ -14,11 +15,11 @@ use crate::async_stream::AsyncStream;
 /// Body is returned by the webdav handler, and implements both `Stream`
 /// and `http_body::Body`.
 pub struct Body {
-    pub(crate) inner: BodyType,
+    inner: BodyType,
 }
 
-pub(crate) enum BodyType {
-    Stream(Box<dyn Stream<Item = io::Result<Bytes>> + Send + Unpin + 'static>),
+enum BodyType {
+    Bytes(Option<Bytes>),
     AsyncStream(AsyncStream<Bytes, io::Error>),
     Empty,
 }
@@ -37,10 +38,8 @@ impl Stream for Body {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         match self.inner {
-            BodyType::Stream(ref mut strm) => {
-                // cannot use pin_mut! - doesn't work with references.
-                let strm = unsafe { Pin::new_unchecked(strm) };
-                strm.poll_next(cx)
+            BodyType::Bytes(ref mut strm) => {
+                Poll::Ready(strm.take().map(|b| Ok(b)))
             },
             BodyType::AsyncStream(ref mut strm) => {
                 // cannot use pin_mut! - doesn't work with references.
@@ -69,21 +68,21 @@ impl HttpBody for Body {
     }
 }
 
-macro_rules! into_body {
-    ($type:ty) => {
-        impl From<$type> for Body {
-            fn from(t: $type) -> Body {
-                Body {
-                    inner: BodyType::Stream(Box::new(stream::once(future::ready(Ok(Bytes::from(t)))))),
-                }
-            }
+impl From<String> for Body {
+    fn from(t: String) -> Body {
+        Body {
+            inner: BodyType::Bytes(Some(Bytes::from(t))),
         }
-    };
+    }
 }
 
-into_body!(String);
-//into_body!(&str);
-into_body!(Bytes);
+impl From<Bytes> for Body {
+    fn from(t: Bytes) -> Body {
+        Body {
+            inner: BodyType::Bytes(Some(t))
+        }
+    }
+}
 
 impl From<AsyncStream<Bytes, io::Error>> for Body {
     fn from(s: AsyncStream<Bytes, io::Error>) -> Body {
@@ -96,45 +95,44 @@ impl From<AsyncStream<Bytes, io::Error>> for Body {
 use pin_project::pin_project;
 
 //
-// A struct that contains a http_body::Body, and implements Stream.
+// A struct that contains a Stream, and implements http_body::Body.
 //
 #[pin_project]
-pub(crate) struct InBody<B, Data, Error>
-where
-    Data: Buf + Send,
-    Error: std::error::Error + Send + Sync + 'static,
-    B: HttpBody<Data = Data, Error = Error>,
-{
+pub(crate) struct StreamBody<B> {
     #[pin]
     body: B,
 }
 
-impl<B, Data, Error> Stream for InBody<B, Data, Error>
+impl<ReqBody, ReqData, ReqError> HttpBody for StreamBody<ReqBody>
 where
-    Data: Buf + Send,
-    Error: std::error::Error + Send + Sync + 'static,
-    B: HttpBody<Data = Data, Error = Error>,
+    ReqData: Buf + Send,
+    ReqError: StdError + Send + Sync + 'static,
+    ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + 'static,
 {
-    type Item = Result<Bytes, io::Error>;
+    type Data = ReqData;
+    type Error = ReqError;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Result<Self::Data, Self::Error>>> {
         let this = self.project();
-        match this.body.poll_data(cx) {
-            Poll::Ready(Some(Ok(mut item))) => Poll::Ready(Some(Ok(item.to_bytes()))),
-            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(io::Error::new(io::ErrorKind::Other, e)))),
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
-        }
+        this.body.poll_next(cx)
+    }
+
+    fn poll_trailers(
+        self: Pin<&mut Self>,
+        _cx: &mut Context,
+    ) -> Poll<Result<Option<HeaderMap>, Self::Error>>
+    {
+        Poll::Ready(Ok(None))
     }
 }
 
-impl<B, Data, Error> InBody<B, Data, Error>
+impl<ReqBody, ReqData, ReqError> StreamBody<ReqBody>
 where
-    Data: Buf + Send,
-    Error: std::error::Error + Send + Sync + 'static,
-    B: HttpBody<Data = Data, Error = Error>,
+    ReqData: Buf + Send,
+    ReqError: StdError + Send + Sync + 'static,
+    ReqBody: Stream<Item = Result<ReqData, ReqError>> + Send + 'static,
 {
-    pub fn from(body: B) -> InBody<B, Data, Error> {
-        InBody { body }
+    pub fn new(body: ReqBody) -> StreamBody<ReqBody> {
+        StreamBody { body }
     }
 }
