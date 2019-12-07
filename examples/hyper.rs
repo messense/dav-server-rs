@@ -1,6 +1,6 @@
 use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 
-#[tokio::main]
+#[tokio::main(threaded_scheduler)]
 async fn main() {
     env_logger::init();
     let dir = "/tmp";

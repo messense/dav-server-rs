@@ -76,7 +76,8 @@ impl Server {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main(threaded_scheduler)]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let matches = clap_app!(webdav_lib =>
@@ -113,13 +114,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let port = matches.value_of("PORT").unwrap_or("4918");
     let addr = "0.0.0.0:".to_string() + port;
     let addr = SocketAddr::from_str(&addr)?;
+
     let server = hyper::Server::try_bind(&addr)?
         .serve(make_service)
         .map_err(|e| eprintln!("server error: {}", e));
 
     println!("Serving {} on {}", name, port);
-    let mut runtime = tokio::runtime::Runtime::new()?;
-    let _ = runtime.block_on(server);
-
+    let _ = server.await;
     Ok(())
 }

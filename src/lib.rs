@@ -69,7 +69,7 @@
 //! ```no_run
 //! use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 //!
-//! #[tokio::main]
+//! #[tokio::main(threaded_scheduler)]
 //! async fn main() {
 //!     let dir = "/tmp";
 //!     let addr = ([127, 0, 0, 1], 4918).into();
