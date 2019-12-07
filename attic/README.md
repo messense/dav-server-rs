@@ -4,7 +4,6 @@ ATTIC
 
 Temporarily moved the actix-web example here. It's broken.
 
-I'll work on it again when actix works with std::future::Future
-and async/await. I'll probably wait for support of the standard
-http/http_body crates as well.
+Most things have been fixed, the only thing that remains is we need
+to find a way to spawn the I/O requests on Actix's threadpool.
 

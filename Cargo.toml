@@ -52,10 +52,9 @@ headers = { git = "https://github.com/hyperium/headers" }
 pin-utils = "0.1.0-alpha.4"
 
 [dev-dependencies]
-#actix-web = "2.0.0-alpha.1"
+#actix-web = "2.0.0-alpha.3"
 clap = "2.33.0"
 env_logger = "0.7.1"
-failure = "0.1.6"
 hyper = { git = "https://github.com/hyperium/hyper" }
 tokio = { version = "0.2.3", features = ["full"] }
 
