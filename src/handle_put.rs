@@ -57,10 +57,10 @@ impl crate::DavInner {
     pub(crate) async fn handle_put<ReqBody, ReqError>(
         self,
         req: &Request<()>,
-        body: &mut ReqBody,
+        body: ReqBody,
     ) -> DavResult<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>> + Unpin,
+        ReqBody: Stream<Item = Result<bytes::Bytes, ReqError>>,
         ReqError: StdError + Sync + Send + 'static,
     {
         let mut start = 0;
@@ -204,6 +204,7 @@ impl crate::DavInner {
 
         res.headers_mut().typed_insert(headers::AcceptRanges::bytes());
 
+        pin_utils::pin_mut!(body);
 
         // loop, read body, write to file.
         let mut bad = false;

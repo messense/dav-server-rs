@@ -218,7 +218,7 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send + Unpin,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
     {
         let inner = DavInner::from(&*self.config);
         inner.handle(req).await
@@ -239,7 +239,7 @@ impl DavHandler {
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send + Unpin,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
     {
         let inner = DavInner::from(self.config.merge(config));
         inner.handle(req).await
@@ -359,7 +359,7 @@ impl DavInner {
     // internal dispatcher.
     async fn handle<ReqBody, ReqData, ReqError>(self, req: Request<ReqBody>) -> io::Result<Response<Body>>
     where
-        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send + Unpin,
+        ReqBody: http_body::Body<Data = ReqData, Error = ReqError> + Send,
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
@@ -417,7 +417,7 @@ impl DavInner {
         body: ReqBody,
     ) -> DavResult<Response<Body>>
     where
-        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send + Unpin,
+        ReqBody: Stream<Item = Result<Bytes, ReqError>> + Send,
         ReqError: StdError + Send + Sync + 'static,
     {
         // debug when running the webdav litmus tests.
@@ -497,8 +497,8 @@ impl DavInner {
             Method::Lock => self.handle_lock(&req, &body_data).await,
             Method::Unlock => self.handle_unlock(&req).await,
             Method::Head | Method::Get => self.handle_get(&req).await,
-            Method::Put | Method::Patch => self.handle_put(&req, &mut body_strm.unwrap()).await,
             Method::Copy | Method::Move => self.handle_copymove(&req, method).await,
+            Method::Put | Method::Patch => self.handle_put(&req, body_strm.unwrap()).await,
         };
         res
     }
