@@ -1,8 +1,7 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use headers::HeaderMapExt;
-use http::StatusCode;
-use http::{self, Method};
+use http::{Method, StatusCode};
 
 use crate::davheaders::{self, ETag};
 use crate::davpath::DavPath;

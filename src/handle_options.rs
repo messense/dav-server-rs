@@ -2,7 +2,7 @@ use headers::HeaderMapExt;
 use http::{Request, Response};
 
 use crate::body::Body;
-use crate::util::{dav_method, Method};
+use crate::util::{dav_method, DavMethod};
 use crate::DavResult;
 
 impl crate::DavInner {
@@ -10,7 +10,7 @@ impl crate::DavInner {
         let mut res = Response::new(Body::empty());
 
         let h = res.headers_mut();
-        let lock_allowed = self.allow.map(|x| x.contains(Method::Lock)).unwrap_or(true);
+        let lock_allowed = self.allow.map(|x| x.contains(DavMethod::Lock)).unwrap_or(true);
         let dav = if self.ls.is_some() && lock_allowed {
             "1,2,3,sabredav-partialupdate"
         } else {
@@ -23,11 +23,11 @@ impl crate::DavInner {
         // Helper to add method to array if method is in fact
         // allowed. If the current method is not OPTIONS, leave
         // out the current method since we're probably called
-        // for MethodNotAllowed.
-        let method = dav_method(req.method()).unwrap_or(Method::Options);
-        let islock = |m| m == Method::Lock || m == Method::Unlock;
-        let mm = |v: &mut Vec<String>, m: &str, y: Method| {
-            if (y == Method::Options || (y != method || islock(y) != islock(method))) &&
+        // for DavMethodNotAllowed.
+        let method = dav_method(req.method()).unwrap_or(DavMethod::Options);
+        let islock = |m| m == DavMethod::Lock || m == DavMethod::Unlock;
+        let mm = |v: &mut Vec<String>, m: &str, y: DavMethod| {
+            if (y == DavMethod::Options || (y != method || islock(y) != islock(method))) &&
                 (!islock(y) || self.ls.is_some()) &&
                 self.allow.map(|x| x.contains(y)).unwrap_or(true)
             {
@@ -39,30 +39,30 @@ impl crate::DavInner {
         let meta = self.fs.metadata(&path).await;
         let is_unmapped = meta.is_err();
         let is_file = meta.and_then(|m| Ok(m.is_file())).unwrap_or_default();
-        let is_star = path.is_star() && method == Method::Options;
+        let is_star = path.is_star() && method == DavMethod::Options;
 
         let mut v = Vec::new();
         if is_unmapped && !is_star {
-            mm(&mut v, "OPTIONS", Method::Options);
-            mm(&mut v, "MKCOL", Method::MkCol);
-            mm(&mut v, "PUT", Method::Put);
-            mm(&mut v, "LOCK", Method::Lock);
+            mm(&mut v, "OPTIONS", DavMethod::Options);
+            mm(&mut v, "MKCOL", DavMethod::MkCol);
+            mm(&mut v, "PUT", DavMethod::Put);
+            mm(&mut v, "LOCK", DavMethod::Lock);
         } else {
             if is_file || is_star {
-                mm(&mut v, "HEAD", Method::Head);
-                mm(&mut v, "GET", Method::Get);
-                mm(&mut v, "PATCH", Method::Patch);
-                mm(&mut v, "PUT", Method::Put);
+                mm(&mut v, "HEAD", DavMethod::Head);
+                mm(&mut v, "GET", DavMethod::Get);
+                mm(&mut v, "PATCH", DavMethod::Patch);
+                mm(&mut v, "PUT", DavMethod::Put);
             }
-            mm(&mut v, "OPTIONS", Method::Options);
-            mm(&mut v, "PROPFIND", Method::PropFind);
-            mm(&mut v, "COPY", Method::Copy);
+            mm(&mut v, "OPTIONS", DavMethod::Options);
+            mm(&mut v, "PROPFIND", DavMethod::PropFind);
+            mm(&mut v, "COPY", DavMethod::Copy);
             if path.as_url_string() != "/" {
-                mm(&mut v, "MOVE", Method::Move);
-                mm(&mut v, "DELETE", Method::Delete);
+                mm(&mut v, "MOVE", DavMethod::Move);
+                mm(&mut v, "DELETE", DavMethod::Delete);
             }
-            mm(&mut v, "LOCK", Method::Lock);
-            mm(&mut v, "UNLOCK", Method::Unlock);
+            mm(&mut v, "LOCK", DavMethod::Lock);
+            mm(&mut v, "UNLOCK", DavMethod::Unlock);
         }
 
         let a = v.clone().join(",").parse().unwrap();

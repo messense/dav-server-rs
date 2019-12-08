@@ -16,7 +16,7 @@ use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
 use crate::util::systemtime_to_timespec;
-use crate::Method;
+use crate::DavMethod;
 
 struct Range {
     start: u64,
@@ -242,7 +242,7 @@ impl crate::DavInner {
         }
 
         // Is PROPFIND explicitly allowed?
-        let allow_propfind = self.allow.map(|x| x.contains(Method::PropFind)).unwrap_or(false);
+        let allow_propfind = self.allow.map(|x| x.contains(DavMethod::PropFind)).unwrap_or(false);
 
         // Only allow index generation if explicitly set to true, _or_ if it was
         // unset, and PROPFIND is explicitly allowed.

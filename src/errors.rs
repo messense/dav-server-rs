@@ -15,7 +15,7 @@ pub(crate) enum DavError {
     InvalidPath,   // error parsing path
     IllegalPath,   // path not valid here
     ForbiddenPath, // too many dotdots
-    UnknownMethod,
+    UnknownDavMethod,
     ChanError,
     Status(StatusCode),
     StatusClose(StatusCode),
@@ -152,7 +152,7 @@ impl DavError {
             &DavError::InvalidPath => StatusCode::BAD_REQUEST,
             &DavError::IllegalPath => StatusCode::BAD_GATEWAY,
             &DavError::ForbiddenPath => StatusCode::FORBIDDEN,
-            &DavError::UnknownMethod => StatusCode::NOT_IMPLEMENTED,
+            &DavError::UnknownDavMethod => StatusCode::NOT_IMPLEMENTED,
             &DavError::ChanError => StatusCode::INTERNAL_SERVER_ERROR,
             &DavError::IoError(ref e) => ioerror_to_status(e),
             &DavError::FsError(ref e) => fserror_to_status(e),

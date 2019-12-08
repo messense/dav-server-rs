@@ -10,7 +10,7 @@ use crate::davpath::DavPath;
 use crate::errors::*;
 use crate::fs::*;
 use crate::multierror::{multi_error, MultiError};
-use crate::{util::Method, DavResult};
+use crate::{util::DavMethod, DavResult};
 
 // map_err helper.
 async fn add_status<'a>(
@@ -143,7 +143,7 @@ impl crate::DavInner {
     pub(crate) async fn handle_copymove(
         self,
         req: &Request<()>,
-        method: Method,
+        method: DavMethod,
     ) -> DavResult<Response<Body>>
     {
         // get and check headers.
@@ -153,7 +153,7 @@ impl crate::DavInner {
             .map_or(true, |o| o.0);
         let depth = match req.headers().typed_get::<Depth>() {
             Some(Depth::Infinity) | None => Depth::Infinity,
-            Some(Depth::Zero) if method == Method::Copy => Depth::Zero,
+            Some(Depth::Zero) if method == DavMethod::Copy => Depth::Zero,
             _ => return Err(StatusCode::BAD_REQUEST.into()),
         };
 
@@ -166,7 +166,7 @@ impl crate::DavInner {
         // for MOVE, tread with care- if the path ends in "/" but it actually
         // is a symlink, we want to move the symlink, not what it points to.
         let mut path = self.path(&req);
-        let meta = if method == Method::Move {
+        let meta = if method == DavMethod::Move {
             let meta = self.fs.symlink_metadata(&path).await?;
             if meta.is_symlink() {
                 let m2 = self.fs.metadata(&path).await?;
@@ -224,7 +224,7 @@ impl crate::DavInner {
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             let principal = self.principal.as_ref().map(|s| s.as_str());
-            if method == Method::Move {
+            if method == DavMethod::Move {
                 // for MOVE check if source path is locked
                 if let Err(_l) = locksystem.check(&path, principal, false, true, t.clone()) {
                     return Err(StatusCode::LOCKED.into());
@@ -258,7 +258,7 @@ impl crate::DavInner {
                 }
 
                 // COPY or MOVE.
-                if method == Method::Copy {
+                if method == DavMethod::Copy {
                     if let Ok(_) = self.do_copy(&path, &dest, &dest, depth, &mut multierror).await {
                         let s = if exists {
                             StatusCode::NO_CONTENT

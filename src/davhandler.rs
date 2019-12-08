@@ -15,7 +15,7 @@ use http_body::Body as HttpBody;
 use crate::body::{Body, StreamBody};
 use crate::davheaders;
 use crate::davpath::DavPath;
-use crate::util::{dav_method, MethodSet, Method};
+use crate::util::{dav_method, DavMethodSet, DavMethod};
 
 use crate::errors::DavError;
 use crate::fs::*;
@@ -43,7 +43,7 @@ pub struct DavConfig {
     // Locksystem backend.
     ls: Option<Box<dyn DavLockSystem>>,
     // Set of allowed methods (None means "all methods")
-    allow: Option<MethodSet>,
+    allow: Option<DavMethodSet>,
     // Principal is webdav speak for "user", used to give locks an owner (if a locksystem is
     // active).
     principal: Option<String>,
@@ -89,7 +89,7 @@ impl DavConfig {
     }
 
     /// Which methods to allow (default is all methods).
-    pub fn methods(self, allow: MethodSet) -> Self {
+    pub fn methods(self, allow: DavMethodSet) -> Self {
         let mut this = self;
         this.allow = Some(allow);
         this
@@ -137,7 +137,7 @@ pub(crate) struct DavInner {
     pub prefix:        String,
     pub fs:            Box<dyn DavFileSystem>,
     pub ls:            Option<Box<dyn DavLockSystem>>,
-    pub allow:         Option<MethodSet>,
+    pub allow:         Option<DavMethodSet>,
     pub principal:     Option<String>,
     pub hide_symlinks: Option<bool>,
     pub autoindex:     Option<bool>,
@@ -431,15 +431,15 @@ impl DavInner {
         // See if method makes sense if we do not have a fileystem.
         if is_voidfs(&self.fs) {
             match method {
-                Method::Options => {
+                DavMethod::Options => {
                     if self
                         .allow
                         .as_ref()
-                        .map(|a| a.contains(Method::Options))
+                        .map(|a| a.contains(DavMethod::Options))
                         .unwrap_or(true)
                     {
-                        let mut a = MethodSet::none();
-                        a.add(Method::Options);
+                        let mut a = DavMethodSet::none();
+                        a.add(DavMethod::Options);
                         self.allow = Some(a);
                     }
                 },
@@ -464,13 +464,13 @@ impl DavInner {
         // PUT is the only handler that reads the body itself. All the
         // other handlers either expected no body, or a pre-read Vec<u8>.
         let (body_strm, body_data) = match method {
-            Method::Put | Method::Patch => (Some(body), Vec::new()),
+            DavMethod::Put | DavMethod::Patch => (Some(body), Vec::new()),
             _ => (None, self.read_request(body, 65536).await?),
         };
 
         // Not all methods accept a body.
         match method {
-            Method::Put | Method::Patch | Method::PropFind | Method::PropPatch | Method::Lock => {},
+            DavMethod::Put | DavMethod::Patch | DavMethod::PropFind | DavMethod::PropPatch | DavMethod::Lock => {},
             _ => {
                 if body_data.len() > 0 {
                     return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into());
@@ -481,16 +481,16 @@ impl DavInner {
         debug!("== START REQUEST {:?} {}", method, path);
 
         let res = match method {
-            Method::Options => self.handle_options(&req).await,
-            Method::PropFind => self.handle_propfind(&req, &body_data).await,
-            Method::PropPatch => self.handle_proppatch(&req, &body_data).await,
-            Method::MkCol => self.handle_mkcol(&req).await,
-            Method::Delete => self.handle_delete(&req).await,
-            Method::Lock => self.handle_lock(&req, &body_data).await,
-            Method::Unlock => self.handle_unlock(&req).await,
-            Method::Head | Method::Get => self.handle_get(&req).await,
-            Method::Copy | Method::Move => self.handle_copymove(&req, method).await,
-            Method::Put | Method::Patch => self.handle_put(&req, body_strm.unwrap()).await,
+            DavMethod::Options => self.handle_options(&req).await,
+            DavMethod::PropFind => self.handle_propfind(&req, &body_data).await,
+            DavMethod::PropPatch => self.handle_proppatch(&req, &body_data).await,
+            DavMethod::MkCol => self.handle_mkcol(&req).await,
+            DavMethod::Delete => self.handle_delete(&req).await,
+            DavMethod::Lock => self.handle_lock(&req, &body_data).await,
+            DavMethod::Unlock => self.handle_unlock(&req).await,
+            DavMethod::Head | DavMethod::Get => self.handle_get(&req).await,
+            DavMethod::Copy | DavMethod::Move => self.handle_copymove(&req, method).await,
+            DavMethod::Put | DavMethod::Patch => self.handle_put(&req, body_strm.unwrap()).await,
         };
         res
     }
