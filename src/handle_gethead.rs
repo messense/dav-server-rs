@@ -242,7 +242,7 @@ impl crate::DavInner {
         }
 
         // Is PROPFIND explicitly allowed?
-        let allow_propfind = self.allow.map(|x| x.allowed(Method::PropFind)).unwrap_or(false);
+        let allow_propfind = self.allow.map(|x| x.contains(Method::PropFind)).unwrap_or(false);
 
         // Only allow index generation if explicitly set to true, _or_ if it was
         // unset, and PROPFIND is explicitly allowed.

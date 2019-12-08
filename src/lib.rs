@@ -158,4 +158,4 @@ pub(crate) use crate::errors::{DavError, DavResult};
 pub(crate) use crate::fs::*;
 
 pub use crate::davhandler::{DavConfig, DavHandler};
-pub use crate::util::{AllowedMethods, Method};
+pub use crate::util::{MethodSet, Method};

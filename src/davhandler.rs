@@ -15,7 +15,7 @@ use http_body::Body as HttpBody;
 use crate::body::{Body, StreamBody};
 use crate::davheaders;
 use crate::davpath::DavPath;
-use crate::util::{dav_method, AllowedMethods, Method};
+use crate::util::{dav_method, MethodSet, Method};
 
 use crate::errors::DavError;
 use crate::fs::*;
@@ -43,7 +43,7 @@ pub struct DavConfig {
     // Locksystem backend.
     ls: Option<Box<dyn DavLockSystem>>,
     // Set of allowed methods (None means "all methods")
-    allow: Option<AllowedMethods>,
+    allow: Option<MethodSet>,
     // Principal is webdav speak for "user", used to give locks an owner (if a locksystem is
     // active).
     principal: Option<String>,
@@ -89,7 +89,7 @@ impl DavConfig {
     }
 
     /// Which methods to allow (default is all methods).
-    pub fn methods(self, allow: AllowedMethods) -> Self {
+    pub fn methods(self, allow: MethodSet) -> Self {
         let mut this = self;
         this.allow = Some(allow);
         this
@@ -137,7 +137,7 @@ pub(crate) struct DavInner {
     pub prefix:        String,
     pub fs:            Box<dyn DavFileSystem>,
     pub ls:            Option<Box<dyn DavLockSystem>>,
-    pub allow:         Option<AllowedMethods>,
+    pub allow:         Option<MethodSet>,
     pub principal:     Option<String>,
     pub hide_symlinks: Option<bool>,
     pub autoindex:     Option<bool>,
@@ -435,10 +435,10 @@ impl DavInner {
                     if self
                         .allow
                         .as_ref()
-                        .map(|a| a.allowed(Method::Options))
+                        .map(|a| a.contains(Method::Options))
                         .unwrap_or(true)
                     {
-                        let mut a = AllowedMethods::none();
+                        let mut a = MethodSet::none();
                         a.add(Method::Options);
                         self.allow = Some(a);
                     }
@@ -452,7 +452,7 @@ impl DavInner {
 
         // see if method is allowed.
         if let Some(ref a) = self.allow {
-            if !a.allowed(method) {
+            if !a.contains(method) {
                 debug!("method {} not allowed on request {}", req.method(), req.uri());
                 return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
             }

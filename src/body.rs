@@ -76,6 +76,14 @@ impl From<String> for Body {
     }
 }
 
+impl From<&str> for Body {
+    fn from(t: &str) -> Body {
+        Body {
+            inner: BodyType::Bytes(Some(Bytes::from(t.to_string()))),
+        }
+    }
+}
+
 impl From<Bytes> for Body {
     fn from(t: Bytes) -> Body {
         Body {

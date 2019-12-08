@@ -54,21 +54,33 @@ pub(crate) fn dav_method(m: &http::Method) -> DavResult<Method> {
     Ok(m)
 }
 
+// for external use.
+impl std::convert::TryFrom<http::Method> for Method {
+    type Error = InvalidMethod;
+
+    fn try_from(value: http::Method) -> Result<Self, Self::Error> {
+        dav_method(&value).map_err(|_| {
+            // A trick to get at the value of http::method::InvalidMethod.
+            http::method::Method::from_bytes(b"").unwrap_err()
+        })
+    }
+}
+
 /// A set of allowed [`Method`]s.
 ///
 /// [`Method`]: enum.Method.html
 #[derive(Clone, Copy)]
-pub struct AllowedMethods(u32);
+pub struct MethodSet(u32);
 
-impl AllowedMethods {
+impl MethodSet {
     /// New set, all methods allowed.
-    pub fn all() -> AllowedMethods {
-        AllowedMethods(0xffffffff)
+    pub fn all() -> MethodSet {
+        MethodSet(0xffffffff)
     }
 
-    /// New set, no methods allowed.
-    pub fn none() -> AllowedMethods {
-        AllowedMethods(0)
+    /// New empty set.
+    pub fn none() -> MethodSet {
+        MethodSet(0)
     }
 
     /// Add a method.
@@ -83,13 +95,13 @@ impl AllowedMethods {
         self
     }
 
-    /// Check if method is allowed.
-    pub fn allowed(&self, m: Method) -> bool {
+    /// Check if a method is in the set.
+    pub fn contains(&self, m: Method) -> bool {
         self.0 & (m as u32) > 0
     }
 
-    /// Generate an AllowedMethods from a list of words.
-    pub fn from_vec(v: Vec<impl AsRef<str>>) -> Result<AllowedMethods, InvalidMethod> {
+    /// Generate an MethodSet from a list of words.
+    pub fn from_vec(v: Vec<impl AsRef<str>>) -> Result<MethodSet, InvalidMethod> {
         const HTTP_RO: u32 = Method::Get as u32 | Method::Head as u32 | Method::Options as u32;
         const HTTP_RW: u32 = HTTP_RO | Method::Put as u32;
         const WEBDAV_RO: u32 = HTTP_RO | Method::PropFind as u32;
@@ -122,7 +134,7 @@ impl AllowedMethods {
                 },
             };
         }
-        Ok(AllowedMethods(m))
+        Ok(MethodSet(m))
     }
 }
 

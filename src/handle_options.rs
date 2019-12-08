@@ -10,7 +10,7 @@ impl crate::DavInner {
         let mut res = Response::new(Body::empty());
 
         let h = res.headers_mut();
-        let lock_allowed = self.allow.map(|x| x.allowed(Method::Lock)).unwrap_or(true);
+        let lock_allowed = self.allow.map(|x| x.contains(Method::Lock)).unwrap_or(true);
         let dav = if self.ls.is_some() && lock_allowed {
             "1,2,3,sabredav-partialupdate"
         } else {
@@ -29,7 +29,7 @@ impl crate::DavInner {
         let mm = |v: &mut Vec<String>, m: &str, y: Method| {
             if (y == Method::Options || (y != method || islock(y) != islock(method))) &&
                 (!islock(y) || self.ls.is_some()) &&
-                self.allow.map(|x| x.allowed(y)).unwrap_or(true)
+                self.allow.map(|x| x.contains(y)).unwrap_or(true)
             {
                 v.push(m.to_string());
             }
