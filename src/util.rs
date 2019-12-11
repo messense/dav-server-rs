@@ -54,11 +54,11 @@ pub(crate) fn dav_method(m: &http::Method) -> DavResult<DavMethod> {
 }
 
 // for external use.
-impl std::convert::TryFrom<http::Method> for DavMethod {
+impl std::convert::TryFrom<&http::Method> for DavMethod {
     type Error = InvalidMethod;
 
-    fn try_from(value: http::Method) -> Result<Self, Self::Error> {
-        dav_method(&value).map_err(|_| {
+    fn try_from(value: &http::Method) -> Result<Self, Self::Error> {
+        dav_method(value).map_err(|_| {
             // A trick to get at the value of http::method::InvalidMethod.
             http::method::Method::from_bytes(b"").unwrap_err()
         })
@@ -68,7 +68,7 @@ impl std::convert::TryFrom<http::Method> for DavMethod {
 /// A set of allowed [`DavMethod`]s.
 ///
 /// [`DavMethod`]: enum.DavMethod.html
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct DavMethodSet(u32);
 
 impl DavMethodSet {

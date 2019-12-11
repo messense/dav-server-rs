@@ -312,7 +312,7 @@ impl DavInner {
     // helper.
     pub(crate) fn path(&self, req: &Request<()>) -> DavPath {
         // This never fails (has been checked before)
-        DavPath::from_uri(req.uri(), &self.prefix).unwrap()
+        DavPath::from_uri_and_prefix(req.uri(), &self.prefix).unwrap()
     }
 
     // See if this is a directory and if so, if we have
@@ -473,7 +473,7 @@ impl DavInner {
         }
 
         // make sure the request path is valid.
-        let path = DavPath::from_uri(req.uri(), &self.prefix)?;
+        let path = DavPath::from_uri_and_prefix(req.uri(), &self.prefix)?;
 
         // PUT is the only handler that reads the body itself. All the
         // other handlers either expected no body, or a pre-read Vec<u8>.

@@ -224,7 +224,7 @@ impl DavPath {
     }
 
     /// from request.uri
-    pub(crate) fn from_uri(uri: &http::uri::Uri, prefix: &str) -> Result<Self, ParseError> {
+    pub(crate) fn from_uri_and_prefix(uri: &http::uri::Uri, prefix: &str) -> Result<Self, ParseError> {
         match uri.path() {
             "*" => {
                 Ok(DavPath {
@@ -235,6 +235,14 @@ impl DavPath {
             path if path.starts_with("/") => DavPath::from_str_and_prefix(path, prefix),
             _ => Err(ParseError::InvalidPath),
         }
+    }
+
+    /// from request.uri
+    pub fn from_uri(uri: &http::uri::Uri) -> Result<Self, ParseError> {
+        Ok(DavPath {
+            fullpath: uri.path().as_bytes().to_vec(),
+            pfxlen:   None,
+        })
     }
 
     /// add a slash to the end of the path (if not already present).
@@ -345,16 +353,6 @@ impl DavPathRef {
         self.get_path().ends_with(b"/")
     }
 
-    /// Count the number of segments the path has. "/" has 0.
-    #[doc(hidden)]
-    pub fn num_segments(&self) -> usize {
-        self.get_path()
-            .split(|&c| c == b'/')
-            .filter(|e| e.len() > 0)
-            .count()
-    }
-
-    //
     // non-public functions
     //
 
