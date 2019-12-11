@@ -1,7 +1,7 @@
 //! Definitions for the Request and Response bodies.
 
-use std::io;
 use std::error::Error as StdError;
+use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -38,9 +38,7 @@ impl Stream for Body {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         match self.inner {
-            BodyType::Bytes(ref mut strm) => {
-                Poll::Ready(strm.take().map(|b| Ok(b)))
-            },
+            BodyType::Bytes(ref mut strm) => Poll::Ready(strm.take().map(|b| Ok(b))),
             BodyType::AsyncStream(ref mut strm) => {
                 // cannot use pin_mut! - doesn't work with references.
                 let strm = unsafe { Pin::new_unchecked(strm) };
@@ -87,7 +85,7 @@ impl From<&str> for Body {
 impl From<Bytes> for Body {
     fn from(t: Bytes) -> Body {
         Body {
-            inner: BodyType::Bytes(Some(t))
+            inner: BodyType::Bytes(Some(t)),
         }
     }
 }
@@ -120,7 +118,11 @@ where
     type Data = ReqData;
     type Error = ReqError;
 
-    fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+    fn poll_data(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Self::Data, Self::Error>>>
+    {
         let this = self.project();
         this.body.poll_next(cx)
     }

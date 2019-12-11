@@ -15,7 +15,7 @@ use http_body::Body as HttpBody;
 use crate::body::{Body, StreamBody};
 use crate::davheaders;
 use crate::davpath::DavPath;
-use crate::util::{dav_method, DavMethodSet, DavMethod};
+use crate::util::{dav_method, DavMethod, DavMethodSet};
 
 use crate::errors::DavError;
 use crate::fs::*;
@@ -412,10 +412,7 @@ impl DavInner {
     }
 
     // internal dispatcher part 2.
-    async fn handle2<ReqBody, ReqData, ReqError>(
-        mut self,
-        req: Request<ReqBody>,
-    ) -> DavResult<Response<Body>>
+    async fn handle2<ReqBody, ReqData, ReqError>(mut self, req: Request<ReqBody>) -> DavResult<Response<Body>>
     where
         ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
         ReqData: Buf + Send,
@@ -484,7 +481,11 @@ impl DavInner {
 
         // Not all methods accept a body.
         match method {
-            DavMethod::Put | DavMethod::Patch | DavMethod::PropFind | DavMethod::PropPatch | DavMethod::Lock => {},
+            DavMethod::Put |
+            DavMethod::Patch |
+            DavMethod::PropFind |
+            DavMethod::PropPatch |
+            DavMethod::Lock => {},
             _ => {
                 if body_data.len() > 0 {
                     return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into());

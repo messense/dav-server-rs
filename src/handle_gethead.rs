@@ -264,7 +264,10 @@ impl crate::DavInner {
         let path = self.path(&req);
 
         // Is PROPFIND explicitly allowed?
-        let allow_propfind = self.allow.map(|x| x.contains(DavMethod::PropFind)).unwrap_or(false);
+        let allow_propfind = self
+            .allow
+            .map(|x| x.contains(DavMethod::PropFind))
+            .unwrap_or(false);
 
         // Only allow index generation if explicitly set to true, _or_ if it was
         // unset, and PROPFIND is explicitly allowed.
@@ -398,12 +401,16 @@ use std::collections::HashMap;
 use std::io::{Error, ErrorKind, SeekFrom};
 use std::time::SystemTime;
 
+use crate::fs::{DavFile, DavMetaData, FsFuture, FsResult};
 use futures::future::{self, FutureExt};
 use handlebars::Handlebars;
 use headers::{authorization::Basic, Authorization};
-use crate::fs::{DavFile, DavMetaData, FsFuture, FsResult};
 
-async fn read_handlebars(req: &Request<()>, mut file: Box<dyn DavFile>) -> DavResult<(Box<dyn DavFile>, Box<dyn DavMetaData>)> {
+async fn read_handlebars(
+    req: &Request<()>,
+    mut file: Box<dyn DavFile>,
+) -> DavResult<(Box<dyn DavFile>, Box<dyn DavMetaData>)>
+{
     let hbs = Handlebars::new();
     let mut vars = HashMap::new();
     let headers = req.headers();
@@ -421,7 +428,7 @@ async fn read_handlebars(req: &Request<()>, mut file: Box<dyn DavFile>) -> DavRe
     let data = String::from_utf8(data)?;
 
     // Set variables.
-    for hdr in &[ "User-Agent", "Host", "Referer" ] {
+    for hdr in &["User-Agent", "Host", "Referer"] {
         if let Some(val) = headers.get(*hdr) {
             let mut var = "HTTP_".to_string() + &hdr.replace('-', "_");
             var.make_ascii_uppercase();
@@ -434,12 +441,13 @@ async fn read_handlebars(req: &Request<()>, mut file: Box<dyn DavFile>) -> DavRe
         Some(Authorization(basic)) => {
             vars.insert("AUTH_TYPE".to_string(), "Basic".to_string());
             vars.insert("REMOTE_USER".to_string(), basic.username().to_string());
-        }
+        },
         _ => {},
     }
 
     // Render.
-    let result = hbs.render_template(&data, &vars)
+    let result = hbs
+        .render_template(&data, &vars)
         .map_err(|_| DavError::Status(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     let hbsfile = HbsFile::new(result);
@@ -449,8 +457,8 @@ async fn read_handlebars(req: &Request<()>, mut file: Box<dyn DavFile>) -> DavRe
 
 #[derive(Clone, Debug)]
 struct HbsMeta {
-    mtime:  SystemTime,
-    size:   u64,
+    mtime: SystemTime,
+    size:  u64,
 }
 
 impl DavMetaData for HbsMeta {
@@ -473,30 +481,27 @@ impl DavMetaData for HbsMeta {
 
 #[derive(Clone, Debug)]
 struct HbsFile {
-    meta:   HbsMeta,
-    pos:    usize,
-    data:   Vec<u8>,
+    meta: HbsMeta,
+    pos:  usize,
+    data: Vec<u8>,
 }
 
 impl HbsFile {
     fn new(data: String) -> Box<dyn DavFile> {
         Box::new(HbsFile {
             meta: HbsMeta {
-                mtime:  SystemTime::now(),
-                size:   data.len() as u64,
+                mtime: SystemTime::now(),
+                size:  data.len() as u64,
             },
-            data:   data.into_bytes(),
-            pos:    0,
+            data: data.into_bytes(),
+            pos:  0,
         })
     }
 }
 
 impl DavFile for HbsFile {
     fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>> {
-        async move {
-            Ok(Box::new(self.meta.clone()) as Box<dyn DavMetaData>)
-        }
-        .boxed()
+        async move { Ok(Box::new(self.meta.clone()) as Box<dyn DavMetaData>) }.boxed()
     }
 
     fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize> {
@@ -543,4 +548,3 @@ impl DavFile for HbsFile {
         Box::pin(future::ready(Ok(())))
     }
 }
-

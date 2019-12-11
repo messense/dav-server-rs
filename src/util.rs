@@ -72,6 +72,12 @@ impl std::convert::TryFrom<&http::Method> for DavMethod {
 pub struct DavMethodSet(u32);
 
 impl DavMethodSet {
+    pub const HTTP_RO: DavMethodSet =
+        DavMethodSet(DavMethod::Get as u32 | DavMethod::Head as u32 | DavMethod::Options as u32);
+    pub const HTTP_RW: DavMethodSet = DavMethodSet(Self::HTTP_RO.0 | DavMethod::Put as u32);
+    pub const WEBDAV_RO: DavMethodSet = DavMethodSet(Self::HTTP_RO.0 | DavMethod::PropFind as u32);
+    pub const WEBDAV_RW: DavMethodSet = DavMethodSet(0xffffffff);
+
     /// New set, all methods allowed.
     pub fn all() -> DavMethodSet {
         DavMethodSet(0xffffffff)
@@ -101,11 +107,6 @@ impl DavMethodSet {
 
     /// Generate an DavMethodSet from a list of words.
     pub fn from_vec(v: Vec<impl AsRef<str>>) -> Result<DavMethodSet, InvalidMethod> {
-        const HTTP_RO: u32 = DavMethod::Get as u32 | DavMethod::Head as u32 | DavMethod::Options as u32;
-        const HTTP_RW: u32 = HTTP_RO | DavMethod::Put as u32;
-        const WEBDAV_RO: u32 = HTTP_RO | DavMethod::PropFind as u32;
-        const WEBDAV_RW: u32 = 0xffffffff;
-
         let mut m: u32 = 0;
         for w in &v {
             m |= match w.as_ref().to_lowercase().as_str() {
@@ -122,10 +123,10 @@ impl DavMethodSet {
                 "move" => DavMethod::Move as u32,
                 "lock" => DavMethod::Lock as u32,
                 "unlock" => DavMethod::Unlock as u32,
-                "http-ro" => HTTP_RO,
-                "http-rw" => HTTP_RW,
-                "webdav-ro" => WEBDAV_RO,
-                "webdav-rw" => WEBDAV_RW,
+                "http-ro" => Self::HTTP_RO.0,
+                "http-rw" => Self::HTTP_RW.0,
+                "webdav-ro" => Self::WEBDAV_RO.0,
+                "webdav-rw" => Self::WEBDAV_RW.0,
                 _ => {
                     // A trick to get at the value of http::method::InvalidMethod.
                     let invalid_method = http::method::Method::from_bytes(b"").unwrap_err();
