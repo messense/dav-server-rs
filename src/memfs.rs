@@ -361,6 +361,7 @@ impl DavFile for MemFsFile {
             }
             let cnt = end - start;
             buf[..cnt].copy_from_slice(&file.data[start..end]);
+            self.pos += cnt;
             Ok(cnt)
         }
         .boxed()
@@ -377,6 +378,7 @@ impl DavFile for MemFsFile {
                 file.data.resize(end, 0);
             }
             file.data[start..end].copy_from_slice(buf);
+            self.pos += end - start;
             Ok(end - start)
         }
         .boxed()
