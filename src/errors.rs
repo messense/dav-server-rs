@@ -17,6 +17,7 @@ pub(crate) enum DavError {
     ForbiddenPath, // too many dotdots
     UnknownDavMethod,
     ChanError,
+    Utf8Error,
     Status(StatusCode),
     StatusClose(StatusCode),
     FsError(FsError),
@@ -98,6 +99,18 @@ impl From<xml::writer::Error> for DavError {
     }
 }
 
+impl From<std::str::Utf8Error> for DavError {
+    fn from(_: std::str::Utf8Error) -> Self {
+        DavError::Utf8Error
+    }
+}
+
+impl From<std::string::FromUtf8Error> for DavError {
+    fn from(_: std::string::FromUtf8Error) -> Self {
+        DavError::Utf8Error
+    }
+}
+
 impl From<futures::channel::mpsc::SendError> for DavError {
     fn from(_e: futures::channel::mpsc::SendError) -> Self {
         DavError::ChanError
@@ -154,6 +167,7 @@ impl DavError {
             &DavError::ForbiddenPath => StatusCode::FORBIDDEN,
             &DavError::UnknownDavMethod => StatusCode::NOT_IMPLEMENTED,
             &DavError::ChanError => StatusCode::INTERNAL_SERVER_ERROR,
+            &DavError::Utf8Error => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             &DavError::IoError(ref e) => ioerror_to_status(e),
             &DavError::FsError(ref e) => fserror_to_status(e),
             &DavError::Status(e) => e,

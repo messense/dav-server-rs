@@ -31,21 +31,52 @@ const READ_BUF_SIZE: usize = 16384;
 
 impl crate::DavInner {
     pub(crate) async fn handle_get(&self, req: &Request<()>) -> DavResult<Response<Body>> {
-        let path = self.path(&req);
+        let head = req.method() == &http::Method::HEAD;
+        let mut path = self.path(&req);
+        let mut is_hbs = false;
 
         // check if it's a directory.
-        let head = req.method() == &http::Method::HEAD;
         let meta = self.fs.metadata(&path).await?;
         if meta.is_dir() {
-            return self.handle_autoindex(req, head).await;
+            //
+            // This is a directory. If the path doesn't end in "/", send a redir.
+            // Most webdav clients handle redirect really bad, but a client asking
+            // for a directory index is usually a browser.
+            //
+            if !path.is_collection() {
+                let mut res = Response::new(Body::empty());
+                path.add_slash();
+                res.headers_mut()
+                    .insert("Location", path.with_prefix().as_utf8_string().parse().unwrap());
+                res.headers_mut().typed_insert(headers::ContentLength(0));
+                *res.status_mut() = StatusCode::FOUND;
+                return Ok(res);
+            }
+
+            // If indexfile was set, use it.
+            if let Some(indexfile) = self.indexfile.as_ref() {
+                path.push_segment(indexfile.as_bytes());
+                is_hbs = indexfile.ends_with(".hbs");
+            } else {
+                // Otherwise see if we need to generate a directory index.
+                return self.handle_autoindex(req, head).await;
+            }
         }
 
         // double check, is it a regular file.
         let mut file = self.fs.open(&path, OpenOptions::read()).await?;
-        let meta = file.metadata().await?;
+        let mut meta = file.metadata().await?;
         if !meta.is_file() {
             return Err(DavError::Status(StatusCode::METHOD_NOT_ALLOWED));
         }
+
+        // if it was a .hbs file, process it.
+        if is_hbs {
+            let (f, m) = read_handlebars(req, file).await?;
+            file = f;
+            meta = m;
+        }
+
         let len = meta.len();
         let mut curpos = 0u64;
         let file_etag = davheaders::ETag::from_meta(&meta);
@@ -144,7 +175,11 @@ impl crate::DavInner {
         }
 
         // set content-length and start if we're not doing multipart.
-        let content_type = path.get_mime_type_str();
+        let content_type = if is_hbs {
+            "text/html; charset=UTF-8"
+        } else {
+            path.get_mime_type_str()
+        };
         if ranges.len() <= 1 {
             res.headers_mut()
                 .typed_insert(davheaders::ContentType(content_type.to_owned()));
@@ -226,20 +261,7 @@ impl crate::DavInner {
 
     pub(crate) async fn handle_autoindex(&self, req: &Request<()>, head: bool) -> DavResult<Response<Body>> {
         let mut res = Response::new(Body::empty());
-
-        // This is a directory. If the path doesn't end in "/", send a redir.
-        // Most webdav clients handle redirect really bad, but a client asking
-        // for a directory index is usually a browser.
         let path = self.path(&req);
-        if !path.is_collection() {
-            let mut path = path.clone();
-            path.add_slash();
-            res.headers_mut()
-                .insert("Location", path.with_prefix().as_utf8_string().parse().unwrap());
-            res.headers_mut().typed_insert(headers::ContentLength(0));
-            *res.status_mut() = StatusCode::FOUND;
-            return Ok(res);
-        }
 
         // Is PROPFIND explicitly allowed?
         let allow_propfind = self.allow.map(|x| x.contains(DavMethod::PropFind)).unwrap_or(false);
@@ -371,3 +393,154 @@ impl crate::DavInner {
         Ok(res)
     }
 }
+
+use std::collections::HashMap;
+use std::io::{Error, ErrorKind, SeekFrom};
+use std::time::SystemTime;
+
+use futures::future::{self, FutureExt};
+use handlebars::Handlebars;
+use headers::{authorization::Basic, Authorization};
+use crate::fs::{DavFile, DavMetaData, FsFuture, FsResult};
+
+async fn read_handlebars(req: &Request<()>, mut file: Box<dyn DavFile>) -> DavResult<(Box<dyn DavFile>, Box<dyn DavMetaData>)> {
+    let hbs = Handlebars::new();
+    let mut vars = HashMap::new();
+    let headers = req.headers();
+
+    // Read .hbs file into memory.
+    let mut buffer = [0; 4096];
+    let mut data = Vec::new();
+    loop {
+        let n = file.read_bytes(&mut buffer[..]).await?;
+        if n == 0 {
+            break;
+        }
+        data.extend_from_slice(&buffer[..n]);
+    }
+    let data = String::from_utf8(data)?;
+
+    // Set variables.
+    for hdr in &[ "User-Agent", "Host", "Referer" ] {
+        if let Some(val) = headers.get(*hdr) {
+            let mut var = "HTTP_".to_string() + &hdr.replace('-', "_");
+            var.make_ascii_uppercase();
+            if let Ok(valstr) = val.to_str() {
+                vars.insert(var, valstr.to_string());
+            }
+        }
+    }
+    match headers.typed_get::<Authorization<Basic>>() {
+        Some(Authorization(basic)) => {
+            vars.insert("AUTH_TYPE".to_string(), "Basic".to_string());
+            vars.insert("REMOTE_USER".to_string(), basic.username().to_string());
+        }
+        _ => {},
+    }
+
+    // Render.
+    let result = hbs.render_template(&data, &vars)
+        .map_err(|_| DavError::Status(StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    let hbsfile = HbsFile::new(result);
+    let hbsmeta = hbsfile.metadata().await?;
+    Ok((hbsfile, hbsmeta))
+}
+
+#[derive(Clone, Debug)]
+struct HbsMeta {
+    mtime:  SystemTime,
+    size:   u64,
+}
+
+impl DavMetaData for HbsMeta {
+    fn len(&self) -> u64 {
+        self.size
+    }
+
+    fn created(&self) -> FsResult<SystemTime> {
+        Ok(self.mtime)
+    }
+
+    fn modified(&self) -> FsResult<SystemTime> {
+        Ok(self.mtime)
+    }
+
+    fn is_dir(&self) -> bool {
+        false
+    }
+}
+
+#[derive(Clone, Debug)]
+struct HbsFile {
+    meta:   HbsMeta,
+    pos:    usize,
+    data:   Vec<u8>,
+}
+
+impl HbsFile {
+    fn new(data: String) -> Box<dyn DavFile> {
+        Box::new(HbsFile {
+            meta: HbsMeta {
+                mtime:  SystemTime::now(),
+                size:   data.len() as u64,
+            },
+            data:   data.into_bytes(),
+            pos:    0,
+        })
+    }
+}
+
+impl DavFile for HbsFile {
+    fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>> {
+        async move {
+            Ok(Box::new(self.meta.clone()) as Box<dyn DavMetaData>)
+        }
+        .boxed()
+    }
+
+    fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize> {
+        async move {
+            let start = self.pos;
+            let end = std::cmp::min(self.pos + buf.len(), self.data.len());
+            let count = end - start;
+            buf[..count].copy_from_slice(&self.data[start..end]);
+            self.pos += count;
+            Ok(count)
+        }
+        .boxed()
+    }
+
+    fn seek<'a>(&'a mut self, pos: SeekFrom) -> FsFuture<u64> {
+        async move {
+            let (start, offset): (u64, i64) = match pos {
+                SeekFrom::Start(npos) => (0, npos as i64),
+                SeekFrom::Current(npos) => (self.pos as u64, npos),
+                SeekFrom::End(npos) => (self.data.len() as u64, npos),
+            };
+            if offset < 0 {
+                if -offset as u64 > start {
+                    return Err(Error::new(ErrorKind::InvalidInput, "invalid seek").into());
+                }
+                self.pos = (start - (-offset as u64)) as usize;
+            } else {
+                self.pos = (start + offset as u64) as usize;
+            }
+            Ok(self.pos as u64)
+        }
+        .boxed()
+    }
+
+    fn write_bytes<'a>(&'a mut self, _buf: &'a [u8]) -> FsFuture<usize> {
+        Box::pin(future::ready(Err(FsError::NotImplemented)))
+    }
+
+    fn write_all<'a>(&'a mut self, _buf: &'a [u8]) -> FsFuture<()> {
+        Box::pin(future::ready(Err(FsError::NotImplemented)))
+    }
+
+    fn flush<'a>(&'a mut self) -> FsFuture<()> {
+        Box::pin(future::ready(Ok(())))
+    }
+}
+

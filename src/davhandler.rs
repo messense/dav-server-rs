@@ -51,6 +51,8 @@ pub struct DavConfig {
     hide_symlinks: Option<bool>,
     // Does GET on a directory return indexes.
     autoindex: Option<bool>,
+    // index.html
+    indexfile: Option<String>,
 }
 
 impl DavConfig {
@@ -116,6 +118,13 @@ impl DavConfig {
         this
     }
 
+    /// Indexfile to show (index.html, usually).
+    pub fn indexfile(self, indexfile: String) -> Self {
+        let mut this = self;
+        this.indexfile = Some(indexfile);
+        this
+    }
+
     fn merge(&self, new: DavConfig) -> DavConfig {
         DavConfig {
             prefix:        new.prefix.or(self.prefix.clone()),
@@ -125,6 +134,7 @@ impl DavConfig {
             principal:     new.principal.or(self.principal.clone()),
             hide_symlinks: new.hide_symlinks.or(self.hide_symlinks.clone()),
             autoindex:     new.autoindex.or(self.autoindex.clone()),
+            indexfile:     new.indexfile.or(self.indexfile.clone()),
         }
     }
 }
@@ -141,6 +151,7 @@ pub(crate) struct DavInner {
     pub principal:     Option<String>,
     pub hide_symlinks: Option<bool>,
     pub autoindex:     Option<bool>,
+    pub indexfile:     Option<String>,
 }
 
 impl From<DavConfig> for DavInner {
@@ -153,6 +164,7 @@ impl From<DavConfig> for DavInner {
             principal:     cfg.principal,
             hide_symlinks: cfg.hide_symlinks,
             autoindex:     cfg.autoindex,
+            indexfile:     cfg.indexfile,
         }
     }
 }
@@ -171,6 +183,7 @@ impl From<&DavConfig> for DavInner {
             principal:     cfg.principal.clone(),
             hide_symlinks: cfg.hide_symlinks.clone(),
             autoindex:     cfg.autoindex.clone(),
+            indexfile:     cfg.indexfile.clone(),
         }
     }
 }
@@ -185,6 +198,7 @@ impl Clone for DavInner {
             principal:     self.principal.clone(),
             hide_symlinks: self.hide_symlinks.clone(),
             autoindex:     self.autoindex.clone(),
+            indexfile:     self.indexfile.clone(),
         }
     }
 }
