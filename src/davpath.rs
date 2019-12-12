@@ -192,7 +192,7 @@ impl DavPath {
 
     /// Set prefix.
     pub fn set_prefix(&mut self, prefix: &str) -> Result<(), ParseError> {
-        let path = &self.fullpath;
+        let path = &mut self.fullpath;
         let prefix = prefix.as_bytes();
         if !path.starts_with(prefix) {
             return Err(ParseError::PrefixMismatch);
@@ -200,8 +200,11 @@ impl DavPath {
         let mut pfxlen = prefix.len();
         if prefix.ends_with(b"/") {
             pfxlen -= 1;
-        } else if path.len() != pfxlen && (path.len() < pfxlen || path[pfxlen] != b'/') {
-            return Err(ParseError::PrefixMismatch);
+            if path[pfxlen] != b'/' {
+                return Err(ParseError::PrefixMismatch);
+            }
+        } else if path.len() == pfxlen {
+            path.push(b'/');
         }
         self.pfxlen = Some(pfxlen);
         Ok(())
@@ -313,7 +316,8 @@ impl std::ops::Deref for DavPath {
     type Target = DavPathRef;
 
     fn deref(&self) -> &DavPathRef {
-        DavPathRef::new(&self.fullpath)
+        let pfxlen = self.pfxlen.unwrap_or(0);
+        DavPathRef::new(&self.fullpath[pfxlen..])
     }
 }
 
