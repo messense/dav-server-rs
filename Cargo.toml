@@ -26,6 +26,8 @@ path = "src/lib.rs"
 [dependencies]
 bytes = "0.5.2"
 futures = "0.3.1"
+handlebars = "2.0.2"
+headers = "0.3"
 htmlescape = "0.3.1"
 http = "0.2.0"
 http-body = "0.3.0"
@@ -37,6 +39,7 @@ mime_guess = "2.0.1"
 parking_lot = "0.10.0"
 percent-encoding = "1.0.1"
 pin-project = "0.4.6"
+pin-utils = "0.1.0-alpha.4"
 regex = "1.3.1"
 tokio = { version = "0.2.3", features = ["rt-core", "rt-threaded", "blocking"] }
 time = "0.1.42"
@@ -44,11 +47,6 @@ url = "2.1.0"
 uuid = { version = "0.8.1", features = ["v4"] }
 xml-rs = "0.8.0"
 xmltree = "0.8.0"
-
-# Alpha / git versions.
-headers = { git = "https://github.com/hyperium/headers" }
-pin-utils = "0.1.0-alpha.4"
-handlebars = "2.0.2"
 
 [dev-dependencies]
 #actix-web = "2.0.0-alpha.3"
