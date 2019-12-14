@@ -12,6 +12,7 @@ use bytes::Bytes;
 use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::conditional;
+use crate::davpath::DavPath;
 use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
@@ -334,29 +335,51 @@ impl crate::DavInner {
                 // and output html
                 let upath = htmlescape::encode_minimal(&path.with_prefix().as_url_string());
                 let mut w = String::new();
-                w.push_str("<html><head>");
-                w.push_str(&format!("<title>Index of {}</title>", upath));
-                w.push_str("<style>");
-                w.push_str("table {{");
-                w.push_str("  border-collapse: separate;");
-                w.push_str("  border-spacing: 1.5em 0.25em;");
-                w.push_str("}}");
-                w.push_str("h1 {{");
-                w.push_str("  padding-left: 0.3em;");
-                w.push_str("}}");
-                w.push_str(".mono {{");
-                w.push_str("  font-family: monospace;");
-                w.push_str("}}");
-                w.push_str("</style>");
-                w.push_str("</head>");
+                w.push_str("\
+                    <html><head>\n\
+                    <title>Index of ");
+                w.push_str(&upath);
+                w.push_str("</title>\n");
+                w.push_str("\
+                    <style>\n\
+                    table {\n\
+                      border-collapse: separate;\n\
+                      border-spacing: 1.5em 0.25em;\n\
+                    }\n\
+                    h1 {\n\
+                      padding-left: 0.3em;\n\
+                    }\n\
+                    a {\n\
+                      text-decoration: none;\n\
+                      color: blue;\n\
+                    }\n\
+                    .left {\n\
+                      text-align: left;\n\
+                    }\n\
+                    .mono {\n\
+                      font-family: monospace;\n\
+                    }\n\
+                    .mw20 {\n\
+                      min-width: 20em;\n\
+                    }\n\
+                    </style>\n\
+                    </head>\n\
+                    <body>\n");
+                w.push_str(&format!("<h1>Index of {}</h1>", display_path(&path)));
+                w.push_str("\
+                    <table>\n\
+                    <tr>\n\
+                      <th class=\"left mw20\">Name</th>\n\
+                      <th class=\"left\">Last modified</th>\n\
+                      <th>Size</th>\n\
+                    </tr>\n\
+                    <tr><th colspan=\"3\"><hr></th></tr>\n\
+                    <tr>\n\
+                      <td><a href=\"..\">Parent Directory</a></td>\n\
+                      <td>&nbsp;</td>\n\
+                      <td class=\"mono\" align=\"right\">[DIR]    </td>\n\
+                    </tr>\n");
 
-                w.push_str("<body>");
-                w.push_str(&format!("<h1>Index of {}</h1>", upath));
-                w.push_str("<table>");
-                w.push_str("<tr>");
-                w.push_str("<th>Name</th><th>Last modified</th><th>Size</th>");
-                w.push_str("<tr><th colspan=\"3\"><hr></th></tr>");
-                w.push_str("<tr><td><a href=\"..\">Parent Directory</a></td><td>&nbsp;</td><td class=\"mono\" align=\"right\">[DIR]</td></tr>");
                 tx.send(Bytes::from(w)).await;
 
                 for dirent in &dirents {
@@ -375,8 +398,8 @@ impl crate::DavInner {
                         Err(_) => "".to_string(),
                     };
                     let size = match dirent.meta.is_file() {
-                        true => dirent.meta.len().to_string(),
-                        false => "[DIR]".to_string(),
+                        true => display_size(dirent.meta.len()),
+                        false => "[DIR]    ".to_string(),
                     };
                     let name = htmlescape::encode_minimal(&dirent.name);
                     let s = format!("<tr><td><a href=\"{}\">{}</a></td><td class=\"mono\">{}</td><td class=\"mono\" align=\"right\">{}</td></tr>",
@@ -395,6 +418,50 @@ impl crate::DavInner {
 
         Ok(res)
     }
+}
+
+fn display_size(size: u64) -> String {
+    if size <= 1000 {
+        return format!("{}    ", size);
+    }
+    if size <= 1_000_000 {
+        return format!("{} KiB", ((size / 10) as f64) / 100f64);
+    }
+    if size <= 1_000_000_000 {
+        return format!("{} MiB", ((size / 10_000) as f64) / 100f64);
+    }
+    if size <= 1_000_000_000_000 {
+        return format!("{} GiB", ((size / 10_000_000) as f64) / 100f64);
+    }
+    format!("{:2}TiB", ((size / 10_000_000_000) as f64) / 100f64)
+}
+
+fn display_path(path: &DavPath) -> String {
+    let path_dsp = path.with_prefix().as_utf8_string();
+    let path_url = path.with_prefix().as_url_string();
+    let dpath_segs = path_dsp.split("/").filter(|s| !s.is_empty()).collect::<Vec<_>>();
+    let upath_segs = path_url.split("/").filter(|s| !s.is_empty()).collect::<Vec<_>>();
+    let mut dpath = String::new();
+    let mut upath = String::new();
+
+    if dpath_segs.len() == 0 {
+        dpath.push_str("/");
+    } else {
+        dpath.push_str("<a href = \"/\">/</a>");
+    }
+
+    for idx in 0..dpath_segs.len() {
+        upath.push('/');
+        upath.push_str(upath_segs[idx]);
+        let dseg = htmlescape::encode_minimal(dpath_segs[idx]);
+        if idx == dpath_segs.len() - 1 {
+            dpath.push_str(&dseg);
+        } else {
+            dpath.push_str(&format!("<a href = \"{}\">{}</a>/", upath, dseg));
+        }
+    }
+
+    dpath
 }
 
 use std::collections::HashMap;
