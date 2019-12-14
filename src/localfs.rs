@@ -500,6 +500,9 @@ impl DavMetaData for LocalFsMetaData {
     fn len(&self) -> u64 {
         self.0.len()
     }
+    fn created(&self) -> FsResult<SystemTime> {
+        self.0.created().map_err(|e| e.into())
+    }
     fn modified(&self) -> FsResult<SystemTime> {
         self.0.modified().map_err(|e| e.into())
     }
