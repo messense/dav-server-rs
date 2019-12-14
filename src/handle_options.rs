@@ -10,12 +10,11 @@ impl crate::DavInner {
         let mut res = Response::new(Body::empty());
 
         let h = res.headers_mut();
-        let lock_allowed = self.allow.map(|x| x.contains(DavMethod::Lock)).unwrap_or(true);
-        let dav = if self.ls.is_some() && lock_allowed {
-            "1,2,3,sabredav-partialupdate"
-        } else {
-            "1,3,sabredav-partialupdate"
-        };
+
+        // We could simply not report webdav level 2 support if self.allow doesn't
+        // contain LOCK/UNLOCK. However we do advertise support, since there might
+        // be LOCK/UNLOCK support in another part of the URL space.
+        let dav = "1,2,3,sabredav-partialupdate";
         h.insert("DAV", dav.parse().unwrap());
         h.insert("MS-Author-Via", "DAV".parse().unwrap());
         h.typed_insert(headers::ContentLength(0));
