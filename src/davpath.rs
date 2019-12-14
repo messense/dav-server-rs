@@ -296,7 +296,7 @@ impl DavPath {
     /// Return the parent directory.
     pub(crate) fn parent(&self) -> DavPath {
         let mut segs = self
-            .get_path()
+            .fullpath
             .split(|&c| c == b'/')
             .filter(|e| e.len() > 0)
             .collect::<Vec<&[u8]>>();
