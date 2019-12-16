@@ -48,7 +48,7 @@ impl crate::DavInner {
                 let mut res = Response::new(Body::empty());
                 path.add_slash();
                 res.headers_mut()
-                    .insert("Location", path.with_prefix().as_utf8_string().parse().unwrap());
+                    .insert("Location", path.with_prefix().as_url_string().parse().unwrap());
                 res.headers_mut().typed_insert(headers::ContentLength(0));
                 *res.status_mut() = StatusCode::FOUND;
                 return Ok(res);
@@ -437,7 +437,7 @@ fn display_size(size: u64) -> String {
 }
 
 fn display_path(path: &DavPath) -> String {
-    let path_dsp = path.with_prefix().as_utf8_string();
+    let path_dsp = String::from_utf8_lossy(path.with_prefix().as_bytes());
     let path_url = path.with_prefix().as_url_string();
     let dpath_segs = path_dsp.split("/").filter(|s| !s.is_empty()).collect::<Vec<_>>();
     let upath_segs = path_url.split("/").filter(|s| !s.is_empty()).collect::<Vec<_>>();

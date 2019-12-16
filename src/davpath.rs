@@ -326,11 +326,6 @@ impl DavPathRef {
         unsafe { &*(path as *const [u8] as *const DavPathRef) }
     }
 
-    /// as utf8 string, with prefix. uses String::from_utf8_lossy.
-    pub fn as_utf8_string(&self) -> String {
-        return String::from_utf8_lossy(&self.get_path()).to_string();
-    }
-
     /// as raw bytes, not encoded, no prefix.
     pub fn as_bytes(&self) -> &[u8] {
         self.get_path()
@@ -371,7 +366,9 @@ impl DavPathRef {
     }
 
     /// as OS specific Path, relative (remove first slash)
-    pub(crate) fn as_rel_ospath(&self) -> &Path {
+    ///
+    /// Used to `push()` onto a pathbuf.
+    pub fn as_rel_ospath(&self) -> &Path {
         let spath = self.get_path();
         let mut path = if spath.len() > 0 { &spath[1..] } else { spath };
         if path.ends_with(b"/") {
