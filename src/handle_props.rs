@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::{self, Cursor};
 
+use bytes::Bytes;
 use futures::{future::BoxFuture, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
@@ -23,7 +24,7 @@ use crate::errors::*;
 use crate::fs::*;
 use crate::handle_lock::{list_lockdiscovery, list_supportedlock};
 use crate::ls::*;
-use crate::multierror::MultiBuf;
+use crate::util::MemBuffer;
 use crate::util::{dav_xml_error, systemtime_to_httpdate, systemtime_to_rfc3339};
 use crate::{DavInner, DavResult};
 
@@ -87,7 +88,7 @@ lazy_static! {
     static ref PROPNAME: Vec<Element> = init_staticprop(PROPNAME_STR);
 }
 
-type Emitter = EventWriter<MultiBuf>;
+type Emitter = EventWriter<MemBuffer>;
 type Sender = crate::async_stream::Sender<bytes::Bytes, io::Error>;
 
 struct StatusElement {
@@ -97,7 +98,6 @@ struct StatusElement {
 
 struct PropWriter {
     emitter:   Emitter,
-    buffer:    MultiBuf,
     tx:        Option<Sender>,
     name:      String,
     props:     Vec<Element>,
@@ -502,10 +502,8 @@ impl PropWriter {
         res.headers_mut().insert("content-type", contenttype);
         *res.status_mut() = StatusCode::MULTI_STATUS;
 
-        let mb = MultiBuf::new();
-
         let mut emitter = EventWriter::new_with_config(
-            mb.clone(),
+            MemBuffer::new(),
             EmitterConfig {
                 normalize_empty_elements: false,
                 perform_indent: false,
@@ -571,7 +569,6 @@ impl PropWriter {
 
         Ok(PropWriter {
             emitter:   emitter,
-            buffer:    mb,
             tx:        None,
             name:      name.to_string(),
             props:     props,
@@ -918,8 +915,8 @@ impl PropWriter {
     }
 
     pub async fn flush(&mut self) -> DavResult<()> {
-        let b = self.buffer.take()?;
-        self.tx.as_mut().unwrap().send(b).await;
+        let buffer = self.emitter.inner_mut().take();
+        self.tx.as_mut().unwrap().send(Bytes::from(buffer)).await;
         Ok(())
     }
 

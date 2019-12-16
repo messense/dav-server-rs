@@ -14,7 +14,7 @@ use crate::davpath::DavPath;
 use crate::errors::*;
 use crate::fs::{FsError, OpenOptions};
 use crate::ls::*;
-use crate::multierror::MultiBuf;
+use crate::util::MemBuffer;
 use crate::xmltree_ext::{self, ElementExt};
 use crate::DavResult;
 
@@ -53,14 +53,13 @@ impl crate::DavInner {
 
             // output result
             let prop = build_lock_prop(&lock, true);
-            let buffer = MultiBuf::new();
-            let mut emitter = xmltree_ext::emitter(buffer.clone())?;
+            let mut emitter = xmltree_ext::emitter(MemBuffer::new())?;
             prop.write_ev(&mut emitter)?;
-            drop(emitter);
+            let buffer = emitter.into_inner().take();
 
             let ct = "application/xml; charset=utf-8".to_owned();
             res.headers_mut().typed_insert(davheaders::ContentType(ct));
-            *res.body_mut() = Body::from(buffer.take()?);
+            *res.body_mut() = Body::from(buffer);
             return Ok(res);
         }
 
@@ -174,13 +173,12 @@ impl crate::DavInner {
             *res.status_mut() = SC::OK;
         }
 
-        let buffer = MultiBuf::new();
-        let mut emitter = xmltree_ext::emitter(buffer.clone())?;
+        let mut emitter = xmltree_ext::emitter(MemBuffer::new())?;
         let prop = build_lock_prop(&lock, true);
         prop.write_ev(&mut emitter)?;
-        drop(emitter);
+        let buffer = emitter.into_inner().take();
 
-        *res.body_mut() = Body::from(buffer.take()?);
+        *res.body_mut() = Body::from(buffer);
         return Ok(res);
     }
 

@@ -1,5 +1,7 @@
+use std::io::{Cursor, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use bytes::Bytes;
 use headers::Header;
 use http::method::InvalidMethod;
 
@@ -169,3 +171,30 @@ pub(crate) fn systemtime_to_rfc3339(t: SystemTime) -> String {
     let ts = systemtime_to_timespec(t);
     format!("{}", time::at_utc(ts).rfc3339())
 }
+
+// A buffer that implements "Write".
+#[derive(Clone)]
+pub(crate) struct MemBuffer(Cursor<Vec<u8>>);
+
+impl MemBuffer {
+    pub fn new() -> MemBuffer {
+        MemBuffer(Cursor::new(Vec::new()))
+    }
+
+    pub fn take(&mut self) -> Bytes {
+        let buf = std::mem::replace(self.0.get_mut(), Vec::new());
+        self.0.set_position(0);
+        Bytes::from(buf)
+    }
+}
+
+impl Write for MemBuffer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+

@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::io::BufWriter;
 use std::io::{Read, Write};
 
 use xml;
@@ -113,9 +112,9 @@ impl ElementExt for Element {
     }
 }
 
-pub(crate) fn emitter<W: Write>(w: W) -> DavResult<EventWriter<BufWriter<W>>> {
+pub(crate) fn emitter<W: Write>(w: W) -> DavResult<EventWriter<W>> {
     let mut emitter = EventWriter::new_with_config(
-        BufWriter::new(w),
+        w,
         EmitterConfig {
             perform_indent: false,
             indent_string: Cow::Borrowed(""),

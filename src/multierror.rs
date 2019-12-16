@@ -1,10 +1,7 @@
-use std::cell::RefCell;
-use std::io::{self, Write};
-use std::rc::Rc;
+use std::io;
 
 use futures::{Stream, StreamExt};
 
-use bytes::Bytes;
 use http::{Response, StatusCode};
 use xml;
 use xml::common::XmlVersion;
@@ -15,6 +12,7 @@ use xml::EmitterConfig;
 use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::davpath::DavPath;
+use crate::util::MemBuffer;
 use crate::DavError;
 
 type Sender = crate::async_stream::Sender<(DavPath, StatusCode), DavError>;
@@ -38,35 +36,7 @@ impl MultiError {
     }
 }
 
-// A buffer that implements "Write".
-#[derive(Clone)]
-pub(crate) struct MultiBuf(Rc<RefCell<Vec<u8>>>);
-
-impl MultiBuf {
-    pub fn new() -> MultiBuf {
-        MultiBuf(Rc::new(RefCell::new(Vec::new())))
-    }
-
-    pub fn take(&self) -> Result<Bytes, DavError> {
-        Ok(self.0.replace(Vec::new()).into())
-    }
-}
-unsafe impl Send for MultiBuf {}
-unsafe impl Sync for MultiBuf {}
-
-impl Write for MultiBuf {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let len = buf.len();
-        self.0.borrow_mut().extend_from_slice(buf);
-        Ok(len)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-type XmlWriter = EventWriter<MultiBuf>;
+type XmlWriter<'a> = EventWriter<MemBuffer>;
 
 fn write_elem<'b, S>(xw: &mut XmlWriter, name: S, text: &str) -> Result<(), DavError>
 where S: Into<xml::name::Name<'b>> {
@@ -127,9 +97,8 @@ where S: Stream<Item = Result<(DavPath, StatusCode), DavError>> + Send + 'static
     let body = AsyncStream::new(|mut tx| {
         async move {
             // Write initial header.
-            let buffer = MultiBuf::new();
             let mut xw = EventWriter::new_with_config(
-                buffer.clone(),
+                MemBuffer::new(),
                 EmitterConfig {
                     perform_indent: true,
                     ..EmitterConfig::default()
@@ -143,7 +112,7 @@ where S: Stream<Item = Result<(DavPath, StatusCode), DavError>> + Send + 'static
             .map_err(DavError::from)?;
             xw.write(XmlWEvent::start_element("D:multistatus").ns("D", "DAV:"))
                 .map_err(DavError::from)?;
-            let data = buffer.take()?;
+            let data = xw.inner_mut().take();
             tx.send(data).await;
 
             // now write the items.
@@ -156,13 +125,13 @@ where S: Stream<Item = Result<(DavPath, StatusCode), DavError>> + Send + 'static
                     status
                 };
                 write_response(&mut xw, &path, status)?;
-                let data = buffer.take()?;
+                let data = xw.inner_mut().take();
                 tx.send(data).await;
             }
 
             // and finally write the trailer.
             xw.write(XmlWEvent::end_element()).map_err(DavError::from)?;
-            let data = buffer.take()?;
+            let data = xw.inner_mut().take();
             tx.send(data).await;
 
             Ok::<_, io::Error>(())
