@@ -101,7 +101,7 @@ impl ElementExt for Element {
         emitter.write(XmlEvent::StartElement {
             name:       name,
             attributes: Cow::Owned(attributes),
-            namespace:  unsafe { std::mem::transmute(namespace) },
+            namespace:  unsafe { std::mem::transmute(namespace) }, // see xmltree-rs pull request #16
         })?;
         if let Some(ref t) = self.text {
             emitter.write(XmlEvent::Characters(t))?;
