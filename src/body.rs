@@ -103,7 +103,7 @@ use pin_project::pin_project;
 // A struct that contains a Stream, and implements http_body::Body.
 //
 #[pin_project]
-pub struct StreamBody<B> {
+pub(crate) struct StreamBody<B> {
     #[pin]
     body: B,
 }
