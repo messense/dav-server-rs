@@ -49,8 +49,8 @@ The relevant parts of the HTTP RFCs are also implemented, such as the
 preconditions (If-Match, If-None-Match, If-Modified-Since, If-Unmodified-Since,
 If-Range), partial transfers (Range).
 
-Also implemented is `partial PUT`, for which there are currently [two
-non-standard ways][PartialPut] to do it: [`PUT` with the `Content-Range` header][PUT],
+Also implemented is `partial PUT`, for which there are currently two
+non-standard ways to do it: [`PUT` with the `Content-Range` header][PUT],
 which is what Apache's `mod_dav` implements, and [`PATCH` with the `X-Update-Range`
 header][PATCH] from `SabreDav`.
 
@@ -116,9 +116,8 @@ async fn main() {
 [`FakeLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/fakels/index.html
 [README_litmus]: https://github.com/miquels/webdav-handler-rs/blob/master/README.litmus-test.md
 [hyper_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/hyper.rs
-[PartialPut]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
-[PUT]: https://blog.sphere.chronosempire.org.uk/2012/11/21/webdav-and-the-http-patch-nightmare
-[PATCH]: https://github.com/miquels/webdavfs/blob/master/SABREDAV-partialupdate.md
+[PUT]: https://github.com/miquels/webdav-handler-rs/tree/master/doc/Apache-PUT-with-Content-Range.md
+[PATCH]: https://github.com/miquels/webdav-handler-rs/tree/master/doc/SABREDAV-partialupdate.md
 [hyper]: https://hyper.rs/
 
 
