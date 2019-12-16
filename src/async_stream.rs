@@ -41,7 +41,7 @@ use std::cell::Cell;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::rc::Rc;
 use std::task::{Context, Poll};
 
 use futures::Stream;
@@ -76,13 +76,13 @@ impl Future for SenderFuture {
 // Only internally used by one AsyncStream and never shared
 // in any other way, so we don't have to use Arc<Mutex<..>>.
 /// Type of the sender passed as first argument into the async closure.
-pub struct Sender<I, E>(Arc<Cell<Option<I>>>, PhantomData<E>);
+pub struct Sender<I, E>(Rc<Cell<Option<I>>>, PhantomData<E>);
 unsafe impl<I, E> Sync for Sender<I, E> {}
 unsafe impl<I, E> Send for Sender<I, E> {}
 
 impl<I, E> Sender<I, E> {
     fn new(item_opt: Option<I>) -> Sender<I, E> {
-        Sender(Arc::new(Cell::new(item_opt)), PhantomData::<E>)
+        Sender(Rc::new(Cell::new(item_opt)), PhantomData::<E>)
     }
 
     // note that this is NOT impl Clone for Sender, it's private.
@@ -119,9 +119,6 @@ impl<Item, Error: 'static + Send> AsyncStream<Item, Error> {
     ///
     /// The closure is passed one argument, the sender, which has a
     /// method "send" that can be called to send a item to the stream.
-    ///
-    /// The AsyncStream instance that is returned impl's both
-    /// a futures 0.1 Stream and a futures 0.3 Stream.
     pub fn new<F, R>(f: F) -> Self
     where
         F: FnOnce(Sender<Item, Error>) -> R,
