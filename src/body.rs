@@ -40,8 +40,7 @@ impl Stream for Body {
         match self.inner {
             BodyType::Bytes(ref mut strm) => Poll::Ready(strm.take().map(|b| Ok(b))),
             BodyType::AsyncStream(ref mut strm) => {
-                // cannot use pin_mut! - doesn't work with references.
-                let strm = unsafe { Pin::new_unchecked(strm) };
+                let strm = Pin::new(strm);
                 strm.poll_next(cx)
             },
             BodyType::Empty => Poll::Ready(None),
