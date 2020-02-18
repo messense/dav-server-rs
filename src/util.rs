@@ -148,15 +148,13 @@ pub(crate) fn dav_xml_error(body: &str) -> Body {
     Body::from(xml)
 }
 
-pub(crate) fn systemtime_to_timespec(t: SystemTime) -> time::Timespec {
+pub(crate) fn systemtime_to_offsetdatetime(t: SystemTime) -> time::OffsetDateTime {
     match t.duration_since(UNIX_EPOCH) {
         Ok(t) => {
-            time::Timespec {
-                sec:  t.as_secs() as i64,
-                nsec: 0,
-            }
+            let tm = time::OffsetDateTime::from_unix_timestamp(t.as_secs() as i64);
+            tm.to_offset(time::offset!(UTC))
         },
-        Err(_) => time::Timespec { sec: 0, nsec: 0 },
+        Err(_) => time::OffsetDateTime::unix_epoch().to_offset(time::offset!(UTC))
     }
 }
 
@@ -168,8 +166,8 @@ pub(crate) fn systemtime_to_httpdate(t: SystemTime) -> String {
 }
 
 pub(crate) fn systemtime_to_rfc3339(t: SystemTime) -> String {
-    let ts = systemtime_to_timespec(t);
-    format!("{}", time::at_utc(ts).rfc3339())
+    // 1996-12-19T16:39:57Z
+    systemtime_to_offsetdatetime(t).format("%FT%H:%M:%SZ")
 }
 
 // A buffer that implements "Write".
@@ -195,6 +193,17 @@ impl Write for MemBuffer {
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::UNIX_EPOCH;
+
+    #[test]
+    fn test_rfc3339() {
+        assert!(systemtime_to_rfc3339(UNIX_EPOCH) == "1970-01-01T00:00:00Z");
     }
 }
 

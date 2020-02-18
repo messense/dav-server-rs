@@ -5,7 +5,6 @@ use futures::StreamExt;
 use headers::HeaderMapExt;
 use htmlescape;
 use http::{status::StatusCode, Request, Response};
-use time;
 
 use bytes::Bytes;
 
@@ -16,7 +15,7 @@ use crate::davpath::DavPath;
 use crate::davheaders;
 use crate::errors::*;
 use crate::fs::*;
-use crate::util::systemtime_to_timespec;
+use crate::util::systemtime_to_offsetdatetime;
 use crate::DavMethod;
 
 struct Range {
@@ -385,14 +384,14 @@ impl crate::DavInner {
                 for dirent in &dirents {
                     let modified = match dirent.meta.modified() {
                         Ok(t) => {
-                            let tm = time::at(systemtime_to_timespec(t));
+                            let tm = systemtime_to_offsetdatetime(t);
                             format!(
                                 "{:04}-{:02}-{:02} {:02}:{:02}",
-                                tm.tm_year + 1900,
-                                tm.tm_mon + 1,
-                                tm.tm_mday,
-                                tm.tm_hour,
-                                tm.tm_min
+                                tm.year(),
+                                tm.month(),
+                                tm.day(),
+                                tm.hour(),
+                                tm.minute(),
                             )
                         },
                         Err(_) => "".to_string(),

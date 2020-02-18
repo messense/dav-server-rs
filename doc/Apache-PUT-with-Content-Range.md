@@ -49,7 +49,7 @@ Content-Range: bytes 1000-1003/*
   implementation. The body must either have a valid Content-Length, or it must
   use the `Chunked` transfer encoding. It is *strongly encouraged* though to
   include Content-Length, so that it can be validated against the range before
-  starting the upload.
+  accepting the PUT request.
 - If the `Content-Length` header is present, its value must be equal
   to `END - START + 1`.
   
