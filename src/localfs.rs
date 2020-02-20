@@ -200,7 +200,7 @@ impl DavFileSystem for LocalFs {
         meta: ReadDirMeta,
     ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>>
     {
-        debug!("FS: read_dir {:?}", self.fspath_dbg(davpath));
+        trace!("FS: read_dir {:?}", self.fspath_dbg(davpath));
         self.blocking(move || {
             let path = self.fspath(davpath);
             match std::fs::read_dir(&path) {
@@ -221,7 +221,7 @@ impl DavFileSystem for LocalFs {
     }
 
     fn open<'a>(&'a self, path: &'a DavPath, options: OpenOptions) -> FsFuture<Box<dyn DavFile>> {
-        debug!("FS: open {:?}", self.fspath_dbg(path));
+        trace!("FS: open {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             if self.is_forbidden(path) {
                 return Err(FsError::Forbidden);
@@ -244,7 +244,7 @@ impl DavFileSystem for LocalFs {
     }
 
     fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
-        debug!("FS: create_dir {:?}", self.fspath_dbg(path));
+        trace!("FS: create_dir {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             if self.is_forbidden(path) {
                 return Err(FsError::Forbidden);
@@ -258,13 +258,13 @@ impl DavFileSystem for LocalFs {
     }
 
     fn remove_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
-        debug!("FS: remove_dir {:?}", self.fspath_dbg(path));
+        trace!("FS: remove_dir {:?}", self.fspath_dbg(path));
         self.blocking(move || std::fs::remove_dir(self.fspath(path)).map_err(|e| e.into()))
             .boxed()
     }
 
     fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
-        debug!("FS: remove_file {:?}", self.fspath_dbg(path));
+        trace!("FS: remove_file {:?}", self.fspath_dbg(path));
         self.blocking(move || {
             if self.is_forbidden(path) {
                 return Err(FsError::Forbidden);
@@ -275,7 +275,7 @@ impl DavFileSystem for LocalFs {
     }
 
     fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
-        debug!("FS: rename {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
+        trace!("FS: rename {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
         self.blocking(move || {
             if self.is_forbidden(from) || self.is_forbidden(to) {
                 return Err(FsError::Forbidden);
@@ -302,13 +302,13 @@ impl DavFileSystem for LocalFs {
     }
 
     fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
-        debug!("FS: copy {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
+        trace!("FS: copy {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
         self.blocking(move || {
             if self.is_forbidden(from) || self.is_forbidden(to) {
                 return Err(FsError::Forbidden);
             }
             if let Err(e) = std::fs::copy(self.fspath(from), self.fspath(to)) {
-                debug!("copy failed: {:?}", e);
+                debug!("copy({:?}, {:?}) failed: {}", self.fspath_dbg(from), self.fspath_dbg(to), e);
                 return Err(e.into());
             }
             Ok(())

@@ -163,7 +163,7 @@ impl DavFileSystem for MemFs {
 
     fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
         async move {
-            debug!("FS: create_dir {:?}", path);
+            trace!("FS: create_dir {:?}", path);
             let tree = &mut *self.tree.lock().unwrap();
             let path = path.as_bytes();
             let parent_id = tree.lookup_parent(path)?;

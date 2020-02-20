@@ -56,13 +56,13 @@ impl DavLockSystem for MemLs {
 
         // any locks in the path?
         let rc = check_locks_to_path(&inner.tree, path, None, true, &Vec::new(), shared);
-        debug!("lock: check_locks_to_path: {:?}", rc);
+        trace!("lock: check_locks_to_path: {:?}", rc);
         rc?;
 
         // if it's a deep lock we need to check if there are locks furter along the path.
         if deep {
             let rc = check_locks_from_path(&inner.tree, path, None, true, &Vec::new(), shared);
-            debug!("lock: check_locks_from_path: {:?}", rc);
+            trace!("lock: check_locks_from_path: {:?}", rc);
             rc?;
         }
 
@@ -82,7 +82,7 @@ impl DavLockSystem for MemLs {
             shared:     shared,
             deep:       deep,
         };
-        debug!("lock {} created", &lock.token);
+        trace!("lock {} created", &lock.token);
         let slock = lock.clone();
         node.push(slock);
         Ok(lock)
@@ -92,7 +92,7 @@ impl DavLockSystem for MemLs {
         let inner = &mut *self.0.lock().unwrap();
         let node_id = match lookup_lock(&inner.tree, path, token) {
             None => {
-                debug!("unlock: {} not found at {}", token, path);
+                trace!("unlock: {} not found at {}", token, path);
                 return Err(());
             },
             Some(n) => n,
@@ -110,11 +110,11 @@ impl DavLockSystem for MemLs {
     }
 
     fn refresh(&self, path: &DavPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()> {
-        debug!("refresh lock {}", token);
+        trace!("refresh lock {}", token);
         let inner = &mut *self.0.lock().unwrap();
         let node_id = match lookup_lock(&inner.tree, path, token) {
             None => {
-                debug!("lock not found");
+                trace!("lock not found");
                 return Err(());
             },
             Some(n) => n,
@@ -150,7 +150,7 @@ impl DavLockSystem for MemLs {
             &submitted_tokens,
             false,
         );
-        debug!("check: check_lock_to_path: {:?}: {:?}", _st, rc);
+        trace!("check: check_lock_to_path: {:?}: {:?}", _st, rc);
         rc?;
 
         // if it's a deep lock we need to check if there are locks furter along the path.
@@ -163,7 +163,7 @@ impl DavLockSystem for MemLs {
                 &submitted_tokens,
                 false,
             );
-            debug!("check: check_locks_from_path: {:?}", rc);
+            trace!("check: check_locks_from_path: {:?}", rc);
             rc?;
         }
         Ok(())
@@ -321,11 +321,11 @@ fn get_or_create_path_node<'a>(tree: &'a mut Tree, path: &DavPath) -> &'a mut Ve
 
 // Find lock in path.
 fn lookup_lock(tree: &Tree, path: &DavPath, token: &str) -> Option<u64> {
-    debug!("lookup_lock: {}", token);
+    trace!("lookup_lock: {}", token);
 
     let mut node_id = tree::ROOT_ID;
     for seg in path_to_segs(path, true) {
-        debug!(
+        trace!(
             "lookup_lock: node {} seg {}",
             node_id,
             String::from_utf8_lossy(seg)
@@ -335,12 +335,12 @@ fn lookup_lock(tree: &Tree, path: &DavPath, token: &str) -> Option<u64> {
             Err(_) => break,
         };
         let node = tree.get_node(node_id).unwrap();
-        debug!("lookup_lock: locks here: {:?}", &node);
+        trace!("lookup_lock: locks here: {:?}", &node);
         if node.iter().any(|n| n.token == token) {
             return Some(node_id);
         }
     }
-    debug!("lookup_lock: fail");
+    trace!("lookup_lock: fail");
     None
 }
 

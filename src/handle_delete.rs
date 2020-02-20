@@ -45,14 +45,14 @@ impl crate::DavInner {
     {
         async move {
             if !meta.is_dir() {
-                debug!("delete_items (file) {} {:?}", path, depth);
+                trace!("delete_items (file) {} {:?}", path, depth);
                 return match self.fs.remove_file(path).await {
                     Ok(x) => Ok(x),
                     Err(e) => Err(add_status(&mut res, path, e).await),
                 };
             }
             if depth == Depth::Zero {
-                debug!("delete_items (dir) {} {:?}", path, depth);
+                trace!("delete_items (dir) {} {:?}", path, depth);
                 return match self.fs.remove_dir(path).await {
                     Ok(x) => Ok(x),
                     Err(e) => Err(add_status(&mut res, path, e).await),

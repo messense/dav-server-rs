@@ -115,7 +115,7 @@ impl crate::DavInner {
         // see if we want to get one or more ranges.
         if do_range {
             if let Some(r) = req.headers().typed_get::<headers::Range>() {
-                debug!("handle_gethead: range header {:?}", r);
+                trace!("handle_gethead: range header {:?}", r);
                 use std::ops::Bound::*;
                 for range in r.iter() {
                     let (start, mut count, valid) = match range {
@@ -204,7 +204,7 @@ impl crate::DavInner {
 
                 let multipart = ranges.len() > 1;
                 for range in ranges {
-                    debug!("handle_get: start = {}, count = {}", range.start, range.count);
+                    trace!("handle_get: start = {}, count = {}", range.start, range.count);
                     if curpos != range.start {
                         // this should never fail, but if it does, just skip this range
                         // and try the next one.
@@ -245,7 +245,7 @@ impl crate::DavInner {
                         }
                         count -= n as u64;
                         curpos += n as u64;
-                        debug!("sending {} bytes", data.len());
+                        trace!("sending {} bytes", data.len());
                         tx.send(Bytes::copy_from_slice(data)).await;
                     }
                 }

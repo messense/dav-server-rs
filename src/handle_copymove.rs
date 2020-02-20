@@ -244,7 +244,7 @@ impl crate::DavInner {
 
                 // see if we need to delete the destination first.
                 if overwrite && exists && depth != Depth::Zero && !dest_is_file {
-                    debug!("handle_copymove: deleting destination {}", dest);
+                    trace!("handle_copymove: deleting destination {}", dest);
                     if let Err(_) = self
                         .delete_items(&mut multierror, Depth::Infinity, dmeta.unwrap(), &dest)
                         .await

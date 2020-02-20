@@ -61,12 +61,12 @@ impl DUCache {
                     let now = SystemTime::now();
                     while let Some((_k, e)) = cache.peek_lru() {
                         if let Ok(age) = now.duration_since(e.time) {
-                            debug!(target: "webdav_cache", "DUCache: purge check {:?}", _k);
+                            trace!(target: "webdav_cache", "DUCache: purge check {:?}", _k);
                             if age.as_secs() <= DU_CACHE_MAX_AGE {
                                 break;
                             }
                             if let Some((_k, _)) = cache.pop_lru() {
-                                debug!(target: "webdav_cache", "DUCache: purging {:?} (age {})", _k, age.as_secs());
+                                trace!(target: "webdav_cache", "DUCache: purging {:?} (age {})", _k, age.as_secs());
                             } else {
                                 break;
                             }
@@ -98,7 +98,7 @@ impl DUCache {
             match cache.peek(&dir) {
                 Some(t) => (t.dir_id, t.dir_modtime),
                 None => {
-                    debug!(target: "webdav_cache", "DUCache::negative({:?}): parent not in cache", path);
+                    trace!(target: "webdav_cache", "DUCache::negative({:?}): parent not in cache", path);
                     return false;
                 },
             }
@@ -112,7 +112,7 @@ impl DUCache {
         };
         let mut cache = self.cache.lock();
         if !valid {
-            debug!(target: "webdav_cache", "DUCache::negative({:?}): parent in cache but stale", path);
+            trace!(target: "webdav_cache", "DUCache::negative({:?}): parent in cache but stale", path);
             cache.pop(&dir);
             return false;
         }
@@ -122,11 +122,11 @@ impl DUCache {
         // the last time we did a readdir().
         match cache.peek(path) {
             Some(t) => {
-                debug!(target: "webdav_cache", "DUCache::negative({:?}): in cache, valid: {}", path, t.dir_id != dir_id);
+                trace!(target: "webdav_cache", "DUCache::negative({:?}): in cache, valid: {}", path, t.dir_id != dir_id);
                 t.dir_id != dir_id
             },
             None => {
-                debug!(target: "webdav_cache", "DUCache::negative({:?}): not in cache", path);
+                trace!(target: "webdav_cache", "DUCache::negative({:?}): not in cache", path);
                 true
             },
         }

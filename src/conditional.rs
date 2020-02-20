@@ -66,7 +66,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<dyn DavMetaData>>) 
     if let Some(r) = req.headers().typed_get::<davheaders::IfMatch>() {
         let etag = meta.and_then(|m| ETag::from_meta(m));
         if !etaglist_match(&r.0, meta.is_some(), etag.as_ref()) {
-            debug!("precondition fail: If-Match {:?}", r);
+            trace!("precondition fail: If-Match {:?}", r);
             return Some(StatusCode::PRECONDITION_FAILED);
         }
     } else if let Some(r) = req.headers().typed_get::<headers::IfUnmodifiedSince>() {
@@ -74,7 +74,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<dyn DavMetaData>>) 
             None => return Some(StatusCode::PRECONDITION_FAILED),
             Some(file_modified) => {
                 if round_time(file_modified) > round_time(r) {
-                    debug!("precondition fail: If-Unmodified-Since {:?}", r);
+                    trace!("precondition fail: If-Unmodified-Since {:?}", r);
                     return Some(StatusCode::PRECONDITION_FAILED);
                 }
             },
@@ -84,7 +84,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<dyn DavMetaData>>) 
     if let Some(r) = req.headers().typed_get::<davheaders::IfNoneMatch>() {
         let etag = meta.and_then(|m| ETag::from_meta(m));
         if etaglist_match(&r.0, meta.is_some(), etag.as_ref()) {
-            debug!("precondition fail: If-None-Match {:?}", r);
+            trace!("precondition fail: If-None-Match {:?}", r);
             if req.method() == &Method::GET || req.method() == &Method::HEAD {
                 return Some(StatusCode::NOT_MODIFIED);
             } else {
@@ -95,7 +95,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<dyn DavMetaData>>) 
         if req.method() == &Method::GET || req.method() == &Method::HEAD {
             if let Some(file_modified) = file_modified {
                 if round_time(file_modified) <= round_time(r) {
-                    debug!("not-modified If-Modified-Since {:?}", r);
+                    trace!("not-modified If-Modified-Since {:?}", r);
                     return Some(StatusCode::NOT_MODIFIED);
                 }
             }
@@ -206,7 +206,7 @@ pub(crate) async fn dav_if_match<'a>(
         }
     }
     if !any_list_ok {
-        debug!("precondition fail: If {:?}", r.0);
+        trace!("precondition fail: If {:?}", r.0);
     }
     (any_list_ok, tokens)
 }

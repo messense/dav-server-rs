@@ -201,7 +201,7 @@ impl DavInner {
             },
         };
 
-        debug!("propfind: type request: {}", name);
+        trace!("propfind: type request: {}", name);
 
         let mut pw = PropWriter::new(&req, &mut res, name, props, &self.fs, self.ls.as_ref())?;
 
@@ -251,7 +251,7 @@ impl DavInner {
                 let meta = match dirent.metadata().await {
                     Ok(meta) => meta,
                     Err(e) => {
-                        debug!("metadata error on {}. Skipping {:?}", npath, e);
+                        trace!("metadata error on {}. Skipping {:?}", npath, e);
                         continue;
                     },
                 };
@@ -400,7 +400,7 @@ impl DavInner {
             }
         }
 
-        debug!(target: "xml", "proppatch input:\n{}]\n",
+        trace!(target: "xml", "proppatch input:\n{}]\n",
                std::string::String::from_utf8_lossy(&xmldata));
 
         // parse xml
