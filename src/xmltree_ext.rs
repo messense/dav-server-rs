@@ -7,18 +7,30 @@ use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
 use xml::EmitterConfig;
 
-use xmltree::{self, Element};
+use xmltree::{self, Element, XMLNode};
 
 use crate::{DavError, DavResult};
 
 pub(crate) trait ElementExt {
-    fn ns<S: Into<String>>(self, prefix: S, namespace: S) -> Self;
+    /// Builder.
     fn new2<'a, E: Into<&'a str>>(e: E) -> Self;
-    fn parse2<R: Read>(r: R) -> Result<Element, DavError>;
-    fn new_text<'a, E: Into<&'a str>, T: Into<String>>(e: E, t: T) -> Self;
+    /// Builder.
+    fn ns<S: Into<String>>(self, prefix: S, namespace: S) -> Self;
+    /// Builder.
     fn text<'a, T: Into<String>>(self, t: T) -> Self;
-    fn push(&mut self, e: Element);
-    fn has_children(&self) -> bool;
+    /// Like parse, but returns DavError.
+    fn parse2<R: Read>(r: R) -> Result<Element, DavError>;
+    /// Add a child element.
+    fn push_element(&mut self, e: Element);
+    /// Iterator over the children that are Elements.
+    fn child_elems_into_iter(self) -> Box<dyn Iterator<Item = Element>>;
+    /// Iterator over the children that are Elements.
+    fn child_elems_iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Element> + 'a>;
+    /// Vec of the children that are Elements.
+    fn take_child_elems(self) -> Vec<Element>;
+    /// Does the element have children that are also Elements.
+    fn has_child_elems(&self) -> bool;
+    /// Write the element using an EventWriter.
     fn write_ev<W: Write>(&self, emitter: &mut EventWriter<W>) -> xml::writer::Result<()>;
 }
 
@@ -41,27 +53,55 @@ impl ElementExt for Element {
         }
     }
 
-    fn new_text<'a, N: Into<&'a str>, S: Into<String>>(n: N, t: S) -> Element {
-        let mut e = Element::new2(n);
-        e.text = Some(t.into());
-        e
-    }
-
     fn text<S: Into<String>>(mut self, t: S) -> Element {
-        self.text = Some(t.into());
+        let nodes = self
+            .children
+            .drain(..)
+            .filter(|n| n.as_text().is_none())
+            .collect();
+        self.children = nodes;
+        self.children.push(XMLNode::Text(t.into()));
         self
     }
 
-    fn push(&mut self, e: Element) {
-        self.children.push(e);
+    fn push_element(&mut self, e: Element) {
+        self.children.push(XMLNode::Element(e));
     }
 
-    fn has_children(&self) -> bool {
-        !self.children.is_empty()
+    fn child_elems_into_iter(self) -> Box<dyn Iterator<Item = Element>> {
+        let iter = self.children.into_iter().filter_map(|n| {
+            match n {
+                XMLNode::Element(e) => Some(e),
+                _ => None,
+            }
+        });
+        Box::new(iter)
+    }
+
+    fn child_elems_iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Element> + 'a> {
+        let iter = self.children.iter().filter_map(|n| n.as_element());
+        Box::new(iter)
+    }
+
+    fn take_child_elems(self) -> Vec<Element> {
+        self.children
+            .into_iter()
+            .filter_map(|n| {
+                match n {
+                    XMLNode::Element(e) => Some(e),
+                    _ => None,
+                }
+            })
+            .collect()
+    }
+
+    fn has_child_elems(&self) -> bool {
+        self.children.iter().find_map(|n| n.as_element()).is_some()
     }
 
     fn parse2<R: Read>(r: R) -> Result<Element, DavError> {
-        match Element::parse(r) {
+        let res = Element::parse(r);
+        match res {
             Ok(elems) => Ok(elems),
             Err(xmltree::ParseError::MalformedXml(_)) => Err(DavError::XmlParseError),
             Err(_) => Err(DavError::XmlReadError),
@@ -71,8 +111,8 @@ impl ElementExt for Element {
     fn write_ev<W: Write>(&self, emitter: &mut EventWriter<W>) -> xml::writer::Result<()> {
         use xml::attribute::Attribute;
         use xml::name::Name;
+        use xml::namespace::Namespace;
         use xml::writer::events::XmlEvent;
-        use xmltree::Namespace;
 
         let mut name = Name::local(&self.name);
         if let Some(ref ns) = self.namespace {
@@ -98,17 +138,33 @@ impl ElementExt for Element {
         };
 
         emitter.write(XmlEvent::StartElement {
-            name:       name,
+            name,
             attributes: Cow::Owned(attributes),
-            namespace:  namespace,
+            namespace,
         })?;
-        if let Some(ref t) = self.text {
-            emitter.write(XmlEvent::Characters(t))?;
+        for node in &self.children {
+            match node {
+                XMLNode::Element(elem) => elem.write_ev(emitter)?,
+                XMLNode::Text(text) => emitter.write(XmlEvent::Characters(text))?,
+                XMLNode::Comment(comment) => emitter.write(XmlEvent::Comment(comment))?,
+                XMLNode::CData(comment) => emitter.write(XmlEvent::CData(comment))?,
+                XMLNode::ProcessingInstruction(name, data) => {
+                    match data.to_owned() {
+                        Some(string) => {
+                            emitter.write(XmlEvent::ProcessingInstruction {
+                                name,
+                                data: Some(&string),
+                            })?
+                        },
+                        None => emitter.write(XmlEvent::ProcessingInstruction { name, data: None })?,
+                    }
+                },
+            }
+            // elem.write_ev(emitter)?;
         }
-        for elem in &self.children {
-            elem.write_ev(emitter)?;
-        }
-        emitter.write(XmlEvent::EndElement { name: Some(name) })
+        emitter.write(XmlEvent::EndElement { name: Some(name) })?;
+
+        Ok(())
     }
 }
 

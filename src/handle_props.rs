@@ -13,7 +13,7 @@ use xml::common::XmlVersion;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
 use xml::EmitterConfig;
-use xmltree::Element;
+use xmltree::{Element, XMLNode};
 
 use crate::async_stream::AsyncStream;
 use crate::body::Body;
@@ -181,17 +181,17 @@ impl DavInner {
         let (name, props) = match root {
             None => ("allprop", Vec::new()),
             Some(mut elem) => {
-                let includes = elem.take_child("includes").map_or(Vec::new(), |c| c.children);
+                let includes = elem
+                    .take_child("includes")
+                    .map_or(Vec::new(), |n| n.take_child_elems());
                 match elem
-                    .children
-                    .iter()
-                    .position(|e| e.name == "propname" || e.name == "prop" || e.name == "allprop")
-                    .map(|i| elem.children.remove(i))
+                    .child_elems_into_iter()
+                    .find(|e| e.name == "propname" || e.name == "prop" || e.name == "allprop")
                 {
                     Some(elem) => {
                         match elem.name.as_str() {
                             "propname" => ("propname", Vec::new()),
-                            "prop" => ("prop", elem.children),
+                            "prop" => ("prop", elem.take_child_elems()),
                             "allprop" => ("allprop", includes),
                             _ => return Err(DavError::XmlParseError.into()),
                         }
@@ -281,12 +281,12 @@ impl DavInner {
             Some(NS_DAV_URI) => {
                 match prop.name.as_str() {
                     "getcontentlanguage" => {
-                        if prop.text.is_none() || prop.children.len() > 0 {
+                        if prop.get_text().is_none() || prop.has_child_elems() {
                             return StatusCode::CONFLICT;
                         }
                         // FIXME only here to make "litmus" happy, really...
-                        if let Some(ref s) = prop.text {
-                            if davheaders::ContentLanguage::try_from(s.as_str()).is_err() {
+                        if let Some(s) = prop.get_text() {
+                            if davheaders::ContentLanguage::try_from(s.as_ref()).is_err() {
                                 return StatusCode::CONFLICT;
                             }
                         }
@@ -297,7 +297,7 @@ impl DavInner {
                         }
                     },
                     "displayname" => {
-                        if prop.text.is_none() || prop.children.len() > 0 {
+                        if prop.get_text().is_none() || prop.has_child_elems() {
                             return StatusCode::CONFLICT;
                         }
                         if can_deadprop {
@@ -309,7 +309,7 @@ impl DavInner {
                     "getlastmodified" => {
                         // we might allow setting modified time
                         // by using utimes() on unix. Not yet though.
-                        if prop.text.is_none() || prop.children.len() > 0 {
+                        if prop.get_text().is_none() || prop.has_child_elems() {
                             return StatusCode::CONFLICT;
                         }
                         StatusCode::FORBIDDEN
@@ -322,7 +322,7 @@ impl DavInner {
                     "executable" => {
                         // we could allow toggling the execute bit.
                         // to be implemented.
-                        if prop.text.is_none() || prop.children.len() > 0 {
+                        if prop.get_text().is_none() || prop.has_child_elems() {
                             return StatusCode::CONFLICT;
                         }
                         StatusCode::FORBIDDEN
@@ -336,7 +336,7 @@ impl DavInner {
                     "Win32FileAttributes" |
                     "Win32LastAccessTime" |
                     "Win32LastModifiedTime" => {
-                        if prop.text.is_none() || prop.children.len() > 0 {
+                        if prop.get_text().is_none() || prop.has_child_elems() {
                             return StatusCode::CONFLICT;
                         }
                         // Always report back that we successfully
@@ -416,12 +416,11 @@ impl DavInner {
         // walk over the element tree and feed "set" and "remove" items to
         // the liveprop_set/liveprop_remove functions. If skipped by those,
         // gather .them in the "patch" Vec to be processed as dead properties.
-        for elem in &tree.children {
+        for elem in tree.child_elems_iter() {
             for n in elem
-                .children
-                .iter()
-                .filter(|f| f.name == "prop")
-                .flat_map(|f| &f.children)
+                .child_elems_iter()
+                .filter(|e| e.name == "prop")
+                .flat_map(|e| e.child_elems_iter())
             {
                 match elem.name.as_str() {
                     "set" => {
@@ -585,25 +584,20 @@ impl PropWriter {
 
     fn build_elem<T>(&self, content: bool, pfx: &str, e: &Element, text: T) -> DavResult<StatusElement>
     where T: Into<String> {
-        let t = if content {
-            let t = text.into();
-            if t != "" {
-                Some(t)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-        let elem = Element {
+        let mut elem = Element {
             prefix:     Some(pfx.to_string()),
             namespace:  None,
             namespaces: None,
             name:       e.name.clone(),
             attributes: HashMap::new(),
             children:   Vec::new(),
-            text:       t,
         };
+        if content {
+            let t: String = text.into();
+            if t != "" {
+                elem.children.push(XMLNode::Text(t));
+            }
+        }
         Ok(StatusElement {
             status:  StatusCode::OK,
             element: elem,
@@ -716,7 +710,7 @@ impl PropWriter {
                         let mut elem = prop.clone();
                         if meta.is_dir() && docontent {
                             let dir = Element::new2("D:collection");
-                            elem.children.push(dir);
+                            elem.children.push(XMLNode::Element(dir));
                         }
                         return Ok(StatusElement {
                             status:  StatusCode::OK,

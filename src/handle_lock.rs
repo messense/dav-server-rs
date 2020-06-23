@@ -104,18 +104,20 @@ impl crate::DavInner {
         let mut owner: Option<Element> = None;
         let mut locktype = false;
 
-        for elem in tree.children {
+        for elem in tree.child_elems_iter() {
             match elem.name.as_str() {
-                "lockscope" if elem.children.len() == 1 => {
-                    match elem.children[0].name.as_ref() {
-                        "exclusive" => shared = Some(false),
-                        "shared" => shared = Some(true),
+                "lockscope" => {
+                    let name = elem.child_elems_iter().find_map(|e| Some(e.name.as_ref()));
+                    match name {
+                        Some("exclusive") => shared = Some(false),
+                        Some("shared") => shared = Some(true),
                         _ => return Err(DavError::XmlParseError),
                     }
                 },
-                "locktype" if elem.children.len() == 1 => {
-                    match elem.children[0].name.as_ref() {
-                        "write" => locktype = true,
+                "locktype" => {
+                    let name = elem.child_elems_iter().find_map(|e| Some(e.name.as_ref()));
+                    match name {
+                        Some("write") => locktype = true,
                         _ => return Err(DavError::XmlParseError),
                     }
                 },
@@ -225,7 +227,7 @@ pub(crate) fn list_lockdiscovery(ls: Option<&Box<dyn DavLockSystem>>, path: &Dav
     // list the locks.
     let locks = locksystem.discover(path);
     for lock in &locks {
-        elem.push(build_lock_prop(lock, false));
+        elem.push_element(build_lock_prop(lock, false));
     }
     elem
 }
@@ -240,17 +242,17 @@ pub(crate) fn list_supportedlock(ls: Option<&Box<dyn DavLockSystem>>) -> Element
 
     let mut entry = Element::new2("D:lockentry");
     let mut scope = Element::new2("D:lockscope");
-    scope.push(Element::new2("D:exclusive"));
-    scope.push(Element::new2("D:write"));
-    entry.push(scope);
-    elem.push(entry);
+    scope.push_element(Element::new2("D:exclusive"));
+    scope.push_element(Element::new2("D:write"));
+    entry.push_element(scope);
+    elem.push_element(entry);
 
     let mut entry = Element::new2("D:lockentry");
     let mut scope = Element::new2("D:lockscope");
-    scope.push(Element::new2("D:shared"));
-    scope.push(Element::new2("D:write"));
-    entry.push(scope);
-    elem.push(entry);
+    scope.push_element(Element::new2("D:shared"));
+    scope.push_element(Element::new2("D:write"));
+    entry.push_element(scope);
+    elem.push_element(entry);
 
     elem
 }
@@ -283,17 +285,17 @@ fn build_lock_prop(lock: &DavLock, full: bool) -> Element {
     let mut actlock = Element::new2("D:activelock");
 
     let mut elem = Element::new2("D:lockscope");
-    elem.push(match lock.shared {
+    elem.push_element(match lock.shared {
         false => Element::new2("D:exclusive"),
         true => Element::new2("D:shared"),
     });
-    actlock.push(elem);
+    actlock.push_element(elem);
 
     let mut elem = Element::new2("D:locktype");
-    elem.push(Element::new2("D:write"));
-    actlock.push(elem);
+    elem.push_element(Element::new2("D:write"));
+    actlock.push_element(elem);
 
-    actlock.push(
+    actlock.push_element(
         Element::new2("D:depth").text(
             match lock.deep {
                 false => "0",
@@ -303,20 +305,20 @@ fn build_lock_prop(lock: &DavLock, full: bool) -> Element {
         ),
     );
 
-    actlock.push(Element::new2("D:timeout").text(match lock.timeout {
+    actlock.push_element(Element::new2("D:timeout").text(match lock.timeout {
         None => "Infinite".to_string(),
         Some(d) => format!("Second-{}", d.as_secs()),
     }));
     let mut locktokenelem = Element::new2("D:locktoken");
-    locktokenelem.push(Element::new2("D:href").text(lock.token.clone()));
-    actlock.push(locktokenelem);
+    locktokenelem.push_element(Element::new2("D:href").text(lock.token.clone()));
+    actlock.push_element(locktokenelem);
 
     let mut lockroot = Element::new2("D:lockroot");
-    lockroot.push(Element::new2("D:href").text(lock.path.with_prefix().as_url_string()));
-    actlock.push(lockroot);
+    lockroot.push_element(Element::new2("D:href").text(lock.path.with_prefix().as_url_string()));
+    actlock.push_element(lockroot);
 
     if let Some(ref o) = lock.owner {
-        actlock.push(o.clone());
+        actlock.push_element(o.clone());
     }
 
     if !full {
@@ -324,9 +326,9 @@ fn build_lock_prop(lock: &DavLock, full: bool) -> Element {
     }
 
     let mut ldis = Element::new2("D:lockdiscovery");
-    ldis.push(actlock);
+    ldis.push_element(actlock);
     let mut prop = Element::new2("D:prop").ns("D", "DAV:");
-    prop.push(ldis);
+    prop.push_element(ldis);
 
     prop
 }
