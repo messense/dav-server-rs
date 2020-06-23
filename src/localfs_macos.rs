@@ -36,11 +36,11 @@ static DIR_ID: AtomicUsize = AtomicUsize::new(1);
 // Dot underscore cache entry.
 struct Entry {
     // Time the entry in the cache was created.
-    time: SystemTime,
+    time:        SystemTime,
     // Modification time of the parent directory.
     dir_modtime: SystemTime,
     // Unique ID of the parent entry.
-    dir_id: usize,
+    dir_id:      usize,
 }
 
 // Dot underscore cache.

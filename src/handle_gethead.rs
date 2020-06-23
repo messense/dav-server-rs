@@ -11,8 +11,8 @@ use bytes::Bytes;
 use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::conditional;
-use crate::davpath::DavPath;
 use crate::davheaders;
+use crate::davpath::DavPath;
 use crate::errors::*;
 use crate::fs::*;
 use crate::util::systemtime_to_offsetdatetime;
@@ -334,12 +334,15 @@ impl crate::DavInner {
                 // and output html
                 let upath = htmlescape::encode_minimal(&path.with_prefix().as_url_string());
                 let mut w = String::new();
-                w.push_str("\
+                w.push_str(
+                    "\
                     <html><head>\n\
-                    <title>Index of ");
+                    <title>Index of ",
+                );
                 w.push_str(&upath);
                 w.push_str("</title>\n");
-                w.push_str("\
+                w.push_str(
+                    "\
                     <style>\n\
                     table {\n\
                       border-collapse: separate;\n\
@@ -363,9 +366,11 @@ impl crate::DavInner {
                     }\n\
                     </style>\n\
                     </head>\n\
-                    <body>\n");
+                    <body>\n",
+                );
                 w.push_str(&format!("<h1>Index of {}</h1>", display_path(&path)));
-                w.push_str("\
+                w.push_str(
+                    "\
                     <table>\n\
                     <tr>\n\
                       <th class=\"left mw20\">Name</th>\n\
@@ -377,7 +382,8 @@ impl crate::DavInner {
                       <td><a href=\"..\">Parent Directory</a></td>\n\
                       <td>&nbsp;</td>\n\
                       <td class=\"mono\" align=\"right\">[DIR]    </td>\n\
-                    </tr>\n");
+                    </tr>\n",
+                );
 
                 tx.send(Bytes::from(w)).await;
 

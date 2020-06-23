@@ -37,22 +37,22 @@ pub struct DavHandler {
 #[derive(Default)]
 pub struct DavConfig {
     // Prefix to be stripped off when handling request.
-    prefix: Option<String>,
+    prefix:        Option<String>,
     // Filesystem backend.
-    fs: Option<Box<dyn DavFileSystem>>,
+    fs:            Option<Box<dyn DavFileSystem>>,
     // Locksystem backend.
-    ls: Option<Box<dyn DavLockSystem>>,
+    ls:            Option<Box<dyn DavLockSystem>>,
     // Set of allowed methods (None means "all methods")
-    allow: Option<DavMethodSet>,
+    allow:         Option<DavMethodSet>,
     // Principal is webdav speak for "user", used to give locks an owner (if a locksystem is
     // active).
-    principal: Option<String>,
+    principal:     Option<String>,
     // Hide symbolic links? `None` maps to `true`.
     hide_symlinks: Option<bool>,
     // Does GET on a directory return indexes.
-    autoindex: Option<bool>,
+    autoindex:     Option<bool>,
     // index.html
-    indexfile: Option<String>,
+    indexfile:     Option<String>,
 }
 
 impl DavConfig {

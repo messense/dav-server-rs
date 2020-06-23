@@ -308,7 +308,12 @@ impl DavFileSystem for LocalFs {
                 return Err(FsError::Forbidden);
             }
             if let Err(e) = std::fs::copy(self.fspath(from), self.fspath(to)) {
-                debug!("copy({:?}, {:?}) failed: {}", self.fspath_dbg(from), self.fspath_dbg(to), e);
+                debug!(
+                    "copy({:?}, {:?}) failed: {}",
+                    self.fspath_dbg(from),
+                    self.fspath_dbg(to),
+                    e
+                );
                 return Err(e.into());
             }
             Ok(())

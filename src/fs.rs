@@ -58,13 +58,13 @@ pub type FsResult<T> = std::result::Result<T, FsError>;
 #[derive(Debug, Clone)]
 pub struct DavProp {
     /// Name of the property.
-    pub name: String,
+    pub name:      String,
     /// XML prefix.
-    pub prefix: Option<String>,
+    pub prefix:    Option<String>,
     /// XML namespace.
     pub namespace: Option<String>,
     /// Value of the property as raw XML.
-    pub xml: Option<Vec<u8>>,
+    pub xml:       Option<Vec<u8>>,
 }
 
 /// Future returned by almost all of the DavFileSystem methods.
@@ -376,15 +376,15 @@ impl<MD: Clone + DavMetaData + 'static> BoxCloneMd for MD {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OpenOptions {
     /// open for reading
-    pub read: bool,
+    pub read:       bool,
     /// open for writing
-    pub write: bool,
+    pub write:      bool,
     /// open in write-append mode
-    pub append: bool,
+    pub append:     bool,
     /// truncate file first when writing
-    pub truncate: bool,
+    pub truncate:   bool,
     /// create file if it doesn't exist
-    pub create: bool,
+    pub create:     bool,
     /// must create new file, fail if it already exists.
     pub create_new: bool,
 }

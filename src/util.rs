@@ -154,7 +154,7 @@ pub(crate) fn systemtime_to_offsetdatetime(t: SystemTime) -> time::OffsetDateTim
             let tm = time::OffsetDateTime::from_unix_timestamp(t.as_secs() as i64);
             tm.to_offset(time::offset!(UTC))
         },
-        Err(_) => time::OffsetDateTime::unix_epoch().to_offset(time::offset!(UTC))
+        Err(_) => time::OffsetDateTime::unix_epoch().to_offset(time::offset!(UTC)),
     }
 }
 
@@ -206,4 +206,3 @@ mod tests {
         assert!(systemtime_to_rfc3339(UNIX_EPOCH) == "1970-01-01T00:00:00Z");
     }
 }
-
