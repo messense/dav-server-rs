@@ -351,12 +351,13 @@ impl DavInner {
                 DavError::IoError(io::Error::new(io::ErrorKind::UnexpectedEof, "UnexpectedEof"))
             })?;
             while buf.has_remaining() {
-                let datalen = data.len();
-                if datalen + buf.remaining() > max_size {
+                if data.len() + buf.remaining() > max_size {
                     return Err(StatusCode::PAYLOAD_TOO_LARGE.into());
                 }
-                data.extend_from_slice(buf.bytes());
-                buf.advance(datalen);
+                let b = buf.bytes();
+                let l = b.len();
+                data.extend_from_slice(b);
+                buf.advance(l);
             }
         }
         Ok(data)
