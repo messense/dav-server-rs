@@ -179,7 +179,7 @@ impl DavError {
 
     pub(crate) fn must_close(&self) -> bool {
         match self {
-            &DavError::Status(_) |
+            &DavError::StatusClose(_) |
             &DavError::FsError(FsError::NotFound) |
             &DavError::FsError(FsError::Forbidden) |
             &DavError::FsError(FsError::Exists) => false,
