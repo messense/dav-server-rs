@@ -522,7 +522,7 @@ async fn read_handlebars(
         .render_template(&data, &vars)
         .map_err(|_| DavError::Status(StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    let hbsfile = HbsFile::new(result);
+    let mut hbsfile = HbsFile::new(result);
     let hbsmeta = hbsfile.metadata().await?;
     Ok((hbsfile, hbsmeta))
 }
@@ -572,7 +572,7 @@ impl HbsFile {
 }
 
 impl DavFile for HbsFile {
-    fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata<'a>(&'a mut self) -> FsFuture<Box<dyn DavMetaData>> {
         async move { Ok(Box::new(self.meta.clone()) as Box<dyn DavMetaData>) }.boxed()
     }
 

@@ -80,7 +80,7 @@ pub type FsStream<T> = Pin<Box<dyn Stream<Item = T> + Send>>;
 /// - a way to get metadata instead of symlink_metadata from
 ///   the directory entry.
 ///
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReadDirMeta {
     /// DavDirEntry.metadata() behaves as metadata()
     Data,
@@ -284,7 +284,7 @@ pub trait DavDirEntry: Send + Sync {
 /// A `DavFile` is the equivalent of `std::fs::File`, should be
 /// readable/writeable/seekable, and be able to return its metadata.
 pub trait DavFile: Debug + Send + Sync {
-    fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>>;
+    fn metadata<'a>(&'a mut self) -> FsFuture<Box<dyn DavMetaData>>;
     fn write_bytes<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<usize>;
     fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<()>;
     fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize>;

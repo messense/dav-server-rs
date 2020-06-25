@@ -335,7 +335,7 @@ impl DavDirEntry for MemFsDirEntry {
 }
 
 impl DavFile for MemFsFile {
-    fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata<'a>(&'a mut self) -> FsFuture<Box<dyn DavMetaData>> {
         async move {
             let tree = &*self.tree.lock().unwrap();
             let node = tree.get_node(self.node_id)?;
