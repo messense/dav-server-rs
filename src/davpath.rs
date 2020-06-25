@@ -322,6 +322,8 @@ impl std::ops::Deref for DavPath {
 }
 
 impl DavPathRef {
+    // NOTE: this is safe, it is what libstd does in std::path::Path::new(), see
+    // https://github.com/rust-lang/rust/blob/6700e186883a83008963d1fdba23eff2b1713e56/src/libstd/path.rs#L1788
     fn new(path: &[u8]) -> &DavPathRef {
         unsafe { &*(path as *const [u8] as *const DavPathRef) }
     }

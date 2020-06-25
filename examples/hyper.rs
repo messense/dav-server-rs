@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 
 #[tokio::main(threaded_scheduler)]
@@ -16,9 +17,9 @@ async fn main() {
         async move {
             let func = move |req| {
                 let dav_server = dav_server.clone();
-                async move { dav_server.handle(req).await }
+                async move { Ok::<_, Infallible>(dav_server.handle(req).await) }
             };
-            Ok::<_, hyper::Error>(hyper::service::service_fn(func))
+            Ok::<_, Infallible>(hyper::service::service_fn(func))
         }
     });
 

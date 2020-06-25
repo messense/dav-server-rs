@@ -30,29 +30,29 @@ use crate::DavResult;
 /// The `handle` and `handle_with` methods are the methods that do the actual work.
 #[derive(Clone)]
 pub struct DavHandler {
-    config: Arc<DavConfig>,
+    pub(crate) config: Arc<DavConfig>,
 }
 
 /// Configuration of the handler.
 #[derive(Default)]
 pub struct DavConfig {
     // Prefix to be stripped off when handling request.
-    prefix:        Option<String>,
+    pub(crate) prefix:        Option<String>,
     // Filesystem backend.
-    fs:            Option<Box<dyn DavFileSystem>>,
+    pub(crate) fs:            Option<Box<dyn DavFileSystem>>,
     // Locksystem backend.
-    ls:            Option<Box<dyn DavLockSystem>>,
+    pub(crate) ls:            Option<Box<dyn DavLockSystem>>,
     // Set of allowed methods (None means "all methods")
-    allow:         Option<DavMethodSet>,
+    pub(crate) allow:         Option<DavMethodSet>,
     // Principal is webdav speak for "user", used to give locks an owner (if a locksystem is
     // active).
-    principal:     Option<String>,
+    pub(crate) principal:     Option<String>,
     // Hide symbolic links? `None` maps to `true`.
-    hide_symlinks: Option<bool>,
+    pub(crate) hide_symlinks: Option<bool>,
     // Does GET on a directory return indexes.
-    autoindex:     Option<bool>,
+    pub(crate) autoindex:     Option<bool>,
     // index.html
-    indexfile:     Option<String>,
+    pub(crate) indexfile:     Option<String>,
 }
 
 impl DavConfig {
@@ -70,9 +70,9 @@ impl DavConfig {
 
     /// Prefix to be stripped off before translating the rest of
     /// the request path to a filesystem path.
-    pub fn strip_prefix(self, prefix: String) -> Self {
+    pub fn strip_prefix(self, prefix: impl Into<String>) -> Self {
         let mut this = self;
-        this.prefix = Some(prefix);
+        this.prefix = Some(prefix.into());
         this
     }
 
@@ -98,9 +98,9 @@ impl DavConfig {
     }
 
     /// Set the name of the "webdav principal". This will be the owner of any created locks.
-    pub fn principal(self, principal: String) -> Self {
+    pub fn principal(self, principal: impl Into<String>) -> Self {
         let mut this = self;
-        this.principal = Some(principal);
+        this.principal = Some(principal.into());
         this
     }
 
@@ -119,9 +119,9 @@ impl DavConfig {
     }
 
     /// Indexfile to show (index.html, usually).
-    pub fn indexfile(self, indexfile: String) -> Self {
+    pub fn indexfile(self, indexfile: impl Into<String>) -> Self {
         let mut this = self;
-        this.indexfile = Some(indexfile);
+        this.indexfile = Some(indexfile.into());
         this
     }
 
@@ -222,14 +222,10 @@ impl DavHandler {
     }
 
     /// Handle a webdav request.
-    ///
-    /// Only one error kind is ever returned: `ErrorKind::BrokenPipe`. In that case we
-    /// were not able to generate a response at all, and the server should just
-    /// close the connection.
     pub async fn handle<ReqBody, ReqData, ReqError>(
         &self,
         req: Request<ReqBody>,
-    ) -> io::Result<Response<Body>>
+    ) -> Response<Body>
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
@@ -250,7 +246,7 @@ impl DavHandler {
         &self,
         config: DavConfig,
         req: Request<ReqBody>,
-    ) -> io::Result<Response<Body>>
+    ) -> Response<Body>
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
@@ -267,7 +263,7 @@ impl DavHandler {
     pub async fn handle_stream<ReqBody, ReqData, ReqError>(
         &self,
         req: Request<ReqBody>,
-    ) -> io::Result<Response<Body>>
+    ) -> Response<Body>
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
@@ -287,7 +283,7 @@ impl DavHandler {
         &self,
         config: DavConfig,
         req: Request<ReqBody>,
-    ) -> io::Result<Response<Body>>
+    ) -> Response<Body>
     where
         ReqData: Buf + Send,
         ReqError: StdError + Send + Sync + 'static,
@@ -364,7 +360,7 @@ impl DavInner {
     }
 
     // internal dispatcher.
-    async fn handle<ReqBody, ReqData, ReqError>(self, req: Request<ReqBody>) -> io::Result<Response<Body>>
+    async fn handle<ReqBody, ReqData, ReqError>(self, req: Request<ReqBody>) -> Response<Body>
     where
         ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
         ReqData: Buf + Send,
@@ -381,7 +377,7 @@ impl DavInner {
         match self.handle2(req).await {
             Ok(resp) => {
                 debug!("== END REQUEST result OK");
-                Ok(resp)
+                resp
             },
             Err(err) => {
                 debug!("== END REQUEST result {:?}", err);
@@ -406,8 +402,7 @@ impl DavInner {
                 if err.must_close() {
                     resp = resp.header("connection", "close");
                 }
-                let resp = resp.body(Body::empty()).unwrap();
-                Ok(resp)
+                resp.body(Body::empty()).unwrap()
             },
         }
     }

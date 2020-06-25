@@ -67,6 +67,7 @@
 //! able to mount this network share from Linux, macOS and Windows.
 //!
 //! ```no_run
+//! use std::convert::Infallible;
 //! use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 //!
 //! #[tokio::main(threaded_scheduler)]
@@ -85,10 +86,10 @@
 //!             let func = move |req| {
 //!                 let dav_server = dav_server.clone();
 //!                 async move {
-//!                     dav_server.handle(req).await
+//!                     Ok::<_, Infallible>(dav_server.handle(req).await)
 //!                 }
 //!             };
-//!             Ok::<_, hyper::Error>(hyper::service::service_fn(func))
+//!             Ok::<_, Infallible>(hyper::service::service_fn(func))
 //!         }
 //!     });
 //!
@@ -114,7 +115,8 @@
 //! [PUT]: https://github.com/miquels/webdav-handler-rs/tree/master/doc/Apache-PUT-with-Content-Range.md
 //! [PATCH]: https://github.com/miquels/webdav-handler-rs/tree/master/doc/SABREDAV-partialupdate.md
 //! [hyper]: https://hyper.rs/
-//!
+
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[macro_use]
 extern crate log;
@@ -151,6 +153,14 @@ pub mod localfs;
 pub mod ls;
 pub mod memfs;
 pub mod memls;
+
+#[cfg(any(docsrs, feature = "actix-compat"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "actix-compat")))]
+pub mod actix;
+
+#[cfg(any(docsrs, feature = "warp-compat"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "warp-compat")))]
+pub mod warp;
 
 pub(crate) use crate::davhandler::DavInner;
 pub(crate) use crate::errors::{DavError, DavResult};

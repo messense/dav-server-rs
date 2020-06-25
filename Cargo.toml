@@ -23,6 +23,28 @@ categories = ["web-programming"]
 name = "webdav_handler"
 path = "src/lib.rs"
 
+[features]
+default = []
+actix-compat = [ "actix-web", "actix-rt" ]
+warp-compat = [ "warp", "hyper" ]
+all = [ "actix-compat", "warp-compat" ]
+
+[[example]]
+name = "actix"
+required-features = [ "actix-compat" ]
+
+[[example]]
+name = "hyper"
+required-features = [ "hyper" ]
+
+[[example]]
+name = "warp"
+required-features = [ "warp-compat" ]
+
+[[example]]
+name = "sample-litmus-server"
+required-features = [ "hyper" ]
+
 [dependencies]
 bytes = "0.5.5"
 futures = "0.3.5"
@@ -48,9 +70,21 @@ uuid = { version = "0.8.1", features = ["v4"] }
 xml-rs = "0.8.3"
 xmltree = "0.10.0"
 
+hyper = { version = "0.13.6", optional = true }
+warp = { version = "0.2.3", optional = true }
+actix-web = { version = "2.0", optional = true }
+actix-rt = { version = "1.1", optional = true }
+
 [dev-dependencies]
 clap = "2.33.1"
 env_logger = "0.7.1"
-hyper = "0.13.6"
 tokio = { version = "0.2.21", features = ["full"] }
-warp = "0.2.3"
+hyper = "0.13.6"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.playground]
+features = ["full"]
+

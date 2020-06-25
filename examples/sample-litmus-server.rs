@@ -5,8 +5,8 @@
 //  Connect to http://localhost:4918/
 //
 
+use std::convert::Infallible;
 use std::error::Error;
-use std::io;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
@@ -48,7 +48,7 @@ impl Server {
         }
     }
 
-    async fn handle(&self, req: hyper::Request<hyper::Body>) -> io::Result<hyper::Response<Body>> {
+    async fn handle(&self, req: hyper::Request<hyper::Body>) -> Result<hyper::Response<Body>, Infallible> {
         let user = if self.auth {
             // we want the client to authenticate.
             match req.headers().typed_get::<Authorization<Basic>>() {
@@ -69,9 +69,9 @@ impl Server {
 
         if let Some(user) = user {
             let config = DavConfig::new().principal(user);
-            self.dh.handle_with(config, req).await
+            Ok(self.dh.handle_with(config, req).await)
         } else {
-            self.dh.handle(req).await
+            Ok(self.dh.handle(req).await)
         }
     }
 }

@@ -8,7 +8,6 @@ use std::any::Any;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
-use std::marker::PhantomPinned;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::DirBuilderExt;
 use std::os::unix::fs::MetadataExt;
@@ -108,7 +107,6 @@ struct LocalFsReadDir {
     dir_cache: Option<DUCacheBuilder>,
     iterator:  Option<std::fs::ReadDir>,
     fut:       Option<BoxFuture<'static, ReadDirBatch>>,
-    _pinned:   PhantomPinned,
 }
 
 // a DirEntry either already has the metadata available, or a handle
@@ -210,6 +208,7 @@ impl LocalFs {
             if !self.inner.is_file {
                 pathbuf.push(path.as_rel_ospath());
             }
+            println!("XXX fspath {:?} -> {:?}", path, pathbuf);
             pathbuf
         }
     }
@@ -290,7 +289,6 @@ impl DavFileSystem for LocalFs {
                         dir_cache: self.dir_cache_builder(path2),
                         iterator:  Some(iterator),
                         fut:       None,
-                        _pinned:   PhantomPinned,
                     };
                     Ok(Box::pin(strm) as FsStream<Box<dyn DavDirEntry>>)
                 },
@@ -473,13 +471,12 @@ impl LocalFsReadDir {
         let fut: BoxFuture<ReadDirBatch> = blocking(move || {
             read_batch(iterator, fs, do_meta)
         }).boxed();
-        let fut: BoxFuture<'static, _> = unsafe { std::mem::transmute(fut) };
         fut
     }
 }
 
 // The stream implementation tries to be smart and batch I/O operations
-impl Stream for LocalFsReadDir {
+impl<'a> Stream for LocalFsReadDir {
     type Item = Box<dyn DavDirEntry>;
 
     fn poll_next(
@@ -487,9 +484,7 @@ impl Stream for LocalFsReadDir {
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>>
     {
-        let this = unsafe {
-            Pin::into_inner_unchecked(self)
-        };
+        let this = Pin::into_inner(self);
 
         // If the buffer is empty, fill it.
         if this.buffer.len() == 0 {
@@ -507,6 +502,7 @@ impl Stream for LocalFsReadDir {
             pin_mut!(fut);
             match Pin::new(&mut fut).poll(cx) {
                 Poll::Ready(batch) => {
+                    this.fut.take();
                     if let Some(ref mut nb) = this.dir_cache {
                         for e in &batch.buffer {
                             if let Ok(ref e) = e {

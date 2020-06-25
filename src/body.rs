@@ -15,10 +15,10 @@ use crate::async_stream::AsyncStream;
 /// Body is returned by the webdav handler, and implements both `Stream`
 /// and `http_body::Body`.
 pub struct Body {
-    inner: BodyType,
+    pub(crate) inner: BodyType,
 }
 
-enum BodyType {
+pub(crate) enum BodyType {
     Bytes(Option<Bytes>),
     AsyncStream(AsyncStream<Bytes, io::Error>),
     Empty,
