@@ -6,7 +6,7 @@ name = "webdav-handler"
 # - Update CHANGELOG.md.
 # - Run ./generate-readme
 # - Create git tag v0.x.y
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 
 readme = "README.md"
 description = "handler for the HTTP and Webdav protocols with filesystem backend"

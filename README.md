@@ -72,6 +72,7 @@ Example server that serves the /tmp directory in r/w mode. You should be
 able to mount this network share from Linux, macOS and Windows.
 
 ```rust
+use std::convert::Infallible;
 use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 
 #[tokio::main(threaded_scheduler)]
@@ -90,10 +91,10 @@ async fn main() {
             let func = move |req| {
                 let dav_server = dav_server.clone();
                 async move {
-                    dav_server.handle(req).await
+                    Ok::<_, Infallible>(dav_server.handle(req).await)
                 }
             };
-            Ok::<_, hyper::Error>(hyper::service::service_fn(func))
+            Ok::<_, Infallible>(hyper::service::service_fn(func))
         }
     });
 
@@ -104,22 +105,21 @@ async fn main() {
         .map_err(|e| eprintln!("server error: {}", e));
 }
 ```
-[DavHandler]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/struct.DavHandler.html
-[DavFileSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/fs/index.html
-[DavLockSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/ls/index.html
-[DavProp]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/fs/struct.DavProp.html
+[DavHandler]: https://docs.rs/webdav-handler/0.2.0-alpha.4/webdav_handler/struct.DavHandler.html
+[DavFileSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.4/webdav_handler/fs/index.html
+[DavLockSystem]: https://docs.rs/webdav-handler/0.2.0-alpha.4/webdav_handler/ls/index.html
+[DavProp]: https://docs.rs/webdav-handler/0.2.0-alpha.4/webdav_handler/fs/struct.DavProp.html
 [`WebDav`]: https://tools.ietf.org/html/rfc4918
 [RFC4918]: https://tools.ietf.org/html/rfc4918
-[`MemLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/memls/index.html
-[`MemFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/memfs/index.html
-[`LocalFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/localfs/index.html
-[`FakeLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.3/webdav_handler/fakels/index.html
+[`MemLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.4/webdav_handler/memls/index.html
+[`MemFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.4/webdav_handler/memfs/index.html
+[`LocalFs`]: https://docs.rs/webdav-handler/0.2.0-alpha.4/webdav_handler/localfs/index.html
+[`FakeLs`]: https://docs.rs/webdav-handler/0.2.0-alpha.4/webdav_handler/fakels/index.html
 [README_litmus]: https://github.com/miquels/webdav-handler-rs/blob/master/README.litmus-test.md
 [hyper_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/hyper.rs
 [PUT]: https://github.com/miquels/webdav-handler-rs/tree/master/doc/Apache-PUT-with-Content-Range.md
 [PATCH]: https://github.com/miquels/webdav-handler-rs/tree/master/doc/SABREDAV-partialupdate.md
 [hyper]: https://hyper.rs/
-
 
 ### Building.
 
@@ -136,6 +136,6 @@ For other options, run `cargo run --example sample-litmus-server -- --help`
 
 ### Copyright and License.
 
- * © 2018, 2019 XS4ALL Internet bv
- * © 2018, 2019 Miquel van Smoorenburg
+ * © 2018, 2019, 2020 XS4ALL Internet bv
+ * © 2018, 2019, 2020 Miquel van Smoorenburg
  * [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0)

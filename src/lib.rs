@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/webdav-handler/0.2.0-alpha.3")]
+#![doc(html_root_url = "https://docs.rs/webdav-handler/0.2.0-alpha.4")]
 //! ## Generic async HTTP/Webdav handler
 //!
 //! [`Webdav`] (RFC4918) is defined as
