@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use webdav_handler::warp::dav_dir;
 
-#[tokio::main(threaded_scheduler)]
+#[tokio::main]
 async fn main() {
     env_logger::init();
     let dir = "/tmp";

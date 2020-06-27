@@ -209,7 +209,6 @@ impl LocalFs {
             if !self.inner.is_file {
                 pathbuf.push(path.as_rel_ospath());
             }
-            println!("XXX fspath {:?} -> {:?}", path, pathbuf);
             pathbuf
         }
     }

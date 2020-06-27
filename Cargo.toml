@@ -34,16 +34,8 @@ name = "actix"
 required-features = [ "actix-compat" ]
 
 [[example]]
-name = "hyper"
-required-features = [ "hyper" ]
-
-[[example]]
 name = "warp"
 required-features = [ "warp-compat" ]
-
-[[example]]
-name = "sample-litmus-server"
-required-features = [ "hyper" ]
 
 [dependencies]
 bytes = "0.5.5"

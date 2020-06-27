@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 
-#[tokio::main(threaded_scheduler)]
+#[tokio::main]
 async fn main() {
     env_logger::init();
     let dir = "/tmp";

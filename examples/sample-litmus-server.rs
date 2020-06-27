@@ -76,7 +76,7 @@ impl Server {
     }
 }
 
-#[tokio::main(threaded_scheduler)]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
