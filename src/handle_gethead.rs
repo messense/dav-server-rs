@@ -1,4 +1,5 @@
 use std::cmp;
+use std::convert::TryInto;
 use std::io::Write;
 
 use futures::StreamExt;
@@ -199,7 +200,6 @@ impl crate::DavInner {
         // now just loop and send data.
         *res.body_mut() = Body::from(AsyncStream::new(|mut tx| {
             async move {
-                let mut buffer = [0; READ_BUF_SIZE];
                 let zero = [0; 4096];
 
                 let multipart = ranges.len() > 1;
@@ -232,21 +232,19 @@ impl crate::DavInner {
 
                     let mut count = range.count;
                     while count > 0 {
-                        let data;
                         let blen = cmp::min(count, READ_BUF_SIZE as u64) as usize;
-                        let mut n = file.read_bytes(&mut buffer[..blen]).await?;
-                        if n == 0 {
+                        let mut buf = file.read_bytes(blen).await?;
+                        if buf.len() == 0 {
                             // this is a cop out. if the file got truncated, just
-                            // return zero bytes instead of file content.
-                            n = if count > 4096 { 4096 } else { count as usize };
-                            data = &zero[..n];
-                        } else {
-                            data = &buffer[..n];
+                            // return zeroed bytes instead of file content.
+                            let n = if count > 4096 { 4096 } else { count as usize };
+                            buf = Bytes::copy_from_slice(&zero[..n]);
                         }
-                        count -= n as u64;
-                        curpos += n as u64;
-                        trace!("sending {} bytes", data.len());
-                        tx.send(Bytes::copy_from_slice(data)).await;
+                        let len = buf.len() as u64;
+                        count -= len;
+                        curpos += len;
+                        trace!("sending {} bytes", len);
+                        tx.send(buf).await;
                     }
                 }
                 if multipart {
@@ -488,16 +486,9 @@ async fn read_handlebars(
     let headers = req.headers();
 
     // Read .hbs file into memory.
-    let mut buffer = [0; 4096];
-    let mut data = Vec::new();
-    loop {
-        let n = file.read_bytes(&mut buffer[..]).await?;
-        if n == 0 {
-            break;
-        }
-        data.extend_from_slice(&buffer[..n]);
-    }
-    let data = String::from_utf8(data)?;
+    let len = file.metadata().await?.len();
+    let buffer = file.read_bytes(len.try_into().unwrap()).await?;
+    let data = std::str::from_utf8(&buffer)?;
 
     // Set variables.
     for hdr in &["User-Agent", "Host", "Referer"] {
@@ -519,7 +510,7 @@ async fn read_handlebars(
 
     // Render.
     let result = hbs
-        .render_template(&data, &vars)
+        .render_template(data, &vars)
         .map_err(|_| DavError::Status(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     let mut hbsfile = HbsFile::new(result);
@@ -576,14 +567,13 @@ impl DavFile for HbsFile {
         async move { Ok(Box::new(self.meta.clone()) as Box<dyn DavMetaData>) }.boxed()
     }
 
-    fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize> {
+    fn read_bytes<'a>(&'a mut self, count: usize) -> FsFuture<Bytes> {
         async move {
             let start = self.pos;
-            let end = std::cmp::min(self.pos + buf.len(), self.data.len());
-            let count = end - start;
-            buf[..count].copy_from_slice(&self.data[start..end]);
-            self.pos += count;
-            Ok(count)
+            let end = std::cmp::min(self.pos + count, self.data.len());
+            self.pos += end - start;
+            let b = Bytes::copy_from_slice(&self.data[start..end]);
+            Ok(b)
         }
         .boxed()
     }
@@ -608,11 +598,11 @@ impl DavFile for HbsFile {
         .boxed()
     }
 
-    fn write_bytes<'a>(&'a mut self, _buf: &'a [u8]) -> FsFuture<usize> {
+    fn write_buf<'a>(&'a mut self, _buf: Box<dyn bytes::Buf + Send>) -> FsFuture<()> {
         Box::pin(future::ready(Err(FsError::NotImplemented)))
     }
 
-    fn write_all<'a>(&'a mut self, _buf: &'a [u8]) -> FsFuture<()> {
+    fn write_bytes<'a>(&'a mut self, _buf: bytes::Bytes) -> FsFuture<()> {
         Box::pin(future::ready(Err(FsError::NotImplemented)))
     }
 

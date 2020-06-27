@@ -11,6 +11,7 @@ use std::io::{Error, ErrorKind, SeekFrom};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
+use bytes::{Bytes, Buf};
 use futures::{
     future,
     future::{BoxFuture, FutureExt},
@@ -345,14 +346,14 @@ impl DavFile for MemFsFile {
         .boxed()
     }
 
-    fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize> {
+    fn read_bytes<'a>(&'a mut self, count: usize) -> FsFuture<Bytes> {
         async move {
             let tree = &*self.tree.lock().unwrap();
             let node = tree.get_node(self.node_id)?;
             let file = node.as_file()?;
             let curlen = file.data.len();
             let mut start = self.pos;
-            let mut end = self.pos + buf.len();
+            let mut end = self.pos + count;
             if start > curlen {
                 start = curlen
             }
@@ -360,33 +361,50 @@ impl DavFile for MemFsFile {
                 end = curlen
             }
             let cnt = end - start;
-            buf[..cnt].copy_from_slice(&file.data[start..end]);
             self.pos += cnt;
-            Ok(cnt)
+            Ok(Bytes::copy_from_slice(&file.data[start..end]))
         }
         .boxed()
     }
 
-    fn write_bytes<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<usize> {
+    fn write_bytes<'a>(&'a mut self, buf: Bytes) -> FsFuture<()> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             let node = tree.get_node_mut(self.node_id)?;
             let file = node.as_file_mut()?;
-            let start = if self.append { file.data.len() } else { self.pos };
-            let end = start + buf.len();
+            if self.append {
+                self.pos = file.data.len();
+            }
+            let end = self.pos + buf.len();
             if end > file.data.len() {
                 file.data.resize(end, 0);
             }
-            file.data[start..end].copy_from_slice(buf);
-            self.pos += end - start;
-            Ok(end - start)
+            file.data[self.pos..end].copy_from_slice(&buf);
+            self.pos = end;
+            Ok(())
         }
         .boxed()
     }
 
-    fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<()> {
+    fn write_buf<'a>(&'a mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<()> {
         async move {
-            self.write_bytes(buf).await?;
+            let tree = &mut *self.tree.lock().unwrap();
+            let node = tree.get_node_mut(self.node_id)?;
+            let file = node.as_file_mut()?;
+            if self.append {
+                self.pos = file.data.len();
+            }
+            let end = self.pos + buf.remaining();
+            if end > file.data.len() {
+                file.data.resize(end, 0);
+            }
+            while buf.has_remaining() {
+                let b = buf.bytes();
+                let len = b.len();
+                file.data[self.pos..self.pos + len].copy_from_slice(b);
+                buf.advance(len);
+                self.pos += len;
+            }
             Ok(())
         }
         .boxed()

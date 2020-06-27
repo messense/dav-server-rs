@@ -285,9 +285,9 @@ pub trait DavDirEntry: Send + Sync {
 /// readable/writeable/seekable, and be able to return its metadata.
 pub trait DavFile: Debug + Send + Sync {
     fn metadata<'a>(&'a mut self) -> FsFuture<Box<dyn DavMetaData>>;
-    fn write_bytes<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<usize>;
-    fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<()>;
-    fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize>;
+    fn write_buf<'a>(&'a mut self, buf: Box<dyn bytes::Buf + Send>) -> FsFuture<()>;
+    fn write_bytes<'a>(&'a mut self, buf: bytes::Bytes) -> FsFuture<()>;
+    fn read_bytes<'a>(&'a mut self, count: usize) -> FsFuture<bytes::Bytes>;
     fn seek<'a>(&'a mut self, pos: SeekFrom) -> FsFuture<u64>;
     fn flush<'a>(&'a mut self) -> FsFuture<()>;
 }

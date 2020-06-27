@@ -227,7 +227,7 @@ impl DavHandler {
         req: Request<ReqBody>,
     ) -> Response<Body>
     where
-        ReqData: Buf + Send,
+        ReqData: Buf + Send + 'static,
         ReqError: StdError + Send + Sync + 'static,
         ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
     {
@@ -248,7 +248,7 @@ impl DavHandler {
         req: Request<ReqBody>,
     ) -> Response<Body>
     where
-        ReqData: Buf + Send,
+        ReqData: Buf + Send + 'static,
         ReqError: StdError + Send + Sync + 'static,
         ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
     {
@@ -265,7 +265,7 @@ impl DavHandler {
         req: Request<ReqBody>,
     ) -> Response<Body>
     where
-        ReqData: Buf + Send,
+        ReqData: Buf + Send + 'static,
         ReqError: StdError + Send + Sync + 'static,
         ReqBody: Stream<Item = Result<ReqData, ReqError>>,
     {
@@ -285,7 +285,7 @@ impl DavHandler {
         req: Request<ReqBody>,
     ) -> Response<Body>
     where
-        ReqData: Buf + Send,
+        ReqData: Buf + Send + 'static,
         ReqError: StdError + Send + Sync + 'static,
         ReqBody: Stream<Item = Result<ReqData, ReqError>>,
     {
@@ -337,7 +337,7 @@ impl DavInner {
     ) -> DavResult<Vec<u8>>
     where
         ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
-        ReqData: Buf + Send,
+        ReqData: Buf + Send + 'static,
         ReqError: StdError + Send + Sync + 'static,
     {
         let mut data = Vec::new();
@@ -363,7 +363,7 @@ impl DavInner {
     async fn handle<ReqBody, ReqData, ReqError>(self, req: Request<ReqBody>) -> Response<Body>
     where
         ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
-        ReqData: Buf + Send,
+        ReqData: Buf + Send + 'static,
         ReqError: StdError + Send + Sync + 'static,
     {
         let is_ms = req
@@ -411,7 +411,7 @@ impl DavInner {
     async fn handle2<ReqBody, ReqData, ReqError>(mut self, req: Request<ReqBody>) -> DavResult<Response<Body>>
     where
         ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
-        ReqData: Buf + Send,
+        ReqData: Buf + Send + 'static,
         ReqError: StdError + Send + Sync + 'static,
     {
         let (req, body) = {

@@ -563,7 +563,7 @@ impl IfList {
         }
     }
     fn add(&mut self, not: bool, item: IfItem) {
-        self.conditions.push({ IfCondition { not, item } });
+        self.conditions.push(IfCondition { not, item });
     }
 }
 

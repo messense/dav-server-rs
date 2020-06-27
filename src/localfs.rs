@@ -20,6 +20,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use bytes::{Buf, Bytes, BytesMut};
 use futures::{future, future::BoxFuture, FutureExt, Stream};
 use pin_utils::pin_mut;
 use tokio::task;
@@ -615,29 +616,25 @@ impl DavFile for LocalFsFile {
         .boxed()
     }
 
-    fn write_bytes<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<usize> {
+    fn write_bytes<'a>(&'a mut self, buf: Bytes) -> FsFuture<()> {
         async move {
             let mut file = self.0.take().unwrap();
-            let buf = buf.to_vec();
-            let (res, file) = blocking(move || { (file.write(&buf), file) }).await;
+            let (res, file) = blocking(move || { (file.write_all(&buf), file) }).await;
             self.0 = Some(file);
             res.map_err(|e| e.into())
         }.boxed()
     }
 
-    fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> FsFuture<()> {
+    fn write_buf<'a>(&'a mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<()> {
         async move {
             let mut file = self.0.take().unwrap();
-            let buf = buf.to_vec();
             let (res, file) = blocking(move || {
-                let len = buf.len();
-                let mut pos = 0;
-                while pos < len {
-                    let n = match file.write(&buf[pos..]) {
+                while buf.remaining() > 0 {
+                    let n = match file.write(buf.bytes()) {
                         Ok(n) => n,
                         Err(e) => return (Err(e), file),
                     };
-                    pos += n;
+                    buf.advance(n);
                 }
                 (Ok(()), file)
             }).await;
@@ -646,23 +643,19 @@ impl DavFile for LocalFsFile {
         }.boxed()
     }
 
-    fn read_bytes<'a>(&'a mut self, buf: &'a mut [u8]) -> FsFuture<usize> {
+    fn read_bytes<'a>(&'a mut self, count: usize) -> FsFuture<Bytes> {
         async move {
-            let mut buffer = Vec::with_capacity(buf.len());
-            buffer.resize(buf.len(), 0);
             let mut file = self.0.take().unwrap();
-            let (res, buffer, file) = blocking(move || {
-                let res = file.read(&mut buffer);
-                (res, buffer, file)
+            let (res, file) = blocking(move || {
+                let mut buf = BytesMut::with_capacity(count);
+                let res = unsafe {
+                    buf.set_len(count);
+                    file.read(&mut buf).map(|n| { buf.set_len(n); buf.freeze() })
+                };
+                (res, file)
             }).await;
             self.0 = Some(file);
-            match res {
-                Ok(n) => {
-                    buf[0..n].copy_from_slice(&buffer[0..n]);
-                    Ok(n as usize)
-                },
-                Err(e) => Err(e.into()),
-            }
+            res.map_err(|e| e.into())
         }.boxed()
     }
 

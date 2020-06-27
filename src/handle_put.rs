@@ -2,7 +2,7 @@ use std::any::Any;
 use std::error::Error as StdError;
 use std::io;
 
-use bytes::Buf;
+use bytes::{Bytes, Buf};
 use headers::HeaderMapExt;
 use http::StatusCode as SC;
 use http::{self, Request, Response};
@@ -62,7 +62,7 @@ impl crate::DavInner {
     ) -> DavResult<Response<Body>>
     where
         ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
-        ReqData: Buf + Send,
+        ReqData: Buf + Send + 'static,
         ReqError: StdError + Send + Sync + 'static,
     {
         let mut start = 0;
@@ -209,25 +209,26 @@ impl crate::DavInner {
         pin_utils::pin_mut!(body);
 
         // loop, read body, write to file.
-        let mut bad = false;
         let mut total = 0u64;
 
         while let Some(data) = body.data().await {
             let mut buf = data.map_err(|e| to_ioerror(e))?;
-            while buf.has_remaining() {
-                let data = buf.bytes();
-                let datalen = data.len();
-                total += datalen as u64;
-                // consistency check.
-                if have_count && total > count {
-                    bad = true;
-                    break;
-                }
-                file.write_all(data).await?;
-                buf.advance(datalen);
-            }
-            if bad {
+            let buflen = buf.remaining();
+            total += buflen as u64;
+            // consistency check.
+            if have_count && total > count {
                 break;
+            }
+            // The `Buf` might actually be a `Bytes`.
+            let b = {
+                let b: &mut dyn std::any::Any = &mut buf;
+                b.downcast_mut::<Bytes>()
+            };
+            if let Some(bytes) = b {
+                let bytes = std::mem::replace(bytes, Bytes::new());
+                file.write_bytes(bytes).await?;
+            } else {
+                file.write_buf(Box::new(buf)).await?;
             }
         }
         file.flush().await?;

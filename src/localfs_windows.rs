@@ -17,7 +17,7 @@ use parking_lot::Mutex;
 use crate::davpath::DavPath;
 
 const CACHE_ENTRIES: usize = 4096;
-const CACHE_MAX_AGE: u64 = (15 * 60);
+const CACHE_MAX_AGE: u64 = 15 * 60;
 const CACHE_SLEEP_MS: u64 = 30059;
 
 lazy_static! {
