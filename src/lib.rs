@@ -14,8 +14,8 @@
 //! in-memory filesystem (`memfs`).
 //!
 //! So this library can be used as a handler with HTTP servers like [hyper],
-//! `warp`, etc. Either as a correct and complete HTTP handler for files (GET/HEAD)
-//! or as a handler for the entire Webdav protocol. In the latter case, you can
+//! [warp], [actix-web], etc. Either as a correct and complete HTTP handler for
+//! files (GET/HEAD) or as a handler for the entire Webdav protocol. In the latter case, you can
 //! mount it as a remote filesystem: Linux, Windows, macOS can all mount Webdav filesystems.
 //!
 //! ## Backend interfaces.
@@ -27,9 +27,11 @@
 //!   implement reading/writing [DAV properties][DavProp].
 //! - you can supply a [locksystem][DavLockSystem] that handles webdav locks.
 //!
-//! The handler in the library itself accepts/implements several traits such as
-//! a `Stream` of `Byte`s and `http_body::Body` so that it can work with several server
-//! libraries/frameworks like [hyper]. (See [examples/hyper.rs][hyper_example]).
+//! The handler in this library works with the standard http types
+//! from the `http` and `http_body` crates. That means that you can use it
+//! straight away with http libraries / frameworks that also work with
+//! those types, like hyper. Compatibility modules for [actix-web][actix-compat]
+//! and [warp][warp-compat] are also provided.
 //!
 //! ## Implemented standards.
 //!
@@ -63,14 +65,15 @@
 //!
 //! ## Example.
 //!
-//! Example server that serves the /tmp directory in r/w mode. You should be
-//! able to mount this network share from Linux, macOS and Windows.
+//! Example server using [hyper] that serves the /tmp directory in r/w mode. You should be
+//! able to mount this network share from Linux, macOS and Windows. [Examples][examples]
+//! for other frameworks are also available.
 //!
 //! ```no_run
 //! use std::convert::Infallible;
 //! use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 //!
-//! #[tokio::main(threaded_scheduler)]
+//! #[tokio::main]
 //! async fn main() {
 //!     let dir = "/tmp";
 //!     let addr = ([127, 0, 0, 1], 4918).into();
@@ -110,11 +113,15 @@
 //! [`MemFs`]: memfs/index.html
 //! [`LocalFs`]: localfs/index.html
 //! [`FakeLs`]: fakels/index.html
+//! [actix-compat]: actix/index.html
+//! [warp-compat]: warp/index.html
 //! [README_litmus]: https://github.com/miquels/webdav-handler-rs/blob/master/README.litmus-test.md
-//! [hyper_example]: https://github.com/miquels/webdav-handler-rs/blob/master/examples/hyper.rs
+//! [examples]: https://github.com/miquels/webdav-handler-rs/tree/master/examples/
 //! [PUT]: https://github.com/miquels/webdav-handler-rs/tree/master/doc/Apache-PUT-with-Content-Range.md
 //! [PATCH]: https://github.com/miquels/webdav-handler-rs/tree/master/doc/SABREDAV-partialupdate.md
 //! [hyper]: https://hyper.rs/
+//! [warp]: https://crates.io/crates/warp
+//! [actix-web]: https://actix.rs/
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
