@@ -11,7 +11,7 @@ use std::io::{Error, ErrorKind, SeekFrom};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use bytes::{Bytes, Buf};
+use bytes::{Buf, Bytes};
 use futures::{
     future,
     future::{BoxFuture, FutureExt},

@@ -2,7 +2,7 @@ use std::any::Any;
 use std::error::Error as StdError;
 use std::io;
 
-use bytes::{Bytes, Buf};
+use bytes::{Buf, Bytes};
 use headers::HeaderMapExt;
 use http::StatusCode as SC;
 use http::{self, Request, Response};

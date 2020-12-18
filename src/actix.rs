@@ -27,8 +27,8 @@ use pin_project::pin_project;
 ///
 /// Wraps `http::Request<DavBody>` and implements `actix_web::FromRequest`.
 pub struct DavRequest {
-    pub request:    http::Request<DavBody>,
-    prefix:         Option<String>,
+    pub request: http::Request<DavBody>,
+    prefix:      Option<String>,
 }
 
 impl DavRequest {
@@ -58,8 +58,11 @@ impl FromRequest for DavRequest {
             x => Some(x.to_string()),
         };
 
-        let body = DavBody{ body: payload.take() };
-        let stdreq = DavRequest{ request: builder.body(body).unwrap(), prefix };
+        let body = DavBody { body: payload.take() };
+        let stdreq = DavRequest {
+            request: builder.body(body).unwrap(),
+            prefix,
+        };
         future::ready(Ok(stdreq))
     }
 }
@@ -68,7 +71,7 @@ impl FromRequest for DavRequest {
 ///
 /// It wraps actix's `PayLoad` and implements `http_body::Body`.
 #[pin_project]
-pub struct DavBody{
+pub struct DavBody {
     #[pin]
     body: dev::Payload,
 }
@@ -77,16 +80,22 @@ impl http_body::Body for DavBody {
     type Data = Bytes;
     type Error = io::Error;
 
-    fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+    fn poll_data(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Self::Data, Self::Error>>>
+    {
         let this = self.project();
         match this.body.poll_next(cx) {
             Poll::Ready(Some(Ok(data))) => Poll::Ready(Some(Ok(data))),
-            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(match err {
-                PayloadError::Incomplete(Some(err)) => err,
-                PayloadError::Incomplete(None) => io::ErrorKind::BrokenPipe.into(),
-                PayloadError::Io(err) => err,
-                other => io::Error::new(io::ErrorKind::Other, format!("{:?}", other)),
-            }))),
+            Poll::Ready(Some(Err(err))) => {
+                Poll::Ready(Some(Err(match err {
+                    PayloadError::Incomplete(Some(err)) => err,
+                    PayloadError::Incomplete(None) => io::ErrorKind::BrokenPipe.into(),
+                    PayloadError::Io(err) => err,
+                    other => io::Error::new(io::ErrorKind::Other, format!("{:?}", other)),
+                })))
+            },
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
         }
@@ -126,14 +135,14 @@ impl actix_web::Responder for DavResponse {
         }
         // I noticed that actix-web returns an empty chunked body
         // (\r\n0\r\n\r\n) and _no_ Transfer-Encoding header on
-        // a 204 statuscode. It's probably because of 
+        // a 204 statuscode. It's probably because of
         // builder.streaming(). So only use builder.streaming()
         // on actual streaming replies.
         let resp = match body.inner {
             BodyType::Bytes(None) => builder.body(""),
             BodyType::Bytes(Some(b)) => builder.body(b),
             BodyType::Empty => builder.body(""),
-            b@BodyType::AsyncStream(..) => builder.streaming(Body{ inner: b }),
+            b @ BodyType::AsyncStream(..) => builder.streaming(Body { inner: b }),
         };
         ok(resp)
     }

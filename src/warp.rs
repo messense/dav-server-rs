@@ -8,18 +8,17 @@
 use std::convert::Infallible;
 use std::path::Path;
 
-use warp::{Filter, filters::BoxedFilter, Reply};
 use crate::{fakels::FakeLs, localfs::LocalFs, DavHandler};
+use warp::{filters::BoxedFilter, Filter, Reply};
 
 /// Reply-filter that runs a DavHandler.
 ///
 /// Just pass in a pre-configured DavHandler. If a prefix was not
 /// configured, it will be the request path up to this point.
 pub fn dav_handler(handler: DavHandler) -> BoxedFilter<(impl Reply,)> {
-
-    use http::Response;
     use http::header::HeaderMap;
     use http::uri::Uri;
+    use http::Response;
     use warp::path::{FullPath, Tail};
 
     warp::method()
@@ -27,39 +26,39 @@ pub fn dav_handler(handler: DavHandler) -> BoxedFilter<(impl Reply,)> {
         .and(warp::path::tail())
         .and(warp::header::headers_cloned())
         .and(warp::body::stream())
-        .and_then(move |method, path_full: FullPath, path_tail: Tail, headers: HeaderMap, body| {
-            let handler = handler.clone();
+        .and_then(
+            move |method, path_full: FullPath, path_tail: Tail, headers: HeaderMap, body| {
+                let handler = handler.clone();
 
-            async move {
-                // rebuild an http::Request struct.
-                let path_str = path_full.as_str();
-                let uri = path_str.parse::<Uri>().unwrap();
-                let mut builder = http::Request::builder()
-                    .method(method)
-                    .uri(uri);
-                for (k, v) in headers.iter() {
-                    builder = builder.header(k, v);
+                async move {
+                    // rebuild an http::Request struct.
+                    let path_str = path_full.as_str();
+                    let uri = path_str.parse::<Uri>().unwrap();
+                    let mut builder = http::Request::builder().method(method).uri(uri);
+                    for (k, v) in headers.iter() {
+                        builder = builder.header(k, v);
+                    }
+                    let request = builder.body(body).unwrap();
+
+                    let response = if handler.config.prefix.is_some() {
+                        // Run a handler with the configured path prefix.
+                        handler.handle_stream(request).await
+                    } else {
+                        // Run a handler with the current path prefix.
+                        let path_len = path_str.len();
+                        let tail_len = path_tail.as_str().len();
+                        let prefix = path_str[..path_len - tail_len].to_string();
+                        let config = DavHandler::builder().strip_prefix(prefix);
+                        handler.handle_stream_with(config, request).await
+                    };
+
+                    // Need to remap the http_body::Body to a hyper::Body.
+                    let (parts, body) = response.into_parts();
+                    let response = Response::from_parts(parts, hyper::Body::wrap_stream(body));
+                    Ok::<_, Infallible>(response)
                 }
-                let request = builder.body(body).unwrap();
-
-                let response = if handler.config.prefix.is_some() {
-                    // Run a handler with the configured path prefix.
-                    handler.handle_stream(request).await
-                } else {
-                    // Run a handler with the current path prefix.
-                    let path_len = path_str.len();
-                    let tail_len = path_tail.as_str().len();
-                    let prefix = path_str[..path_len - tail_len].to_string();
-                    let config = DavHandler::builder().strip_prefix(prefix);
-                    handler.handle_stream_with(config, request).await
-                };
-
-                // Need to remap the http_body::Body to a hyper::Body.
-                let (parts, body) = response.into_parts();
-                let response = Response::from_parts(parts, hyper::Body::wrap_stream(body));
-                Ok::<_, Infallible>(response)
-            }
-        })
+            },
+        )
         .boxed()
 }
 

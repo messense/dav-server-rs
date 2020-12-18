@@ -222,10 +222,7 @@ impl DavHandler {
     }
 
     /// Handle a webdav request.
-    pub async fn handle<ReqBody, ReqData, ReqError>(
-        &self,
-        req: Request<ReqBody>,
-    ) -> Response<Body>
+    pub async fn handle<ReqBody, ReqData, ReqError>(&self, req: Request<ReqBody>) -> Response<Body>
     where
         ReqData: Buf + Send + 'static,
         ReqError: StdError + Send + Sync + 'static,
@@ -260,10 +257,7 @@ impl DavHandler {
     /// Used with webserver frameworks that have not
     /// opted to use the `http_body` crate just yet.
     #[doc(hidden)]
-    pub async fn handle_stream<ReqBody, ReqData, ReqError>(
-        &self,
-        req: Request<ReqBody>,
-    ) -> Response<Body>
+    pub async fn handle_stream<ReqBody, ReqData, ReqError>(&self, req: Request<ReqBody>) -> Response<Body>
     where
         ReqData: Buf + Send + 'static,
         ReqError: StdError + Send + Sync + 'static,

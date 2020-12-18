@@ -1,8 +1,8 @@
 use std::io;
 
 use actix_web::{web, App, HttpServer};
-use webdav_handler::{DavHandler, DavConfig, localfs::LocalFs, fakels::FakeLs};
 use webdav_handler::actix::*;
+use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavConfig, DavHandler};
 
 pub async fn dav_handler(req: DavRequest, davhandler: web::Data<DavHandler>) -> DavResponse {
     if let Some(prefix) = req.prefix() {
@@ -26,10 +26,12 @@ async fn main() -> io::Result<()> {
 
     println!("actix-web example: listening on {} serving {}", addr, dir);
 
-    HttpServer::new(move || App::new().data(dav_server.clone()).service(
-        web::resource("/{tail:.*}").to(dav_handler)
-    ))
-        .bind(addr)?
-        .run()
-        .await
+    HttpServer::new(move || {
+        App::new()
+            .data(dav_server.clone())
+            .service(web::resource("/{tail:.*}").to(dav_handler))
+    })
+    .bind(addr)?
+    .run()
+    .await
 }
