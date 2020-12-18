@@ -2,7 +2,7 @@
 //!
 //! Example:
 //!
-//! ```rust text
+//! ```rust ignore
 //! use futures::StreamExt;
 //! use futures::executor::block_on;
 //! # use webdav_handler::async_stream;
@@ -77,8 +77,8 @@ impl Future for SenderFuture {
 // in any other way, so we don't have to use Arc<Mutex<..>>.
 /// Type of the sender passed as first argument into the async closure.
 pub struct Sender<I, E>(Rc<Cell<Option<I>>>, PhantomData<E>);
-unsafe impl<I, E> Sync for Sender<I, E> {}
-unsafe impl<I, E> Send for Sender<I, E> {}
+unsafe impl<I: Sync, E: Sync> Sync for Sender<I, E> {}
+unsafe impl<I: Send, E: Send> Send for Sender<I, E> {}
 
 impl<I, E> Sender<I, E> {
     fn new(item_opt: Option<I>) -> Sender<I, E> {

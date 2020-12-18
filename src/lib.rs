@@ -130,8 +130,7 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-#[doc(hidden)]
-pub mod async_stream;
+mod async_stream;
 mod conditional;
 mod davhandler;
 mod davheaders;
