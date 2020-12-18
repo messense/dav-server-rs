@@ -13,7 +13,7 @@ pub async fn dav_handler(req: DavRequest, davhandler: web::Data<DavHandler>) -> 
     }
 }
 
-#[actix_rt::main]
+#[actix_web::main]
 async fn main() -> io::Result<()> {
     env_logger::init();
     let addr = "127.0.0.1:4918";
@@ -23,6 +23,8 @@ async fn main() -> io::Result<()> {
         .filesystem(LocalFs::new(dir, false, false, false))
         .locksystem(FakeLs::new())
         .build_handler();
+
+    println!("actix-web example: listening on {} serving {}", addr, dir);
 
     HttpServer::new(move || App::new().data(dav_server.clone()).service(
         web::resource("/{tail:.*}").to(dav_handler)

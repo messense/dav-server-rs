@@ -7,7 +7,7 @@ async fn main() {
     let dir = "/tmp";
     let addr: SocketAddr = ([127, 0, 0, 1], 4918).into();
 
-    println!("Serving {} on {}", dir, addr);
+    println!("warp example: listening on {:?} serving {}", addr, dir);
     let warpdav = dav_dir(dir, true, true);
     warp::serve(warpdav).run(addr).await;
 }

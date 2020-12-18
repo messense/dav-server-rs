@@ -23,7 +23,7 @@ async fn main() {
         }
     });
 
-    println!("Serving {} on {}", dir, addr);
+    println!("hyper example: listening on {:?} serving {}", addr, dir);
     let _ = hyper::Server::bind(&addr)
         .serve(make_service)
         .await
