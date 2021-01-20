@@ -344,7 +344,7 @@ impl DavInner {
                 if data.len() + buf.remaining() > max_size {
                     return Err(StatusCode::PAYLOAD_TOO_LARGE.into());
                 }
-                let b = buf.bytes();
+                let b = buf.chunk();
                 let l = b.len();
                 data.extend_from_slice(b);
                 buf.advance(l);

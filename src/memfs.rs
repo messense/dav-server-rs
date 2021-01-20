@@ -399,7 +399,7 @@ impl DavFile for MemFsFile {
                 file.data.resize(end, 0);
             }
             while buf.has_remaining() {
-                let b = buf.bytes();
+                let b = buf.chunk();
                 let len = b.len();
                 file.data[self.pos..self.pos + len].copy_from_slice(b);
                 buf.advance(len);

@@ -6,7 +6,7 @@ name = "webdav-handler"
 # - Update CHANGELOG.md.
 # - Run ./generate-readme
 # - Create git tag v0.x.y
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 
 readme = "README.md"
 description = "handler for the HTTP and Webdav protocols with filesystem backend"
@@ -45,37 +45,38 @@ name = "warp"
 required-features = [ "warp-compat" ]
 
 [dependencies]
-bytes = "0.5.5"
-futures = "0.3.5"
-handlebars = "3.5.1"
-headers = "0.3.2"
+bytes = "1.0.1"
+futures = "0.3.12"
+handlebars = "3.5.2"
+headers = "0.3.3"
 htmlescape = "0.3.1"
-http = "0.2.1"
-http-body = "0.3.1"
+http = "0.2.3"
+http-body = "0.4.0"
 lazy_static = "1.4.0"
-libc = "0.2.71"
-log = "0.4.8"
-lru = "0.6.2"
+libc = "0.2.82"
+log = "0.4.13"
+lru = "0.6.3"
 mime_guess = "2.0.3"
 parking_lot = "0.11.1"
 percent-encoding = "1.0.1"
-pin-project = "1.0.2"
+pin-project = "1.0.4"
 pin-utils = "0.1.0"
-regex = "1.4.2"
-tokio = { version = "0.2.21", features = ["rt-core", "rt-threaded", "blocking"] }
-time = { version = "0.2.16", default-features = false }
+regex = "1.4.3"
+tokio = { version = "1.0.2", features = [ "rt-multi-thread", "io-util", "net", "time", "sync" ] }
+time = { version = "0.2.24", default-features = false }
 url = "2.2.0"
-uuid = { version = "0.8.1", features = ["v4"] }
+uuid = { version = "0.8.2", features = ["v4"] }
 xml-rs = "0.8.3"
-xmltree = "0.10.0"
+xmltree = "0.10.2"
 
-hyper = { version = "0.13.6", optional = true }
-warp = { version = "0.2.3", optional = true }
-actix-web = { version = "3.3", optional = true }
+hyper = {version = "0.14.2", optional = true }
+warp = { version = "0.3.0", optional = true }
+#actix-web = { version = "3.3.2", optional = true }
+actix-web = { version = "4.0.0-beta.1", optional = true }
 
 [dev-dependencies]
-clap = "2.33.1"
+clap = "2.33.3"
 env_logger = "0.8.2"
-tokio = { version = "0.2.21", features = ["full"] }
-hyper = "0.13.6"
+hyper = { version = "0.14.2", features = [ "http1", "http2", "server", "stream", "runtime" ] }
+tokio = { version = "1.0.2", features = ["full"] }
 

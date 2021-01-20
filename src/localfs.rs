@@ -647,7 +647,7 @@ impl DavFile for LocalFsFile {
             let mut file = self.0.take().unwrap();
             let (res, file) = blocking(move || {
                 while buf.remaining() > 0 {
-                    let n = match file.write(buf.bytes()) {
+                    let n = match file.write(buf.chunk()) {
                         Ok(n) => n,
                         Err(e) => return (Err(e), file),
                     };
