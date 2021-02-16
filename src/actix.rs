@@ -122,10 +122,8 @@ impl From<http::Response<crate::body::Body>> for DavResponse {
 }
 
 impl actix_web::Responder for DavResponse {
-    type Error = Error;
-    type Future = Ready<Result<HttpResponse, Error>>;
 
-    fn respond_to(self, _req: &HttpRequest) -> Self::Future {
+    fn respond_to(self, _req: &HttpRequest) -> HttpResponse {
         use crate::body::{Body, BodyType};
 
         let (parts, body) = self.0.into_parts();
@@ -144,6 +142,6 @@ impl actix_web::Responder for DavResponse {
             BodyType::Empty => builder.body(""),
             b @ BodyType::AsyncStream(..) => builder.streaming(Body { inner: b }),
         };
-        ok(resp)
+        resp
     }
 }
