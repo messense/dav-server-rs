@@ -17,7 +17,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use actix_web::client::PayloadError;
+use actix_web::error::PayloadError;
 use actix_web::{dev, Error, FromRequest, HttpRequest, HttpResponse};
 use bytes::Bytes;
 use futures::{future, Stream};
