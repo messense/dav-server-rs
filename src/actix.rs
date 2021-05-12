@@ -20,7 +20,7 @@ use std::task::{Context, Poll};
 use actix_web::client::PayloadError;
 use actix_web::{dev, Error, FromRequest, HttpRequest, HttpResponse};
 use bytes::Bytes;
-use futures::{future, future::ok, future::Ready, Stream};
+use futures::{future, Stream};
 use pin_project::pin_project;
 
 /// http::Request compatibility.
@@ -122,16 +122,14 @@ impl From<http::Response<crate::body::Body>> for DavResponse {
 }
 
 impl actix_web::Responder for DavResponse {
-    type Error = Error;
-    type Future = Ready<Result<HttpResponse, Error>>;
 
-    fn respond_to(self, _req: &HttpRequest) -> Self::Future {
+    fn respond_to(self, _req: &HttpRequest) -> HttpResponse {
         use crate::body::{Body, BodyType};
 
         let (parts, body) = self.0.into_parts();
         let mut builder = HttpResponse::build(parts.status);
         for (name, value) in parts.headers.into_iter() {
-            builder.header(name.unwrap(), value);
+            builder.append_header((name.unwrap(), value));
         }
         // I noticed that actix-web returns an empty chunked body
         // (\r\n0\r\n\r\n) and _no_ Transfer-Encoding header on
@@ -144,6 +142,6 @@ impl actix_web::Responder for DavResponse {
             BodyType::Empty => builder.body(""),
             b @ BodyType::AsyncStream(..) => builder.streaming(Body { inner: b }),
         };
-        ok(resp)
+        resp
     }
 }
