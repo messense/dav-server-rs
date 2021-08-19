@@ -53,6 +53,8 @@ pub struct DavConfig {
     pub(crate) autoindex:     Option<bool>,
     // index.html
     pub(crate) indexfile:     Option<String>,
+    // read buffer size in bytes
+    pub(crate) read_buf_size: Option<usize>,
 }
 
 impl DavConfig {
@@ -125,6 +127,13 @@ impl DavConfig {
         this
     }
 
+    /// Read buffer size in bytes
+    pub fn read_buf_size(self, size: usize) -> Self {
+        let mut this = self;
+        this.read_buf_size = Some(size);
+        this
+    }
+
     fn merge(&self, new: DavConfig) -> DavConfig {
         DavConfig {
             prefix:        new.prefix.or(self.prefix.clone()),
@@ -135,6 +144,7 @@ impl DavConfig {
             hide_symlinks: new.hide_symlinks.or(self.hide_symlinks.clone()),
             autoindex:     new.autoindex.or(self.autoindex.clone()),
             indexfile:     new.indexfile.or(self.indexfile.clone()),
+            read_buf_size: new.read_buf_size.or(self.read_buf_size.clone()),
         }
     }
 }
@@ -152,6 +162,7 @@ pub(crate) struct DavInner {
     pub hide_symlinks: Option<bool>,
     pub autoindex:     Option<bool>,
     pub indexfile:     Option<String>,
+    pub read_buf_size: Option<usize>,
 }
 
 impl From<DavConfig> for DavInner {
@@ -165,6 +176,7 @@ impl From<DavConfig> for DavInner {
             hide_symlinks: cfg.hide_symlinks,
             autoindex:     cfg.autoindex,
             indexfile:     cfg.indexfile,
+            read_buf_size: cfg.read_buf_size,
         }
     }
 }
@@ -184,6 +196,7 @@ impl From<&DavConfig> for DavInner {
             hide_symlinks: cfg.hide_symlinks.clone(),
             autoindex:     cfg.autoindex.clone(),
             indexfile:     cfg.indexfile.clone(),
+            read_buf_size: cfg.read_buf_size.clone(),
         }
     }
 }
@@ -199,6 +212,7 @@ impl Clone for DavInner {
             hide_symlinks: self.hide_symlinks.clone(),
             autoindex:     self.autoindex.clone(),
             indexfile:     self.indexfile.clone(),
+            read_buf_size: self.read_buf_size.clone(),
         }
     }
 }

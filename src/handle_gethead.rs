@@ -198,6 +198,7 @@ impl crate::DavInner {
         }
 
         // now just loop and send data.
+        let read_buf_size = self.read_buf_size.unwrap_or(READ_BUF_SIZE);
         *res.body_mut() = Body::from(AsyncStream::new(|mut tx| {
             async move {
                 let zero = [0; 4096];
@@ -232,7 +233,7 @@ impl crate::DavInner {
 
                     let mut count = range.count;
                     while count > 0 {
-                        let blen = cmp::min(count, READ_BUF_SIZE as u64) as usize;
+                        let blen = cmp::min(count, read_buf_size as u64) as usize;
                         let mut buf = file.read_bytes(blen).await?;
                         if buf.len() == 0 {
                             // this is a cop out. if the file got truncated, just
