@@ -1,5 +1,4 @@
 use std::cmp;
-use std::convert::TryInto;
 use std::io::Write;
 
 use futures::StreamExt;
@@ -66,12 +65,14 @@ impl crate::DavInner {
 
         // double check, is it a regular file.
         let mut file = self.fs.open(&path, OpenOptions::read()).await?;
+        #[allow(unused_mut)]
         let mut meta = file.metadata().await?;
         if !meta.is_file() {
             return Err(DavError::Status(StatusCode::METHOD_NOT_ALLOWED));
         }
 
         // if it was a .hbs file, process it.
+        #[cfg(feature = "handlebars")]
         if is_hbs {
             let (f, m) = read_handlebars(req, file).await?;
             file = f;
@@ -468,15 +469,25 @@ fn display_path(path: &DavPath) -> String {
     dpath
 }
 
-use std::collections::HashMap;
-use std::io::{Error, ErrorKind, SeekFrom};
 use std::time::SystemTime;
+use crate::fs::{DavMetaData, FsResult};
 
-use crate::fs::{DavFile, DavMetaData, FsFuture, FsResult};
+#[cfg(feature = "handlebars")]
+use std::collections::HashMap;
+#[cfg(feature = "handlebars")]
+use std::convert::TryInto;
+#[cfg(feature = "handlebars")]
+use std::io::{Error, ErrorKind, SeekFrom};
+#[cfg(feature = "handlebars")]
 use futures::future::{self, FutureExt};
-use handlebars::Handlebars;
+#[cfg(feature = "handlebars")]
 use headers::{authorization::Basic, Authorization};
+#[cfg(feature = "handlebars")]
+use handlebars::Handlebars;
+#[cfg(feature = "handlebars")]
+use crate::fs::{DavFile, FsFuture};
 
+#[cfg(feature = "handlebars")]
 async fn read_handlebars(
     req: &Request<()>,
     mut file: Box<dyn DavFile>,
@@ -543,6 +554,7 @@ impl DavMetaData for HbsMeta {
     }
 }
 
+#[cfg(feature = "handlebars")]
 #[derive(Clone, Debug)]
 struct HbsFile {
     meta: HbsMeta,
@@ -550,6 +562,7 @@ struct HbsFile {
     data: Vec<u8>,
 }
 
+#[cfg(feature = "handlebars")]
 impl HbsFile {
     fn new(data: String) -> Box<dyn DavFile> {
         Box::new(HbsFile {
@@ -563,6 +576,7 @@ impl HbsFile {
     }
 }
 
+#[cfg(feature = "handlebars")]
 impl DavFile for HbsFile {
     fn metadata<'a>(&'a mut self) -> FsFuture<Box<dyn DavMetaData>> {
         async move { Ok(Box::new(self.meta.clone()) as Box<dyn DavMetaData>) }.boxed()
