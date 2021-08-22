@@ -21,7 +21,7 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bytes::{Buf, Bytes, BytesMut};
-use futures::{future, future::BoxFuture, FutureExt, Stream};
+use futures_util::{future, future::BoxFuture, FutureExt, Stream};
 use pin_utils::pin_mut;
 use tokio::task;
 

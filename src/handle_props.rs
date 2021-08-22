@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::io::{self, Cursor};
 
 use bytes::Bytes;
-use futures::{future::BoxFuture, FutureExt, StreamExt};
+use futures_util::{future::BoxFuture, FutureExt, StreamExt};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 

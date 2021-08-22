@@ -20,7 +20,7 @@ use std::task::{Context, Poll};
 use actix_web::error::PayloadError;
 use actix_web::{dev, Error, FromRequest, HttpRequest, HttpResponse};
 use bytes::Bytes;
-use futures::{future, Stream};
+use futures_util::{future, Stream};
 use pin_project::pin_project;
 
 /// http::Request compatibility.

@@ -8,7 +8,7 @@ use std::io::SeekFrom;
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures::{future, Future, Stream, TryFutureExt};
+use futures_util::{future, Future, Stream, TryFutureExt};
 use http::StatusCode;
 
 use crate::davpath::DavPath;

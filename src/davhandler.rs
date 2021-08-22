@@ -7,7 +7,7 @@ use std::io;
 use std::sync::Arc;
 
 use bytes::{self, buf::Buf};
-use futures::stream::Stream;
+use futures_util::stream::Stream;
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 use http_body::Body as HttpBody;

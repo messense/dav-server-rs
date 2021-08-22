@@ -14,7 +14,7 @@ use std::str::FromStr;
 extern crate clap;
 
 use env_logger;
-use futures::future::TryFutureExt;
+use futures_util::future::TryFutureExt;
 use hyper;
 
 use headers::{authorization::Basic, Authorization, HeaderMapExt};

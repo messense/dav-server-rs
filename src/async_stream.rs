@@ -3,8 +3,8 @@
 //! Example:
 //!
 //! ```rust ignore
-//! use futures::StreamExt;
-//! use futures::executor::block_on;
+//! use futures_util::StreamExt;
+//! use futures_executor::block_on;
 //! # use webdav_handler::async_stream;
 //! use async_stream::AsyncStream;
 //!
@@ -44,7 +44,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll};
 
-use futures::Stream;
+use futures_util::Stream;
 
 /// Future returned by the Sender.send() method.
 ///

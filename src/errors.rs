@@ -111,8 +111,8 @@ impl From<std::string::FromUtf8Error> for DavError {
     }
 }
 
-impl From<futures::channel::mpsc::SendError> for DavError {
-    fn from(_e: futures::channel::mpsc::SendError) -> Self {
+impl From<futures_channel::mpsc::SendError> for DavError {
+    fn from(_e: futures_channel::mpsc::SendError) -> Self {
         DavError::ChanError
     }
 }

@@ -1,6 +1,6 @@
 use std::io;
 
-use futures::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt};
 
 use http::{Response, StatusCode};
 use xml;
@@ -28,7 +28,7 @@ impl MultiError {
         &'a mut self,
         path: &'a DavPath,
         status: impl Into<DavError> + 'static,
-    ) -> Result<(), futures::channel::mpsc::SendError>
+    ) -> Result<(), futures_channel::mpsc::SendError>
     {
         let status = status.into().statuscode();
         self.0.send((path.clone(), status)).await;
@@ -116,7 +116,7 @@ where S: Stream<Item = Result<(DavPath, StatusCode), DavError>> + Send + 'static
             tx.send(data).await;
 
             // now write the items.
-            let mut status_stream = futures::stream::iter(items).chain(status_stream);
+            let mut status_stream = futures_util::stream::iter(items).chain(status_stream);
             while let Some(res) = status_stream.next().await {
                 let (path, status) = res?;
                 let status = if status == StatusCode::NO_CONTENT {

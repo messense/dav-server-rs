@@ -1,7 +1,7 @@
 use std::cmp;
 use std::io::Write;
 
-use futures::StreamExt;
+use futures_util::StreamExt;
 use headers::HeaderMapExt;
 use htmlescape;
 use http::{status::StatusCode, Request, Response};
@@ -479,7 +479,7 @@ use std::convert::TryInto;
 #[cfg(feature = "handlebars")]
 use std::io::{Error, ErrorKind, SeekFrom};
 #[cfg(feature = "handlebars")]
-use futures::future::{self, FutureExt};
+use futures_util::future::{self, FutureExt};
 #[cfg(feature = "handlebars")]
 use headers::{authorization::Basic, Authorization};
 #[cfg(feature = "handlebars")]
