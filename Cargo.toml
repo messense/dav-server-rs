@@ -31,10 +31,12 @@ name = "webdav_handler"
 path = "src/lib.rs"
 
 [features]
-default = ["handlebars"]
+default = ["handlebars", "localfs", "memfs"]
 actix-compat = [ "actix-web" ]
 warp-compat = [ "warp", "hyper" ]
 all = [ "actix-compat", "warp-compat" ]
+localfs = []
+memfs = []
 
 [[example]]
 name = "actix"

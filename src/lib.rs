@@ -143,7 +143,9 @@ mod handle_mkcol;
 mod handle_options;
 mod handle_props;
 mod handle_put;
+#[cfg(feature = "localfs")]
 mod localfs_macos;
+#[cfg(feature = "localfs")]
 mod localfs_windows;
 mod multierror;
 mod tree;
@@ -155,8 +157,10 @@ pub mod body;
 pub mod davpath;
 pub mod fakels;
 pub mod fs;
+#[cfg(feature = "localfs")]
 pub mod localfs;
 pub mod ls;
+#[cfg(feature = "memfs")]
 pub mod memfs;
 pub mod memls;
 
