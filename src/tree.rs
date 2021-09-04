@@ -167,6 +167,7 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
     /// Move a node to a new position and new name in the tree.
     /// If "overwrite" is true, will replace an existing
     /// node, but only if it doesn't have any children.
+    #[cfg(feature = "memfs")]
     pub fn move_node(&mut self, id: u64, new_parent: u64, new_name: K, overwrite: bool) -> FsResult<()> {
         let dest = {
             let pnode = self.nodes.get(&new_parent).ok_or(FsError::NotFound)?;
