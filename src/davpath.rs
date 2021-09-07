@@ -286,7 +286,7 @@ impl DavPath {
     }
 
     /// Return the parent directory.
-    pub(crate) fn parent(&self) -> DavPath {
+    pub fn parent(&self) -> DavPath {
         let mut segs = self
             .fullpath
             .split(|&c| c == b'/')
@@ -380,7 +380,7 @@ impl DavPathRef {
 
     // get parent.
     #[allow(dead_code)]
-    pub(crate) fn parent(&self) -> &DavPathRef {
+    pub fn parent(&self) -> &DavPathRef {
         let path = self.get_path();
 
         let mut end = path.len();
