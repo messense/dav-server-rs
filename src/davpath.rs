@@ -397,7 +397,7 @@ impl DavPathRef {
     }
 
     /// The filename is the last segment of the path. Can be empty.
-    pub(crate) fn file_name(&self) -> &[u8] {
+    pub fn file_name(&self) -> &[u8] {
         let segs = self
             .get_path()
             .split(|&c| c == b'/')
