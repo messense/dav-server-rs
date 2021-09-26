@@ -77,6 +77,7 @@ impl crate::DavInner {
         if let Some(n) = req.headers().typed_get::<headers::ContentLength>() {
             count = n.0;
             have_count = true;
+            oo.size = Some(count);
         }
         let path = self.path(&req);
         let meta = self.fs.metadata(&path).await;

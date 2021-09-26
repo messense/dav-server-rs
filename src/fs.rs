@@ -387,6 +387,8 @@ pub struct OpenOptions {
     pub create:     bool,
     /// must create new file, fail if it already exists.
     pub create_new: bool,
+    /// write file total size
+    pub size: Option<u64>,
 }
 
 impl OpenOptions {
@@ -399,6 +401,7 @@ impl OpenOptions {
             truncate:   false,
             create:     false,
             create_new: false,
+            size:       None,
         }
     }
 
@@ -410,6 +413,7 @@ impl OpenOptions {
             truncate:   false,
             create:     false,
             create_new: false,
+            size:       None,
         }
     }
 
@@ -421,6 +425,7 @@ impl OpenOptions {
             truncate:   false,
             create:     false,
             create_new: false,
+            size:       None,
         }
     }
 }
