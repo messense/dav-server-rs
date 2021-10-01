@@ -397,7 +397,7 @@ impl DavPathRef {
     }
 
     /// The filename is the last segment of the path. Can be empty.
-    pub fn file_name(&self) -> &[u8] {
+    pub fn file_name_bytes(&self) -> &[u8] {
         let segs = self
             .get_path()
             .split(|&c| c == b'/')
@@ -410,8 +410,18 @@ impl DavPathRef {
         }
     }
 
+    /// The filename is the last segment of the path. Can be empty.
+    pub fn file_name(&self) -> Option<&str> {
+        let name = self.file_name_bytes();
+        if name.is_empty() {
+            None
+        } else {
+            std::str::from_utf8(name).ok()
+        }
+    }
+
     pub(crate) fn get_mime_type_str(&self) -> &'static str {
-        let name = self.file_name();
+        let name = self.file_name_bytes();
         let d = name.rsplitn(2, |&c| c == b'.').collect::<Vec<&[u8]>>();
         if d.len() > 1 {
             if let Ok(ext) = std::str::from_utf8(d[0]) {

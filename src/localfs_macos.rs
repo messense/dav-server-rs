@@ -254,7 +254,7 @@ impl LocalFs {
             b"/.ql_disablethumbnails" => return true,
             _ => {},
         }
-        path.file_name() == b".localized"
+        path.file_name_bytes() == b".localized"
     }
 
     // File might not exists because of negative cache entry.
