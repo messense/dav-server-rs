@@ -122,10 +122,10 @@ async fn main() {
 [`FakeLs`]: https://docs.rs/dav-server/latest/dav_server/fakels/index.html
 [actix-compat]: https://docs.rs/dav-server/latest/dav_server/actix/index.html
 [warp-compat]: https://docs.rs/dav-server/latest/dav_server/warp/index.html
-[README_litmus]: https://github.com/messense/dav-server-rs/blob/master/README.litmus-test.md
-[examples]: https://github.com/messense/dav-server-rs/tree/master/examples/
-[PUT]: https://github.com/messense/dav-server-rs/tree/master/doc/Apache-PUT-with-Content-Range.md
-[PATCH]: https://github.com/messense/dav-server-rs/tree/master/doc/SABREDAV-partialupdate.md
+[README_litmus]: https://github.com/messense/dav-server-rs/blob/main/README.litmus-test.md
+[examples]: https://github.com/messense/dav-server-rs/tree/main/examples/
+[PUT]: https://github.com/messense/dav-server-rs/tree/main/doc/Apache-PUT-with-Content-Range.md
+[PATCH]: https://github.com/messense/dav-server-rs/tree/main/doc/SABREDAV-partialupdate.md
 [hyper]: https://hyper.rs/
 [warp]: https://crates.io/crates/warp
 [actix-web]: https://actix.rs/

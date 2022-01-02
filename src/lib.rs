@@ -114,10 +114,10 @@
 //! [`FakeLs`]: fakels/index.html
 //! [actix-compat]: actix/index.html
 //! [warp-compat]: warp/index.html
-//! [README_litmus]: https://github.com/messense/dav-server-rs/blob/master/README.litmus-test.md
-//! [examples]: https://github.com/messense/dav-server-rs/tree/master/examples/
-//! [PUT]: https://github.com/messense/dav-server-rs/tree/master/doc/Apache-PUT-with-Content-Range.md
-//! [PATCH]: https://github.com/messense/dav-server-rs/tree/master/doc/SABREDAV-partialupdate.md
+//! [README_litmus]: https://github.com/messense/dav-server-rs/blob/main/README.litmus-test.md
+//! [examples]: https://github.com/messense/dav-server-rs/tree/main/examples/
+//! [PUT]: https://github.com/messense/dav-server-rs/tree/main/doc/Apache-PUT-with-Content-Range.md
+//! [PATCH]: https://github.com/messense/dav-server-rs/tree/main/doc/SABREDAV-partialupdate.md
 //! [hyper]: https://hyper.rs/
 //! [warp]: https://crates.io/crates/warp
 //! [actix-web]: https://actix.rs/
