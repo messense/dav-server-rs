@@ -19,7 +19,11 @@ use crate::xmltree_ext::{self, ElementExt};
 use crate::DavResult;
 
 impl crate::DavInner {
-    pub(crate) async fn handle_lock(&self, req: &Request<()>, xmldata: &[u8]) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_lock(
+        &self,
+        req: &Request<()>,
+        xmldata: &[u8],
+    ) -> DavResult<Response<Body>> {
         // must have a locksystem or bail
         let locksystem = match self.ls {
             Some(ref ls) => ls,
@@ -113,19 +117,19 @@ impl crate::DavInner {
                         Some("shared") => shared = Some(true),
                         _ => return Err(DavError::XmlParseError),
                     }
-                },
+                }
                 "locktype" => {
                     let name = elem.child_elems_iter().find_map(|e| Some(e.name.as_ref()));
                     match name {
                         Some("write") => locktype = true,
                         _ => return Err(DavError::XmlParseError),
                     }
-                },
+                }
                 "owner" => {
                     let mut o = elem.clone();
                     o.prefix = Some("D".to_owned());
                     owner = Some(o);
-                },
+                }
                 _ => return Err(DavError::XmlParseError),
             }
         }
@@ -147,7 +151,7 @@ impl crate::DavInner {
         // try to create file if it doesn't exist.
         if let None = meta {
             match self.fs.open(&path, oo).await {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(FsError::NotFound) | Err(FsError::Exists) => {
                     let s = if !oo.create || oo.create_new {
                         SC::PRECONDITION_FAILED
@@ -156,11 +160,11 @@ impl crate::DavInner {
                     };
                     let _ = locksystem.unlock(&path, &lock.token);
                     return Err(s.into());
-                },
+                }
                 Err(e) => {
                     let _ = locksystem.unlock(&path, &lock.token);
                     return Err(e.into());
-                },
+                }
             };
         }
 
@@ -209,7 +213,7 @@ impl crate::DavInner {
             Ok(_) => {
                 *res.status_mut() = SC::NO_CONTENT;
                 Ok(res)
-            },
+            }
             Err(_) => Err(SC::CONFLICT.into()),
         }
     }
@@ -265,17 +269,15 @@ fn get_timeout(req: &Request<()>, refresh: bool, shared: bool) -> Option<Duratio
         Duration::new(600, 0)
     };
     match req.headers().typed_get::<davheaders::Timeout>() {
-        Some(davheaders::Timeout(ref vec)) if vec.len() > 0 => {
-            match vec[0] {
-                DavTimeout::Infinite => {
-                    if refresh {
-                        None
-                    } else {
-                        Some(max_timeout)
-                    }
-                },
-                DavTimeout::Seconds(n) => Some(cmp::min(max_timeout, Duration::new(n as u64, 0))),
+        Some(davheaders::Timeout(ref vec)) if vec.len() > 0 => match vec[0] {
+            DavTimeout::Infinite => {
+                if refresh {
+                    None
+                } else {
+                    Some(max_timeout)
+                }
             }
+            DavTimeout::Seconds(n) => Some(cmp::min(max_timeout, Duration::new(n as u64, 0))),
         },
         _ => None,
     }

@@ -27,7 +27,9 @@ lazy_static! {
 
 // helper.
 fn one<'i, I>(values: &mut I) -> Result<&'i HeaderValue, headers::Error>
-where I: Iterator<Item = &'i HeaderValue> {
+where
+    I: Iterator<Item = &'i HeaderValue>,
+{
     let v = values.next().ok_or_else(invalid)?;
     if values.next().is_some() {
         Err(invalid())
@@ -61,7 +63,9 @@ macro_rules! header {
             }
 
             fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-            where I: Iterator<Item = &'i HeaderValue> {
+            where
+                I: Iterator<Item = &'i HeaderValue>,
+            {
                 one(values)?
                     .to_str()
                     .map(|x| $tname(x.to_owned()))
@@ -69,7 +73,9 @@ macro_rules! header {
             }
 
             fn encode<E>(&self, values: &mut E)
-            where E: Extend<HeaderValue> {
+            where
+                E: Extend<HeaderValue>,
+            {
                 let value = HeaderValue::from_str(&self.0).unwrap();
                 values.extend(std::iter::once(value))
             }
@@ -96,7 +102,9 @@ impl Header for Depth {
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where I: Iterator<Item = &'i HeaderValue> {
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         let value = one(values)?;
         match value.as_bytes() {
             b"0" => Ok(Depth::Zero),
@@ -107,7 +115,9 @@ impl Header for Depth {
     }
 
     fn encode<E>(&self, values: &mut E)
-    where E: Extend<HeaderValue> {
+    where
+        E: Extend<HeaderValue>,
+    {
         let value = match *self {
             Depth::Zero => "0",
             Depth::One => "1",
@@ -144,7 +154,9 @@ impl Header for ContentLanguage {
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where I: Iterator<Item = &'i HeaderValue> {
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         let h = match headers::Vary::decode(values) {
             Err(e) => return Err(e),
             Ok(h) => h,
@@ -161,7 +173,9 @@ impl Header for ContentLanguage {
     }
 
     fn encode<E>(&self, values: &mut E)
-    where E: Extend<HeaderValue> {
+    where
+        E: Extend<HeaderValue>,
+    {
         self.0.encode(values)
     }
 }
@@ -181,7 +195,9 @@ impl Header for Timeout {
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where I: Iterator<Item = &'i HeaderValue> {
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         let value = one(values)?;
         let mut v = Vec::new();
         let words = value.to_str().map_err(map_invalid)?.split(|c| c == ',');
@@ -194,7 +210,7 @@ impl Header for Timeout {
                         Err(_) => return Err(invalid()),
                         Ok(n) => DavTimeout::Seconds(n),
                     }
-                },
+                }
                 _ => return Err(invalid()),
             };
             v.push(w);
@@ -203,7 +219,9 @@ impl Header for Timeout {
     }
 
     fn encode<E>(&self, values: &mut E)
-    where E: Extend<HeaderValue> {
+    where
+        E: Extend<HeaderValue>,
+    {
         let mut first = false;
         let mut value = String::new();
         for s in &self.0 {
@@ -229,7 +247,9 @@ impl Header for Destination {
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where I: Iterator<Item = &'i HeaderValue> {
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         let s = one(values)?.to_str().map_err(map_invalid)?;
         if s.starts_with("/") {
             return Ok(Destination(s.to_string()));
@@ -243,7 +263,9 @@ impl Header for Destination {
     }
 
     fn encode<E>(&self, values: &mut E)
-    where E: Extend<HeaderValue> {
+    where
+        E: Extend<HeaderValue>,
+    {
         values.extend(std::iter::once(HeaderValue::from_str(&self.0).unwrap()));
     }
 }
@@ -257,7 +279,9 @@ impl Header for Overwrite {
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where I: Iterator<Item = &'i HeaderValue> {
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         let line = one(values)?;
         match line.as_bytes() {
             b"F" => Ok(Overwrite(false)),
@@ -267,7 +291,9 @@ impl Header for Overwrite {
     }
 
     fn encode<E>(&self, values: &mut E)
-    where E: Extend<HeaderValue> {
+    where
+        E: Extend<HeaderValue>,
+    {
         let value = match self.0 {
             true => "T",
             false => "F",
@@ -278,7 +304,7 @@ impl Header for Overwrite {
 
 #[derive(Debug, Clone)]
 pub struct ETag {
-    tag:  String,
+    tag: String,
     weak: bool,
 }
 
@@ -291,7 +317,7 @@ impl ETag {
         } else {
             let w = if weak { "W/" } else { "" };
             Ok(ETag {
-                tag:  format!("{}\"{}\"", w, t),
+                tag: format!("{}\"{}\"", w, t),
                 weak: weak,
             })
         }
@@ -300,7 +326,7 @@ impl ETag {
     pub fn from_meta(meta: impl AsRef<dyn DavMetaData>) -> Option<ETag> {
         let tag = meta.as_ref().etag()?;
         Some(ETag {
-            tag:  format!("\"{}\"", tag),
+            tag: format!("\"{}\"", tag),
             weak: false,
         })
     }
@@ -322,7 +348,7 @@ impl FromStr for ETag {
         };
         if s.starts_with("\"") && s.ends_with("\"") && !s[1..s.len() - 1].contains("\"") {
             Ok(ETag {
-                tag:  t.to_owned(),
+                tag: t.to_owned(),
                 weak: weak,
             })
         } else {
@@ -358,13 +384,17 @@ impl Header for ETag {
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where I: Iterator<Item = &'i HeaderValue> {
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         let value = one(values)?;
         ETag::try_from(value)
     }
 
     fn encode<E>(&self, values: &mut E)
-    where E: Extend<HeaderValue> {
+    where
+        E: Extend<HeaderValue>,
+    {
         values.extend(std::iter::once(HeaderValue::from_str(&self.tag).unwrap()));
     }
 }
@@ -381,7 +411,9 @@ impl Header for IfRange {
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where I: Iterator<Item = &'i HeaderValue> {
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         let value = one(values)?;
 
         let mut iter = std::iter::once(value);
@@ -398,7 +430,9 @@ impl Header for IfRange {
     }
 
     fn encode<E>(&self, values: &mut E)
-    where E: Extend<HeaderValue> {
+    where
+        E: Extend<HeaderValue>,
+    {
         match self {
             &IfRange::Date(ref d) => d.encode(values),
             &IfRange::ETag(ref t) => t.encode(values),
@@ -422,7 +456,9 @@ pub struct IfNoneMatch(pub ETagList);
 // actually use a real parser. E.g. we don't handle comma's in
 // etags correctly - but we never generated those anyway.
 fn decode_etaglist<'i, I>(values: &mut I) -> Result<ETagList, headers::Error>
-where I: Iterator<Item = &'i HeaderValue> {
+where
+    I: Iterator<Item = &'i HeaderValue>,
+{
     let mut v = Vec::new();
     let mut count = 0usize;
     for value in values {
@@ -446,10 +482,16 @@ where I: Iterator<Item = &'i HeaderValue> {
 }
 
 fn encode_etaglist<E>(m: &ETagList, values: &mut E)
-where E: Extend<HeaderValue> {
+where
+    E: Extend<HeaderValue>,
+{
     let value = match m {
         &ETagList::Star => "*".to_string(),
-        &ETagList::Tags(ref t) => t.iter().map(|t| t.tag.as_str()).collect::<Vec<&str>>().join(", "),
+        &ETagList::Tags(ref t) => t
+            .iter()
+            .map(|t| t.tag.as_str())
+            .collect::<Vec<&str>>()
+            .join(", "),
     };
     values.extend(std::iter::once(HeaderValue::from_str(&value).unwrap()));
 }
@@ -460,12 +502,16 @@ impl Header for IfMatch {
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where I: Iterator<Item = &'i HeaderValue> {
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         Ok(IfMatch(decode_etaglist(values)?))
     }
 
     fn encode<E>(&self, values: &mut E)
-    where E: Extend<HeaderValue> {
+    where
+        E: Extend<HeaderValue>,
+    {
         encode_etaglist(&self.0, values)
     }
 }
@@ -476,12 +522,16 @@ impl Header for IfNoneMatch {
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where I: Iterator<Item = &'i HeaderValue> {
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         Ok(IfNoneMatch(decode_etaglist(values)?))
     }
 
     fn encode<E>(&self, values: &mut E)
-    where E: Extend<HeaderValue> {
+    where
+        E: Extend<HeaderValue>,
+    {
         encode_etaglist(&self.0, values)
     }
 }
@@ -500,7 +550,9 @@ impl Header for XUpdateRange {
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where I: Iterator<Item = &'i HeaderValue> {
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         let mut s = one(values)?.to_str().map_err(map_invalid)?;
         if s == "append" {
             return Ok(XUpdateRange::Append);
@@ -526,13 +578,17 @@ impl Header for XUpdateRange {
             ));
         }
         if nums[1] != "" {
-            return Ok(XUpdateRange::Last((nums[1]).parse::<u64>().map_err(map_invalid)?));
+            return Ok(XUpdateRange::Last(
+                (nums[1]).parse::<u64>().map_err(map_invalid)?,
+            ));
         }
         return Err(invalid());
     }
 
     fn encode<E>(&self, values: &mut E)
-    where E: Extend<HeaderValue> {
+    where
+        E: Extend<HeaderValue>,
+    {
         let value = match self {
             &XUpdateRange::Append => "append".to_string(),
             &XUpdateRange::FromTo(b, e) => format!("{}-{}", b, e),
@@ -551,7 +607,7 @@ pub struct If(pub Vec<IfList>);
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfList {
     pub resource_tag: Option<url::Url>,
-    pub conditions:   Vec<IfCondition>,
+    pub conditions: Vec<IfCondition>,
 }
 
 // helpers.
@@ -559,7 +615,7 @@ impl IfList {
     fn new() -> IfList {
         IfList {
             resource_tag: None,
-            conditions:   Vec::new(),
+            conditions: Vec::new(),
         }
     }
     fn add(&mut self, not: bool, item: IfItem) {
@@ -570,7 +626,7 @@ impl IfList {
 // Single Condition is [NOT] State-Token | ETag
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfCondition {
-    pub not:  bool,
+    pub not: bool,
     pub item: IfItem,
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -658,12 +714,12 @@ fn get_token<'a>(buf: &'a [u8]) -> Result<(IfToken, &'a [u8]), headers::Error> {
             let (tok, rest) = scan_until(buf, b'>')?;
             let s = std::string::String::from_utf8(tok.to_vec()).map_err(map_invalid)?;
             Ok((IfToken::Pointy(s), rest))
-        },
+        }
         b'[' => {
             let (tok, rest) = scan_until(buf, b']')?;
             let s = std::str::from_utf8(tok).map_err(map_invalid)?;
             Ok((IfToken::ETag(ETag::from_str(s)?), rest))
-        },
+        }
         _ => {
             let (tok, rest) = scan_word(buf)?;
             if tok == b"Not" {
@@ -672,7 +728,7 @@ fn get_token<'a>(buf: &'a [u8]) -> Result<(IfToken, &'a [u8]), headers::Error> {
                 let s = std::string::String::from_utf8(tok.to_vec()).map_err(map_invalid)?;
                 Ok((IfToken::Word(s), rest))
             }
-        },
+        }
     }
 }
 
@@ -682,7 +738,9 @@ impl Header for If {
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where I: Iterator<Item = &'i HeaderValue> {
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
         // one big state machine.
         let mut if_lists = If(Vec::new());
         let mut cur_list = IfList::new();
@@ -694,28 +752,24 @@ impl Header for If {
             let (tok, rest) = get_token(input)?;
             input = rest;
             state = match state {
-                IfState::Start => {
-                    match tok {
-                        IfToken::ListOpen => IfState::List,
-                        IfToken::Pointy(url) => {
-                            let u = url::Url::parse(&url).map_err(map_invalid)?;
-                            cur_list.resource_tag = Some(u);
-                            IfState::RTag
-                        },
-                        IfToken::End => {
-                            if if_lists.0.len() > 0 {
-                                break;
-                            }
-                            IfState::Bad
-                        },
-                        _ => IfState::Bad,
+                IfState::Start => match tok {
+                    IfToken::ListOpen => IfState::List,
+                    IfToken::Pointy(url) => {
+                        let u = url::Url::parse(&url).map_err(map_invalid)?;
+                        cur_list.resource_tag = Some(u);
+                        IfState::RTag
                     }
+                    IfToken::End => {
+                        if if_lists.0.len() > 0 {
+                            break;
+                        }
+                        IfState::Bad
+                    }
+                    _ => IfState::Bad,
                 },
-                IfState::RTag => {
-                    match tok {
-                        IfToken::ListOpen => IfState::List,
-                        _ => IfState::Bad,
-                    }
+                IfState::RTag => match tok {
+                    IfToken::ListOpen => IfState::List,
+                    _ => IfState::Bad,
                 },
                 IfState::List | IfState::Not => {
                     let not = state == IfState::Not;
@@ -726,7 +780,7 @@ impl Header for If {
                             } else {
                                 IfState::Not
                             }
-                        },
+                        }
                         IfToken::Pointy(stok) | IfToken::Word(stok) => {
                             // as we don't have an URI parser, just
                             // check if there's at least one ':' in there.
@@ -736,11 +790,11 @@ impl Header for If {
                                 cur_list.add(not, IfItem::StateToken(stok));
                                 IfState::List
                             }
-                        },
+                        }
                         IfToken::ETag(etag) => {
                             cur_list.add(not, IfItem::ETag(etag));
                             IfState::List
-                        },
+                        }
                         IfToken::ListClose => {
                             if cur_list.conditions.is_empty() {
                                 IfState::Bad
@@ -749,10 +803,10 @@ impl Header for If {
                                 cur_list = IfList::new();
                                 IfState::Start
                             }
-                        },
+                        }
                         _ => IfState::Bad,
                     }
-                },
+                }
                 IfState::Bad => return Err(invalid()),
             };
         }
@@ -760,7 +814,9 @@ impl Header for If {
     }
 
     fn encode<E>(&self, values: &mut E)
-    where E: Extend<HeaderValue> {
+    where
+        E: Extend<HeaderValue>,
+    {
         let value = "[If header]";
         values.extend(std::iter::once(HeaderValue::from_static(value)));
     }

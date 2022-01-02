@@ -28,8 +28,7 @@ impl DavFileSystem for VoidFs {
         &'a self,
         _path: &'a DavPath,
         _meta: ReadDirMeta,
-    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>>
-    {
+    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>> {
         Box::pin(async { Err(FsError::NotImplemented) })
     }
 

@@ -28,8 +28,7 @@ impl MultiError {
         &'a mut self,
         path: &'a DavPath,
         status: impl Into<DavError> + 'static,
-    ) -> Result<(), futures_channel::mpsc::SendError>
-    {
+    ) -> Result<(), futures_channel::mpsc::SendError> {
         let status = status.into().statuscode();
         self.0.send((path.clone(), status)).await;
         Ok(())
@@ -39,7 +38,9 @@ impl MultiError {
 type XmlWriter<'a> = EventWriter<MemBuffer>;
 
 fn write_elem<'b, S>(xw: &mut XmlWriter, name: S, text: &str) -> Result<(), DavError>
-where S: Into<xml::name::Name<'b>> {
+where
+    S: Into<xml::name::Name<'b>>,
+{
     let n = name.into();
     xw.write(XmlWEvent::start_element(n))?;
     if text.len() > 0 {
@@ -58,15 +59,20 @@ fn write_response(mut w: &mut XmlWriter, path: &DavPath, sc: StatusCode) -> Resu
     Ok(())
 }
 
-pub(crate) async fn multi_error<S>(req_path: DavPath, status_stream: S) -> Result<Response<Body>, DavError>
-where S: Stream<Item = Result<(DavPath, StatusCode), DavError>> + Send + 'static {
+pub(crate) async fn multi_error<S>(
+    req_path: DavPath,
+    status_stream: S,
+) -> Result<Response<Body>, DavError>
+where
+    S: Stream<Item = Result<(DavPath, StatusCode), DavError>> + Send + 'static,
+{
     // read the first path/status item
     let mut status_stream = Box::pin(status_stream);
     let (path, status) = match status_stream.next().await {
         None => {
             debug!("multi_error: empty status_stream");
             return Err(DavError::ChanError);
-        },
+        }
         Some(Err(e)) => return Err(e),
         Some(Ok(item)) => item,
     };
@@ -79,15 +85,18 @@ where S: Stream<Item = Result<(DavPath, StatusCode), DavError>> + Send + 'static
         match status_stream.next().await {
             None => {
                 // No, this was the first and only item.
-                let resp = Response::builder().status(status).body(Body::empty()).unwrap();
+                let resp = Response::builder()
+                    .status(status)
+                    .body(Body::empty())
+                    .unwrap();
                 return Ok(resp);
-            },
+            }
             Some(Err(e)) => return Err(e),
             Some(Ok(item)) => {
                 // Yes, more than one response.
                 items.push(Ok((path, status)));
                 items.push(Ok(item));
-            },
+            }
         }
     } else {
         items.push(Ok((path, status)));
@@ -105,8 +114,8 @@ where S: Stream<Item = Result<(DavPath, StatusCode), DavError>> + Send + 'static
                 },
             );
             xw.write(XmlWEvent::StartDocument {
-                version:    XmlVersion::Version10,
-                encoding:   Some("utf-8"),
+                version: XmlVersion::Version10,
+                encoding: Some("utf-8"),
                 standalone: None,
             })
             .map_err(DavError::from)?;

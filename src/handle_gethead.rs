@@ -46,8 +46,10 @@ impl crate::DavInner {
             if !path.is_collection() {
                 let mut res = Response::new(Body::empty());
                 path.add_slash();
-                res.headers_mut()
-                    .insert("Location", path.with_prefix().as_url_string().parse().unwrap());
+                res.headers_mut().insert(
+                    "Location",
+                    path.with_prefix().as_url_string().parse().unwrap(),
+                );
                 res.headers_mut().typed_insert(headers::ContentLength(0));
                 *res.status_mut() = StatusCode::FOUND;
                 return Ok(res);
@@ -105,7 +107,8 @@ impl crate::DavInner {
         // Apache always adds an Accept-Ranges header, even with partial
         // responses where it should be pretty obvious. So something somewhere
         // probably depends on that.
-        res.headers_mut().typed_insert(headers::AcceptRanges::bytes());
+        res.headers_mut()
+            .typed_insert(headers::AcceptRanges::bytes());
 
         // handle the if-headers.
         if let Some(s) = conditional::if_match(&req, Some(&meta), &self.fs, &self.ls, &path).await {
@@ -128,7 +131,8 @@ impl crate::DavInner {
                     };
                     if !valid || start >= len {
                         let r = format!("bytes */{}", len);
-                        res.headers_mut().insert("Content-Range", r.parse().unwrap());
+                        res.headers_mut()
+                            .insert("Content-Range", r.parse().unwrap());
                         *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
                         ranges.clear();
                         no_body = true;
@@ -146,7 +150,8 @@ impl crate::DavInner {
             // seek to beginning of the first range.
             if let Err(_) = file.seek(std::io::SeekFrom::Start(ranges[0].start)).await {
                 let r = format!("bytes */{}", len);
-                res.headers_mut().insert("Content-Range", r.parse().unwrap());
+                res.headers_mut()
+                    .insert("Content-Range", r.parse().unwrap());
                 *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
                 ranges.clear();
                 no_body = true;
@@ -165,7 +170,8 @@ impl crate::DavInner {
                     ranges[0].start + ranges[0].count - 1,
                     len
                 );
-                res.headers_mut().insert("Content-Range", r.parse().unwrap());
+                res.headers_mut()
+                    .insert("Content-Range", r.parse().unwrap());
             } else {
                 // add content-type header.
                 let r = format!("multipart/byteranges; boundary={}", BOUNDARY);
@@ -173,7 +179,10 @@ impl crate::DavInner {
             }
         } else {
             // normal request, send entire file.
-            ranges.push(Range { start: 0, count: len });
+            ranges.push(Range {
+                start: 0,
+                count: len,
+            });
         }
 
         // set content-length and start if we're not doing multipart.
@@ -206,7 +215,11 @@ impl crate::DavInner {
 
                 let multipart = ranges.len() > 1;
                 for range in ranges {
-                    trace!("handle_get: start = {}, count = {}", range.start, range.count);
+                    trace!(
+                        "handle_get: start = {}, count = {}",
+                        range.start,
+                        range.count
+                    );
                     if curpos != range.start {
                         // this should never fail, but if it does, just skip this range
                         // and try the next one.
@@ -259,7 +272,11 @@ impl crate::DavInner {
         Ok(res)
     }
 
-    pub(crate) async fn handle_autoindex(&self, req: &Request<()>, head: bool) -> DavResult<Response<Body>> {
+    pub(crate) async fn handle_autoindex(
+        &self,
+        req: &Request<()>,
+        head: bool,
+    ) -> DavResult<Response<Body>> {
         let mut res = Response::new(Body::empty());
         let path = self.path(&req);
 
@@ -272,7 +289,11 @@ impl crate::DavInner {
         // Only allow index generation if explicitly set to true, _or_ if it was
         // unset, and PROPFIND is explicitly allowed.
         if !self.autoindex.unwrap_or(allow_propfind) {
-            debug!("method {} not allowed on request {}", req.method(), req.uri());
+            debug!(
+                "method {} not allowed on request {}",
+                req.method(),
+                req.uri()
+            );
             return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
         }
 
@@ -399,7 +420,7 @@ impl crate::DavInner {
                                 tm.hour(),
                                 tm.minute(),
                             )
-                        },
+                        }
                         Err(_) => "".to_string(),
                     };
                     let size = match dirent.meta.is_file() {
@@ -444,8 +465,14 @@ fn display_size(size: u64) -> String {
 fn display_path(path: &DavPath) -> String {
     let path_dsp = String::from_utf8_lossy(path.with_prefix().as_bytes());
     let path_url = path.with_prefix().as_url_string();
-    let dpath_segs = path_dsp.split("/").filter(|s| !s.is_empty()).collect::<Vec<_>>();
-    let upath_segs = path_url.split("/").filter(|s| !s.is_empty()).collect::<Vec<_>>();
+    let dpath_segs = path_dsp
+        .split("/")
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>();
+    let upath_segs = path_url
+        .split("/")
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>();
     let mut dpath = String::new();
     let mut upath = String::new();
 
@@ -469,30 +496,29 @@ fn display_path(path: &DavPath) -> String {
     dpath
 }
 
-use std::time::SystemTime;
 use crate::fs::{DavMetaData, FsResult};
+use std::time::SystemTime;
 
+#[cfg(feature = "handlebars")]
+use crate::fs::{DavFile, FsFuture};
+#[cfg(feature = "handlebars")]
+use futures_util::future::{self, FutureExt};
+#[cfg(feature = "handlebars")]
+use handlebars::Handlebars;
+#[cfg(feature = "handlebars")]
+use headers::{authorization::Basic, Authorization};
 #[cfg(feature = "handlebars")]
 use std::collections::HashMap;
 #[cfg(feature = "handlebars")]
 use std::convert::TryInto;
 #[cfg(feature = "handlebars")]
 use std::io::{Error, ErrorKind, SeekFrom};
-#[cfg(feature = "handlebars")]
-use futures_util::future::{self, FutureExt};
-#[cfg(feature = "handlebars")]
-use headers::{authorization::Basic, Authorization};
-#[cfg(feature = "handlebars")]
-use handlebars::Handlebars;
-#[cfg(feature = "handlebars")]
-use crate::fs::{DavFile, FsFuture};
 
 #[cfg(feature = "handlebars")]
 async fn read_handlebars(
     req: &Request<()>,
     mut file: Box<dyn DavFile>,
-) -> DavResult<(Box<dyn DavFile>, Box<dyn DavMetaData>)>
-{
+) -> DavResult<(Box<dyn DavFile>, Box<dyn DavMetaData>)> {
     let hbs = Handlebars::new();
     let mut vars = HashMap::new();
     let headers = req.headers();
@@ -516,8 +542,8 @@ async fn read_handlebars(
         Some(Authorization(basic)) => {
             vars.insert("AUTH_TYPE".to_string(), "Basic".to_string());
             vars.insert("REMOTE_USER".to_string(), basic.username().to_string());
-        },
-        _ => {},
+        }
+        _ => {}
     }
 
     // Render.
@@ -533,7 +559,7 @@ async fn read_handlebars(
 #[derive(Clone, Debug)]
 struct HbsMeta {
     mtime: SystemTime,
-    size:  u64,
+    size: u64,
 }
 
 impl DavMetaData for HbsMeta {
@@ -558,7 +584,7 @@ impl DavMetaData for HbsMeta {
 #[derive(Clone, Debug)]
 struct HbsFile {
     meta: HbsMeta,
-    pos:  usize,
+    pos: usize,
     data: Vec<u8>,
 }
 
@@ -568,10 +594,10 @@ impl HbsFile {
         Box::new(HbsFile {
             meta: HbsMeta {
                 mtime: SystemTime::now(),
-                size:  data.len() as u64,
+                size: data.len() as u64,
             },
             data: data.into_bytes(),
-            pos:  0,
+            pos: 0,
         })
     }
 }

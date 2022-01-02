@@ -71,7 +71,11 @@ pub fn dav_handler(handler: DavHandler) -> BoxedFilter<(impl Reply,)> {
 /// - `index_html`: if an `index.html` file is found, serve it.
 /// - `auto_index`: create a directory listing.
 /// - no flags set: 404.
-pub fn dav_dir(base: impl AsRef<Path>, index_html: bool, auto_index: bool) -> BoxedFilter<(impl Reply,)> {
+pub fn dav_dir(
+    base: impl AsRef<Path>,
+    index_html: bool,
+    auto_index: bool,
+) -> BoxedFilter<(impl Reply,)> {
     let mut builder = DavHandler::builder()
         .filesystem(LocalFs::new(base, false, false, false))
         .locksystem(FakeLs::new())

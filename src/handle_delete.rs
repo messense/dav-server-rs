@@ -41,8 +41,7 @@ impl crate::DavInner {
         depth: Depth,
         meta: Box<dyn DavMetaData + 'a>,
         path: &'a DavPath,
-    ) -> BoxFuture<'a, DavResult<()>>
-    {
+    ) -> BoxFuture<'a, DavResult<()>> {
         async move {
             if !meta.is_dir() {
                 trace!("delete_items (file) {} {:?}", path, depth);
@@ -74,7 +73,7 @@ impl crate::DavInner {
                     Err(e) => {
                         result = Err(add_status(&mut res, path, e).await);
                         continue;
-                    },
+                    }
                 };
 
                 let mut npath = path.clone();
@@ -88,7 +87,7 @@ impl crate::DavInner {
                         DavError::Status(_) => {
                             result = Err(e);
                             continue;
-                        },
+                        }
                         _ => return Err(e),
                     }
                 }

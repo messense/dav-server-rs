@@ -24,20 +24,15 @@ pub(crate) fn ifrange_match(
     hdr: &davheaders::IfRange,
     tag: Option<&davheaders::ETag>,
     date: Option<SystemTime>,
-) -> bool
-{
+) -> bool {
     match hdr {
-        &davheaders::IfRange::Date(ref d) => {
-            match date {
-                Some(date) => round_time(date) == round_time(*d),
-                None => false,
-            }
+        &davheaders::IfRange::Date(ref d) => match date {
+            Some(date) => round_time(date) == round_time(*d),
+            None => false,
         },
-        &davheaders::IfRange::ETag(ref t) => {
-            match tag {
-                Some(tag) => t == tag,
-                None => false,
-            }
+        &davheaders::IfRange::ETag(ref t) => match tag {
+            Some(tag) => t == tag,
+            None => false,
         },
     }
 }
@@ -46,21 +41,21 @@ pub(crate) fn etaglist_match(
     tags: &davheaders::ETagList,
     exists: bool,
     tag: Option<&davheaders::ETag>,
-) -> bool
-{
+) -> bool {
     match tags {
         &davheaders::ETagList::Star => exists,
-        &davheaders::ETagList::Tags(ref t) => {
-            match tag {
-                Some(tag) => t.iter().any(|x| x == tag),
-                None => false,
-            }
+        &davheaders::ETagList::Tags(ref t) => match tag {
+            Some(tag) => t.iter().any(|x| x == tag),
+            None => false,
         },
     }
 }
 
 // Handle the if-headers: RFC 7232, HTTP/1.1 Conditional Requests.
-pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<dyn DavMetaData>>) -> Option<StatusCode> {
+pub(crate) fn http_if_match(
+    req: &Request,
+    meta: Option<&Box<dyn DavMetaData>>,
+) -> Option<StatusCode> {
     let file_modified = meta.and_then(|m| m.modified().ok());
 
     if let Some(r) = req.headers().typed_get::<davheaders::IfMatch>() {
@@ -77,7 +72,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&Box<dyn DavMetaData>>) 
                     trace!("precondition fail: If-Unmodified-Since {:?}", r);
                     return Some(StatusCode::PRECONDITION_FAILED);
                 }
-            },
+            }
         }
     }
 
@@ -117,8 +112,7 @@ pub(crate) async fn dav_if_match<'a>(
     fs: &'a Box<dyn DavFileSystem + 'static>,
     ls: &'a Option<Box<dyn DavLockSystem + 'static>>,
     path: &'a DavPath,
-) -> (bool, Vec<String>)
-{
+) -> (bool, Vec<String>) {
     let mut tokens: Vec<String> = Vec::new();
     let mut any_list_ok = false;
 
@@ -129,11 +123,9 @@ pub(crate) async fn dav_if_match<'a>(
 
     for iflist in r.0.iter() {
         // save and return all statetokens that we encountered.
-        let toks = iflist.conditions.iter().filter_map(|c| {
-            match &c.item {
-                &davheaders::IfItem::StateToken(ref t) => Some(t.to_owned()),
-                _ => None,
-            }
+        let toks = iflist.conditions.iter().filter_map(|c| match &c.item {
+            &davheaders::IfItem::StateToken(ref t) => Some(t.to_owned()),
+            _ => None,
         });
         tokens.extend(toks);
 
@@ -151,10 +143,10 @@ pub(crate) async fn dav_if_match<'a>(
                         // anchor davpath in pa.
                         let p: &DavPath = pa.get_or_insert(p);
                         (p, true)
-                    },
+                    }
                     Err(_) => (path, false),
                 }
-            },
+            }
             None => (path, true),
         };
 
@@ -172,7 +164,7 @@ pub(crate) async fn dav_if_match<'a>(
                             &None => false,
                         }
                     }
-                },
+                }
                 davheaders::IfItem::ETag(ref tag) => {
                     if !valid {
                         // invalid location, so always false.
@@ -186,14 +178,14 @@ pub(crate) async fn dav_if_match<'a>(
                                 } else {
                                     false
                                 }
-                            },
+                            }
                             Err(_) => {
                                 // metadata error, fail.
                                 false
-                            },
+                            }
                         }
                     }
-                },
+                }
             };
             if cond_ok == cond.not {
                 list_ok = false;
@@ -218,10 +210,9 @@ pub(crate) async fn if_match<'a>(
     fs: &'a Box<dyn DavFileSystem + 'static>,
     ls: &'a Option<Box<dyn DavLockSystem + 'static>>,
     path: &'a DavPath,
-) -> Option<StatusCode>
-{
+) -> Option<StatusCode> {
     match dav_if_match(req, fs, ls, path).await {
-        (true, _) => {},
+        (true, _) => {}
         (false, _) => return Some(StatusCode::PRECONDITION_FAILED),
     }
     http_if_match(req, meta)
@@ -234,8 +225,7 @@ pub(crate) async fn if_match_get_tokens<'a>(
     fs: &'a Box<dyn DavFileSystem + 'static>,
     ls: &'a Option<Box<dyn DavLockSystem + 'static>>,
     path: &'a DavPath,
-) -> Result<Vec<String>, StatusCode>
-{
+) -> Result<Vec<String>, StatusCode> {
     if let Some(code) = http_if_match(req, meta) {
         return Err(code);
     }

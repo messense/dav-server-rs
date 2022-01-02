@@ -58,13 +58,13 @@ pub type FsResult<T> = std::result::Result<T, FsError>;
 #[derive(Debug, Clone)]
 pub struct DavProp {
     /// Name of the property.
-    pub name:      String,
+    pub name: String,
     /// XML prefix.
-    pub prefix:    Option<String>,
+    pub prefix: Option<String>,
     /// XML namespace.
     pub namespace: Option<String>,
     /// Value of the property as raw XML.
-    pub xml:       Option<Vec<u8>>,
+    pub xml: Option<Vec<u8>>,
 }
 
 /// Future returned by almost all of the DavFileSystem methods.
@@ -187,7 +187,10 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
     ///
     /// The default implementation returns `false`.
     #[allow(unused_variables)]
-    fn have_props<'a>(&'a self, path: &'a DavPath) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>> {
+    fn have_props<'a>(
+        &'a self,
+        path: &'a DavPath,
+    ) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>> {
         Box::pin(future::ready(false))
     }
 
@@ -199,8 +202,7 @@ pub trait DavFileSystem: Sync + Send + BoxCloneFs {
         &'a self,
         path: &'a DavPath,
         patch: Vec<(bool, DavProp)>,
-    ) -> FsFuture<Vec<(StatusCode, DavProp)>>
-    {
+    ) -> FsFuture<Vec<(StatusCode, DavProp)>> {
         notimplemented_fut!("patch_props")
     }
 
@@ -277,7 +279,10 @@ pub trait DavDirEntry: Send + Sync {
 
     /// Likewise. Default: `false`.
     fn is_symlink<'a>(&'a self) -> FsFuture<bool> {
-        Box::pin(self.metadata().and_then(|meta| future::ok(meta.is_symlink())))
+        Box::pin(
+            self.metadata()
+                .and_then(|meta| future::ok(meta.is_symlink())),
+        )
     }
 }
 
@@ -376,15 +381,15 @@ impl<MD: Clone + DavMetaData + 'static> BoxCloneMd for MD {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OpenOptions {
     /// open for reading
-    pub read:       bool,
+    pub read: bool,
     /// open for writing
-    pub write:      bool,
+    pub write: bool,
     /// open in write-append mode
-    pub append:     bool,
+    pub append: bool,
     /// truncate file first when writing
-    pub truncate:   bool,
+    pub truncate: bool,
     /// create file if it doesn't exist
-    pub create:     bool,
+    pub create: bool,
     /// must create new file, fail if it already exists.
     pub create_new: bool,
     /// write file total size
@@ -395,37 +400,37 @@ impl OpenOptions {
     #[allow(dead_code)]
     pub(crate) fn new() -> OpenOptions {
         OpenOptions {
-            read:       false,
-            write:      false,
-            append:     false,
-            truncate:   false,
-            create:     false,
+            read: false,
+            write: false,
+            append: false,
+            truncate: false,
+            create: false,
             create_new: false,
-            size:       None,
+            size: None,
         }
     }
 
     pub(crate) fn read() -> OpenOptions {
         OpenOptions {
-            read:       true,
-            write:      false,
-            append:     false,
-            truncate:   false,
-            create:     false,
+            read: true,
+            write: false,
+            append: false,
+            truncate: false,
+            create: false,
             create_new: false,
-            size:       None,
+            size: None,
         }
     }
 
     pub(crate) fn write() -> OpenOptions {
         OpenOptions {
-            read:       false,
-            write:      true,
-            append:     false,
-            truncate:   false,
-            create:     false,
+            read: false,
+            write: true,
+            append: false,
+            truncate: false,
+            create: false,
             create_new: false,
-            size:       None,
+            size: None,
         }
     }
 }

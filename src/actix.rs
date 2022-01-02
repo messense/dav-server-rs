@@ -17,9 +17,9 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use actix_web::body::BoxBody;
 use actix_web::error::PayloadError;
 use actix_web::{dev, Error, FromRequest, HttpRequest, HttpResponse};
-use actix_web::body::BoxBody;
 use bytes::Bytes;
 use futures_util::{future, Stream};
 use pin_project::pin_project;
@@ -29,7 +29,7 @@ use pin_project::pin_project;
 /// Wraps `http::Request<DavBody>` and implements `actix_web::FromRequest`.
 pub struct DavRequest {
     pub request: http::Request<DavBody>,
-    prefix:      Option<String>,
+    prefix: Option<String>,
 }
 
 impl DavRequest {
@@ -58,7 +58,9 @@ impl FromRequest for DavRequest {
             x => Some(x.to_string()),
         };
 
-        let body = DavBody { body: payload.take() };
+        let body = DavBody {
+            body: payload.take(),
+        };
         let stdreq = DavRequest {
             request: builder.body(body).unwrap(),
             prefix,
@@ -83,19 +85,16 @@ impl http_body::Body for DavBody {
     fn poll_data(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>>
-    {
+    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
         let this = self.project();
         match this.body.poll_next(cx) {
             Poll::Ready(Some(Ok(data))) => Poll::Ready(Some(Ok(data))),
-            Poll::Ready(Some(Err(err))) => {
-                Poll::Ready(Some(Err(match err {
-                    PayloadError::Incomplete(Some(err)) => err,
-                    PayloadError::Incomplete(None) => io::ErrorKind::BrokenPipe.into(),
-                    PayloadError::Io(err) => err,
-                    other => io::Error::new(io::ErrorKind::Other, format!("{:?}", other)),
-                })))
-            },
+            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(match err {
+                PayloadError::Incomplete(Some(err)) => err,
+                PayloadError::Incomplete(None) => io::ErrorKind::BrokenPipe.into(),
+                PayloadError::Io(err) => err,
+                other => io::Error::new(io::ErrorKind::Other, format!("{:?}", other)),
+            }))),
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
         }
@@ -104,8 +103,7 @@ impl http_body::Body for DavBody {
     fn poll_trailers(
         self: Pin<&mut Self>,
         _cx: &mut Context,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>>
-    {
+    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
         Poll::Ready(Ok(None))
     }
 }

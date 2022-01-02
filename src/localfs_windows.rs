@@ -72,7 +72,7 @@ pub(crate) fn resolve<'a>(base: impl Into<PathBuf>, path: &DavPath) -> PathBuf {
                     cache.insert(parent);
                 }
                 (parent.to_path_buf(), exists)
-            },
+            }
         }
     } else {
         (parent.to_path_buf(), true)
@@ -120,8 +120,8 @@ fn lookup(mut path: PathBuf, seg: &OsStr, no_init_check: bool) -> (PathBuf, bool
             Err(ref e) if e.kind() != ErrorKind::NotFound => {
                 // stop on errors other than "NotFound".
                 return (path2, true);
-            },
-            Err(_) => {},
+            }
+            Err(_) => {}
         }
     }
 
@@ -237,7 +237,7 @@ impl Cache {
                 let mut cache = self.cache.lock();
                 cache.pop(&lc_path);
                 None
-            },
+            }
             Ok(m) => Some((e.path, m)),
         }
     }

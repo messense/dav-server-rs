@@ -26,9 +26,9 @@ impl crate::DavInner {
         let method = dav_method(req.method()).unwrap_or(DavMethod::Options);
         let islock = |m| m == DavMethod::Lock || m == DavMethod::Unlock;
         let mm = |v: &mut Vec<String>, m: &str, y: DavMethod| {
-            if (y == DavMethod::Options || (y != method || islock(y) != islock(method))) &&
-                (!islock(y) || self.ls.is_some()) &&
-                self.allow.map(|x| x.contains(y)).unwrap_or(true)
+            if (y == DavMethod::Options || (y != method || islock(y) != islock(method)))
+                && (!islock(y) || self.ls.is_some())
+                && self.allow.map(|x| x.contains(y)).unwrap_or(true)
             {
                 v.push(m.to_string());
             }

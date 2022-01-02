@@ -38,11 +38,12 @@ impl crate::DavInner {
             Ok(()) => {
                 if path.is_collection() {
                     path.add_slash();
-                    res.headers_mut()
-                        .typed_insert(davheaders::ContentLocation(path.with_prefix().as_url_string()));
+                    res.headers_mut().typed_insert(davheaders::ContentLocation(
+                        path.with_prefix().as_url_string(),
+                    ));
                 }
                 *res.status_mut() = StatusCode::CREATED;
-            },
+            }
         }
 
         Ok(res)

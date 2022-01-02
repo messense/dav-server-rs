@@ -36,11 +36,11 @@ static DIR_ID: AtomicUsize = AtomicUsize::new(1);
 // Dot underscore cache entry.
 struct Entry {
     // Time the entry in the cache was created.
-    time:        SystemTime,
+    time: SystemTime,
     // Modification time of the parent directory.
     dir_modtime: SystemTime,
     // Unique ID of the parent entry.
-    dir_id:      usize,
+    dir_id: usize,
 }
 
 // Dot underscore cache.
@@ -100,7 +100,7 @@ impl DUCache {
                 None => {
                     trace!(target: "webdav_cache", "DUCache::negative({:?}): parent not in cache", path);
                     return false;
-                },
+                }
             }
         };
 
@@ -124,11 +124,11 @@ impl DUCache {
             Some(t) => {
                 trace!(target: "webdav_cache", "DUCache::negative({:?}): in cache, valid: {}", path, t.dir_id != dir_id);
                 t.dir_id != dir_id
-            },
+            }
             None => {
                 trace!(target: "webdav_cache", "DUCache::negative({:?}): not in cache", path);
                 true
-            },
+            }
         }
     }
 }
@@ -136,18 +136,18 @@ impl DUCache {
 // Storage for the entries of one dir while we're collecting them.
 #[derive(Default)]
 pub(crate) struct DUCacheBuilder {
-    dir:     PathBuf,
+    dir: PathBuf,
     entries: Vec<OsString>,
-    done:    bool,
+    done: bool,
 }
 
 impl DUCacheBuilder {
     // return a new instance.
     pub fn start(dir: PathBuf) -> DUCacheBuilder {
         DUCacheBuilder {
-            dir:     dir,
+            dir: dir,
             entries: Vec::new(),
-            done:    false,
+            done: false,
         }
     }
 
@@ -188,9 +188,9 @@ impl DUCacheBuilder {
         let mut path = self.dir.clone();
         path.push(".");
         let entry = Entry {
-            time:        now,
+            time: now,
             dir_modtime: dir_modtime,
-            dir_id:      dir_id,
+            dir_id: dir_id,
         };
         cache.put(path, entry);
 
@@ -200,9 +200,9 @@ impl DUCacheBuilder {
             let mut path = self.dir.clone();
             path.push(filename);
             let entry = Entry {
-                time:        now,
+                time: now,
                 dir_modtime: dir_modtime,
-                dir_id:      dir_id,
+                dir_id: dir_id,
             };
             cache.put(path, entry);
         }
@@ -236,8 +236,8 @@ impl LocalFs {
             return None;
         }
         match path.as_bytes() {
-            b"/.metadata_never_index" => {},
-            b"/.ql_disablethumbnails" => {},
+            b"/.metadata_never_index" => {}
+            b"/.ql_disablethumbnails" => {}
             _ => return None,
         }
         Some(Box::new(EmptyMetaData {}))
@@ -252,7 +252,7 @@ impl LocalFs {
         match path.as_bytes() {
             b"/.metadata_never_index" => return true,
             b"/.ql_disablethumbnails" => return true,
-            _ => {},
+            _ => {}
         }
         path.file_name_bytes() == b".localized"
     }

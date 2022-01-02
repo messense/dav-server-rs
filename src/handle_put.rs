@@ -25,28 +25,26 @@ const SABRE: &'static str = "application/x-sabredav-partialupdate";
 // Also, this is senseless. It's not as if we _do_ anything with the
 // io::Error, other than noticing "oops an error occured".
 fn to_ioerror<E>(err: E) -> io::Error
-where E: StdError + Sync + Send + 'static {
+where
+    E: StdError + Sync + Send + 'static,
+{
     let e = &err as &dyn Any;
     if e.is::<io::Error>() || e.is::<Box<io::Error>>() {
         let err = Box::new(err) as Box<dyn Any>;
         match err.downcast::<io::Error>() {
             Ok(e) => *e,
-            Err(e) => {
-                match e.downcast::<Box<io::Error>>() {
-                    Ok(e) => *(*e),
-                    Err(_) => io::ErrorKind::Other.into(),
-                }
+            Err(e) => match e.downcast::<Box<io::Error>>() {
+                Ok(e) => *(*e),
+                Err(_) => io::ErrorKind::Other.into(),
             },
         }
     } else if e.is::<DavError>() || e.is::<Box<DavError>>() {
         let err = Box::new(err) as Box<dyn Any>;
         match err.downcast::<DavError>() {
             Ok(e) => (*e).into(),
-            Err(e) => {
-                match e.downcast::<Box<DavError>>() {
-                    Ok(e) => (*(*e)).into(),
-                    Err(_) => io::ErrorKind::Other.into(),
-                }
+            Err(e) => match e.downcast::<Box<DavError>>() {
+                Ok(e) => (*(*e)).into(),
+                Err(_) => io::ErrorKind::Other.into(),
             },
         }
     } else {
@@ -78,9 +76,11 @@ impl crate::DavInner {
             count = n.0;
             have_count = true;
             oo.size = Some(count);
-        } else if let Some(n) = req.headers()
-                                   .get("X-Expected-Entity-Length")
-                                   .and_then(|v| v.to_str().ok()) {
+        } else if let Some(n) = req
+            .headers()
+            .get("X-Expected-Entity-Length")
+            .and_then(|v| v.to_str().ok())
+        {
             // macOS Finder, see https://evertpot.com/260/
             if let Ok(len) = n.parse() {
                 count = len;
@@ -117,10 +117,10 @@ impl crate::DavInner {
                         return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
                     }
                     start = b;
-                },
+                }
                 davheaders::XUpdateRange::AllFrom(b) => {
                     start = b;
-                },
+                }
                 davheaders::XUpdateRange::Last(n) => {
                     if let Ok(ref m) = meta {
                         if n > m.len() {
@@ -128,10 +128,10 @@ impl crate::DavInner {
                         }
                         start = m.len() - n;
                     }
-                },
+                }
                 davheaders::XUpdateRange::Append => {
                     oo.append = true;
-                },
+                }
             }
             do_range = true;
             oo.truncate = false;
@@ -157,8 +157,8 @@ impl crate::DavInner {
                     do_range = true;
                     oo.truncate = false;
                 }
-            },
-            Ok(None) => {},
+            }
+            Ok(None) => {}
             Err(_) => return Err(DavError::StatusClose(SC::BAD_REQUEST)),
         }
 
@@ -203,7 +203,7 @@ impl crate::DavInner {
                     SC::CONFLICT
                 };
                 return Err(DavError::StatusClose(s));
-            },
+            }
             Err(e) => return Err(DavError::FsError(e)),
         };
 
@@ -214,7 +214,8 @@ impl crate::DavInner {
             }
         }
 
-        res.headers_mut().typed_insert(headers::AcceptRanges::bytes());
+        res.headers_mut()
+            .typed_insert(headers::AcceptRanges::bytes());
 
         pin_utils::pin_mut!(body);
 
@@ -259,7 +260,7 @@ impl crate::DavInner {
             Err(_) => {
                 res.headers_mut().typed_insert(headers::ContentLength(0));
                 SC::CREATED
-            },
+            }
         };
 
         // no errors, connection may be kept open.

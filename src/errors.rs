@@ -180,10 +180,10 @@ impl DavError {
     pub(crate) fn must_close(&self) -> bool {
         match self {
             // non-fatal, keep the connnection open.
-            &DavError::Status(_) |
-            &DavError::FsError(FsError::NotFound) |
-            &DavError::FsError(FsError::Forbidden) |
-            &DavError::FsError(FsError::Exists) => false,
+            &DavError::Status(_)
+            | &DavError::FsError(FsError::NotFound)
+            | &DavError::FsError(FsError::Forbidden)
+            | &DavError::FsError(FsError::Exists) => false,
             // close the connection to be sure.
             _ => true,
         }

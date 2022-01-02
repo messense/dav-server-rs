@@ -40,7 +40,7 @@ fn tm_limit(d: Option<Duration>) -> Duration {
             } else {
                 d
             }
-        },
+        }
     }
 }
 
@@ -53,8 +53,7 @@ impl DavLockSystem for FakeLs {
         timeout: Option<Duration>,
         shared: bool,
         deep: bool,
-    ) -> Result<DavLock, DavLock>
-    {
+    ) -> Result<DavLock, DavLock> {
         let timeout = tm_limit(timeout);
         let timeout_at = SystemTime::now() + timeout;
 
@@ -63,14 +62,14 @@ impl DavLockSystem for FakeLs {
         let token = format!("opaquetoken:{}/{}/{}", Uuid::new_v4().to_hyphenated(), d, s);
 
         let lock = DavLock {
-            token:      token,
-            path:       path.clone(),
-            principal:  principal.map(|s| s.to_string()),
-            owner:      owner.cloned(),
+            token: token,
+            path: path.clone(),
+            principal: principal.map(|s| s.to_string()),
+            owner: owner.cloned(),
             timeout_at: Some(timeout_at),
-            timeout:    Some(timeout),
-            shared:     shared,
-            deep:       deep,
+            timeout: Some(timeout),
+            shared: shared,
+            deep: deep,
         };
         debug!("lock {} created", &lock.token);
         Ok(lock)
@@ -80,7 +79,12 @@ impl DavLockSystem for FakeLs {
         Ok(())
     }
 
-    fn refresh(&self, path: &DavPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()> {
+    fn refresh(
+        &self,
+        path: &DavPath,
+        token: &str,
+        timeout: Option<Duration>,
+    ) -> Result<DavLock, ()> {
         debug!("refresh lock {}", token);
         let v: Vec<&str> = token.split('/').collect();
         let deep = v.len() > 1 && v[1] == "I";
@@ -90,14 +94,14 @@ impl DavLockSystem for FakeLs {
         let timeout_at = SystemTime::now() + timeout;
 
         let lock = DavLock {
-            token:      token.to_string(),
-            path:       path.clone(),
-            principal:  None,
-            owner:      None,
+            token: token.to_string(),
+            path: path.clone(),
+            principal: None,
+            owner: None,
             timeout_at: Some(timeout_at),
-            timeout:    Some(timeout),
-            shared:     shared,
-            deep:       deep,
+            timeout: Some(timeout),
+            shared: shared,
+            deep: deep,
         };
         Ok(lock)
     }
@@ -109,8 +113,7 @@ impl DavLockSystem for FakeLs {
         _ignore_principal: bool,
         _deep: bool,
         _submitted_tokens: Vec<&str>,
-    ) -> Result<(), DavLock>
-    {
+    ) -> Result<(), DavLock> {
         Ok(())
     }
 

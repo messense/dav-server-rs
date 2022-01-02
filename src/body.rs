@@ -42,7 +42,7 @@ impl Stream for Body {
             BodyType::AsyncStream(ref mut strm) => {
                 let strm = Pin::new(strm);
                 strm.poll_next(cx)
-            },
+            }
             BodyType::Empty => Poll::Ready(None),
         }
     }
@@ -52,15 +52,17 @@ impl HttpBody for Body {
     type Data = Bytes;
     type Error = io::Error;
 
-    fn poll_data(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+    fn poll_data(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
         self.poll_next(cx)
     }
 
     fn poll_trailers(
         self: Pin<&mut Self>,
         _cx: &mut Context,
-    ) -> Poll<Result<Option<HeaderMap>, Self::Error>>
-    {
+    ) -> Poll<Result<Option<HeaderMap>, Self::Error>> {
         Poll::Ready(Ok(None))
     }
 }
@@ -120,8 +122,7 @@ where
     fn poll_data(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>>
-    {
+    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
         let this = self.project();
         this.body.poll_next(cx)
     }
@@ -129,8 +130,7 @@ where
     fn poll_trailers(
         self: Pin<&mut Self>,
         _cx: &mut Context,
-    ) -> Poll<Result<Option<HeaderMap>, Self::Error>>
-    {
+    ) -> Poll<Result<Option<HeaderMap>, Self::Error>> {
         Poll::Ready(Ok(None))
     }
 }

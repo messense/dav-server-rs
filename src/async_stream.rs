@@ -92,7 +92,9 @@ impl<I, E> Sender<I, E> {
 
     /// Send one item to the stream.
     pub fn send<T>(&mut self, item: T) -> SenderFuture
-    where T: Into<I> {
+    where
+        T: Into<I>,
+    {
         self.0.set(Some(item.into()));
         SenderFuture::new()
     }
@@ -110,7 +112,7 @@ impl<I, E> Sender<I, E> {
 #[must_use]
 pub struct AsyncStream<Item, Error> {
     item: Sender<Item, Error>,
-    fut:  Option<Pin<Box<dyn Future<Output = Result<(), Error>> + 'static + Send>>>,
+    fut: Option<Pin<Box<dyn Future<Output = Result<(), Error>> + 'static + Send>>>,
 }
 
 impl<Item, Error: 'static + Send> AsyncStream<Item, Error> {
@@ -128,7 +130,7 @@ impl<Item, Error: 'static + Send> AsyncStream<Item, Error> {
         let sender = Sender::new(None);
         AsyncStream::<Item, Error> {
             item: sender.clone(),
-            fut:  Some(Box::pin(f(sender))),
+            fut: Some(Box::pin(f(sender))),
         }
     }
 }
@@ -156,7 +158,7 @@ impl<I, E: Unpin> Stream for AsyncStream<I, E> {
                 } else {
                     Poll::Ready(Some(Ok(item.take().unwrap())))
                 }
-            },
+            }
         }
     }
 }

@@ -17,8 +17,7 @@ async fn add_status<'a>(
     m_err: &'a mut MultiError,
     path: &'a DavPath,
     e: impl Into<DavError> + 'static,
-) -> DavResult<()>
-{
+) -> DavResult<()> {
     let daverror = e.into();
     if let Err(x) = m_err.add_status(path, daverror.statuscode()).await {
         return Err(x.into());
@@ -34,8 +33,7 @@ impl crate::DavInner {
         dest: &'a DavPath,
         depth: Depth,
         mut multierror: &'a mut MultiError,
-    ) -> BoxFuture<'a, DavResult<()>>
-    {
+    ) -> BoxFuture<'a, DavResult<()>> {
         async move {
             // when doing "COPY /a/b /a/b/c make sure we don't recursively
             // copy /a/b/c/ into /a/b/c.
@@ -56,7 +54,7 @@ impl crate::DavInner {
                     Err(e) => {
                         debug!("do_copy: self.fs.copy error: {:?}", e);
                         add_status(&mut multierror, source, e).await
-                    },
+                    }
                 };
             }
 
@@ -80,7 +78,7 @@ impl crate::DavInner {
                 Err(e) => {
                     debug!("do_copy: self.fs.read_dir error: {:?}", e);
                     return add_status(&mut multierror, source, e).await;
-                },
+                }
             };
 
             // If we encounter errors, just print them, and keep going.
@@ -103,7 +101,10 @@ impl crate::DavInner {
                     ndest.add_slash();
                 }
                 // recurse.
-                if let Err(e) = self.do_copy(&nsrc, topdest, &ndest, depth, multierror).await {
+                if let Err(e) = self
+                    .do_copy(&nsrc, topdest, &ndest, depth, multierror)
+                    .await
+                {
                     retval = Err(e);
                 }
             }
@@ -131,8 +132,7 @@ impl crate::DavInner {
         source: &'a DavPath,
         dest: &'a DavPath,
         mut multierror: &'a mut MultiError,
-    ) -> DavResult<()>
-    {
+    ) -> DavResult<()> {
         if let Err(e) = self.fs.rename(source, dest).await {
             add_status(&mut multierror, &source, e).await
         } else {
@@ -144,8 +144,7 @@ impl crate::DavInner {
         self,
         req: &Request<()>,
         method: DavMethod,
-    ) -> DavResult<Response<Body>>
-    {
+    ) -> DavResult<Response<Body>> {
         // get and check headers.
         let overwrite = req
             .headers()
@@ -197,7 +196,7 @@ impl crate::DavInner {
                     is_file = true;
                 }
                 (is_file, Ok(meta))
-            },
+            }
             Err(e) => (false, Err(e)),
         };
 
@@ -259,7 +258,10 @@ impl crate::DavInner {
 
                 // COPY or MOVE.
                 if method == DavMethod::Copy {
-                    if let Ok(_) = self.do_copy(&path, &dest, &dest, depth, &mut multierror).await {
+                    if let Ok(_) = self
+                        .do_copy(&path, &dest, &dest, depth, &mut multierror)
+                        .await
+                    {
                         let s = if exists {
                             StatusCode::NO_CONTENT
                         } else {

@@ -4,8 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use bytes::Bytes;
 use headers::Header;
 use http::method::InvalidMethod;
-use time::macros::offset;
 use time::format_description::well_known::Rfc3339;
+use time::macros::offset;
 
 use crate::body::Body;
 use crate::errors::DavError;
@@ -15,19 +15,19 @@ use crate::DavResult;
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 #[repr(u32)]
 pub enum DavMethod {
-    Head      = 0x0001,
-    Get       = 0x0002,
-    Put       = 0x0004,
-    Patch     = 0x0008,
-    Options   = 0x0010,
-    PropFind  = 0x0020,
+    Head = 0x0001,
+    Get = 0x0002,
+    Put = 0x0004,
+    Patch = 0x0008,
+    Options = 0x0010,
+    PropFind = 0x0020,
     PropPatch = 0x0040,
-    MkCol     = 0x0080,
-    Copy      = 0x0100,
-    Move      = 0x0200,
-    Delete    = 0x0400,
-    Lock      = 0x0800,
-    Unlock    = 0x1000,
+    MkCol = 0x0080,
+    Copy = 0x0100,
+    Move = 0x0200,
+    Delete = 0x0400,
+    Lock = 0x0800,
+    Unlock = 0x1000,
 }
 
 // translate method into our own enum that has webdav methods as well.
@@ -39,18 +39,16 @@ pub(crate) fn dav_method(m: &http::Method) -> DavResult<DavMethod> {
         &http::Method::PATCH => DavMethod::Patch,
         &http::Method::DELETE => DavMethod::Delete,
         &http::Method::OPTIONS => DavMethod::Options,
-        _ => {
-            match m.as_str() {
-                "PROPFIND" => DavMethod::PropFind,
-                "PROPPATCH" => DavMethod::PropPatch,
-                "MKCOL" => DavMethod::MkCol,
-                "COPY" => DavMethod::Copy,
-                "MOVE" => DavMethod::Move,
-                "LOCK" => DavMethod::Lock,
-                "UNLOCK" => DavMethod::Unlock,
-                _ => {
-                    return Err(DavError::UnknownDavMethod);
-                },
+        _ => match m.as_str() {
+            "PROPFIND" => DavMethod::PropFind,
+            "PROPPATCH" => DavMethod::PropPatch,
+            "MKCOL" => DavMethod::MkCol,
+            "COPY" => DavMethod::Copy,
+            "MOVE" => DavMethod::Move,
+            "LOCK" => DavMethod::Lock,
+            "UNLOCK" => DavMethod::Unlock,
+            _ => {
+                return Err(DavError::UnknownDavMethod);
             }
         },
     };
@@ -135,7 +133,7 @@ impl DavMethodSet {
                     // A trick to get at the value of http::method::InvalidMethod.
                     let invalid_method = http::method::Method::from_bytes(b"").unwrap_err();
                     return Err(invalid_method);
-                },
+                }
             };
         }
         Ok(DavMethodSet(m))
@@ -145,7 +143,10 @@ impl DavMethodSet {
 pub(crate) fn dav_xml_error(body: &str) -> Body {
     let xml = format!(
         "{}\n{}\n{}\n{}\n",
-        r#"<?xml version="1.0" encoding="utf-8" ?>"#, r#"<D:error xmlns:D="DAV:">"#, body, r#"</D:error>"#
+        r#"<?xml version="1.0" encoding="utf-8" ?>"#,
+        r#"<D:error xmlns:D="DAV:">"#,
+        body,
+        r#"</D:error>"#
     );
     Body::from(xml)
 }
@@ -155,7 +156,7 @@ pub(crate) fn systemtime_to_offsetdatetime(t: SystemTime) -> time::OffsetDateTim
         Ok(t) => {
             let tm = time::OffsetDateTime::from_unix_timestamp(t.as_secs() as i64).unwrap();
             tm.to_offset(offset!(UTC))
-        },
+        }
         Err(_) => time::OffsetDateTime::UNIX_EPOCH.to_offset(offset!(UTC)),
     }
 }

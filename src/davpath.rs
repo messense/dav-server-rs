@@ -26,7 +26,7 @@ const PATH_ENCODE_SET: &pct::AsciiSet = &pct::NON_ALPHANUMERIC
 #[derive(Clone)]
 pub struct DavPath {
     fullpath: Vec<u8>,
-    pfxlen:   Option<usize>,
+    pfxlen: Option<usize>,
 }
 
 /// Reference to DavPath, no prefix.
@@ -94,7 +94,9 @@ fn valid_segment(src: &[u8]) -> Result<(), ParseError> {
 
 // encode path segment with user-defined ENCODE_SET
 fn encode_path(src: &[u8]) -> Vec<u8> {
-    pct::percent_encode(src, PATH_ENCODE_SET).to_string().into_bytes()
+    pct::percent_encode(src, PATH_ENCODE_SET)
+        .to_string()
+        .into_bytes()
 }
 
 // make path safe:
@@ -134,21 +136,21 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
     let mut v: Vec<&[u8]> = Vec::new();
     for segment in segments {
         match segment {
-            b"." | b"" => {},
+            b"." | b"" => {}
             b".." => {
                 if v.len() < 2 {
                     return Err(ParseError::ForbiddenPath);
                 }
                 v.pop();
                 v.pop();
-            },
+            }
             s => {
                 if let Err(e) = valid_segment(s) {
                     Err(e)?;
                 }
                 v.push(b"/");
                 v.push(s);
-            },
+            }
         }
     }
     if isdir || v.is_empty() {
@@ -178,7 +180,7 @@ impl DavPath {
         let path = normalize_path(src.as_bytes())?;
         Ok(DavPath {
             fullpath: path.to_vec(),
-            pfxlen:   None,
+            pfxlen: None,
         })
     }
 
@@ -212,21 +214,22 @@ impl DavPath {
         let path = normalize_path(src.as_bytes())?;
         let mut davpath = DavPath {
             fullpath: path.to_vec(),
-            pfxlen:   None,
+            pfxlen: None,
         };
         davpath.set_prefix(prefix)?;
         Ok(davpath)
     }
 
     /// from request.uri
-    pub(crate) fn from_uri_and_prefix(uri: &http::uri::Uri, prefix: &str) -> Result<Self, ParseError> {
+    pub(crate) fn from_uri_and_prefix(
+        uri: &http::uri::Uri,
+        prefix: &str,
+    ) -> Result<Self, ParseError> {
         match uri.path() {
-            "*" => {
-                Ok(DavPath {
-                    fullpath: b"*".to_vec(),
-                    pfxlen:   None,
-                })
-            },
+            "*" => Ok(DavPath {
+                fullpath: b"*".to_vec(),
+                pfxlen: None,
+            }),
             path if path.starts_with("/") => DavPath::from_str_and_prefix(path, prefix),
             _ => Err(ParseError::InvalidPath),
         }
@@ -236,7 +239,7 @@ impl DavPath {
     pub fn from_uri(uri: &http::uri::Uri) -> Result<Self, ParseError> {
         Ok(DavPath {
             fullpath: uri.path().as_bytes().to_vec(),
-            pfxlen:   None,
+            pfxlen: None,
         })
     }
 
@@ -298,7 +301,7 @@ impl DavPath {
         }
         segs.insert(0, b"");
         DavPath {
-            pfxlen:   self.pfxlen,
+            pfxlen: self.pfxlen,
             fullpath: segs.join(&b'/').to_vec(),
         }
     }
@@ -374,7 +377,7 @@ impl DavPathRef {
         #[cfg(not(target_os = "windows"))]
         let os_string = OsStr::from_bytes(path);
         #[cfg(target_os = "windows")]
-        let os_string : &OsStr = std::str::from_utf8(path).unwrap().as_ref();
+        let os_string: &OsStr = std::str::from_utf8(path).unwrap().as_ref();
         Path::new(os_string)
     }
 

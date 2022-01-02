@@ -1,5 +1,5 @@
-use std::net::SocketAddr;
 use dav_server::warp::dav_dir;
+use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() {

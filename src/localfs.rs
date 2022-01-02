@@ -38,7 +38,7 @@ static RUNTIME_TYPE: AtomicU32 = AtomicU32::new(0);
 #[derive(Clone, Copy)]
 #[repr(u32)]
 enum RuntimeType {
-    Basic      = RUNTIME_TYPE_BASIC,
+    Basic = RUNTIME_TYPE_BASIC,
     ThreadPool = RUNTIME_TYPE_THREADPOOL,
 }
 
@@ -57,7 +57,7 @@ impl RuntimeType {
                 };
                 RUNTIME_TYPE.store(rt as u32, Ordering::SeqCst);
                 rt
-            },
+            }
         }
     }
 }
@@ -90,24 +90,24 @@ pub struct LocalFs {
 
 // inner struct.
 pub(crate) struct LocalFsInner {
-    pub basedir:          PathBuf,
-    pub public:           bool,
+    pub basedir: PathBuf,
+    pub public: bool,
     pub case_insensitive: bool,
-    pub macos:            bool,
-    pub is_file:          bool,
-    pub fs_access_guard:  Option<Box<dyn Fn() -> Box<dyn Any> + Send + Sync + 'static>>,
+    pub macos: bool,
+    pub is_file: bool,
+    pub fs_access_guard: Option<Box<dyn Fn() -> Box<dyn Any> + Send + Sync + 'static>>,
 }
 
 #[derive(Debug)]
 struct LocalFsFile(Option<std::fs::File>);
 
 struct LocalFsReadDir {
-    fs:        LocalFs,
-    do_meta:   ReadDirMeta,
-    buffer:    VecDeque<io::Result<LocalFsDirEntry>>,
+    fs: LocalFs,
+    do_meta: ReadDirMeta,
+    buffer: VecDeque<io::Result<LocalFsDirEntry>>,
     dir_cache: Option<DUCacheBuilder>,
-    iterator:  Option<std::fs::ReadDir>,
-    fut:       Option<BoxFuture<'static, ReadDirBatch>>,
+    iterator: Option<std::fs::ReadDir>,
+    fut: Option<BoxFuture<'static, ReadDirBatch>>,
 }
 
 // a DirEntry either already has the metadata available, or a handle
@@ -119,7 +119,7 @@ enum Meta {
 
 // Items from the readdir stream.
 struct LocalFsDirEntry {
-    meta:  Meta,
+    meta: Meta,
     entry: std::fs::DirEntry,
 }
 
@@ -132,14 +132,19 @@ impl LocalFs {
     ///
     /// If "case_insensitive" is set to true, all filesystem lookups will
     /// be case insensitive. Note that this has a _lot_ of overhead!
-    pub fn new<P: AsRef<Path>>(base: P, public: bool, case_insensitive: bool, macos: bool) -> Box<LocalFs> {
+    pub fn new<P: AsRef<Path>>(
+        base: P,
+        public: bool,
+        case_insensitive: bool,
+        macos: bool,
+    ) -> Box<LocalFs> {
         let inner = LocalFsInner {
-            basedir:          base.as_ref().to_path_buf(),
-            public:           public,
-            macos:            macos,
+            basedir: base.as_ref().to_path_buf(),
+            public: public,
+            macos: macos,
             case_insensitive: case_insensitive,
-            is_file:          false,
-            fs_access_guard:  None,
+            is_file: false,
+            fs_access_guard: None,
         };
         Box::new({
             LocalFs {
@@ -154,12 +159,12 @@ impl LocalFs {
     /// The request path is ignored.
     pub fn new_file<P: AsRef<Path>>(file: P, public: bool) -> Box<LocalFs> {
         let inner = LocalFsInner {
-            basedir:          file.as_ref().to_path_buf(),
-            public:           public,
-            macos:            false,
+            basedir: file.as_ref().to_path_buf(),
+            public: public,
+            macos: false,
             case_insensitive: false,
-            is_file:          true,
-            fs_access_guard:  None,
+            is_file: true,
+            fs_access_guard: None,
         };
         Box::new({
             LocalFs {
@@ -176,15 +181,14 @@ impl LocalFs {
         case_insensitive: bool,
         macos: bool,
         fs_access_guard: Option<Box<dyn Fn() -> Box<dyn Any> + Send + Sync + 'static>>,
-    ) -> Box<LocalFs>
-    {
+    ) -> Box<LocalFs> {
         let inner = LocalFsInner {
-            basedir:          base.as_ref().to_path_buf(),
-            public:           public,
-            macos:            macos,
+            basedir: base.as_ref().to_path_buf(),
+            public: public,
+            macos: macos,
             case_insensitive: case_insensitive,
-            is_file:          false,
-            fs_access_guard:  fs_access_guard,
+            is_file: false,
+            fs_access_guard: fs_access_guard,
         };
         Box::new({
             LocalFs {
@@ -241,11 +245,9 @@ impl DavFileSystem for LocalFs {
             if self.is_notfound(&path) {
                 return Err(FsError::NotFound);
             }
-            self.blocking(move || {
-                match std::fs::metadata(path) {
-                    Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
-                    Err(e) => Err(e.into()),
-                }
+            self.blocking(move || match std::fs::metadata(path) {
+                Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
+                Err(e) => Err(e.into()),
             })
             .await
         }
@@ -261,11 +263,9 @@ impl DavFileSystem for LocalFs {
             if self.is_notfound(&path) {
                 return Err(FsError::NotFound);
             }
-            self.blocking(move || {
-                match std::fs::symlink_metadata(path) {
-                    Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
-                    Err(e) => Err(e.into()),
-                }
+            self.blocking(move || match std::fs::symlink_metadata(path) {
+                Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
+                Err(e) => Err(e.into()),
             })
             .await
         }
@@ -278,8 +278,7 @@ impl DavFileSystem for LocalFs {
         &'a self,
         davpath: &'a DavPath,
         meta: ReadDirMeta,
-    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>>
-    {
+    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>> {
         async move {
             trace!("FS: read_dir {:?}", self.fspath_dbg(davpath));
             let path = self.fspath(davpath);
@@ -288,15 +287,15 @@ impl DavFileSystem for LocalFs {
             match iter {
                 Ok(iterator) => {
                     let strm = LocalFsReadDir {
-                        fs:        self.clone(),
-                        do_meta:   meta,
-                        buffer:    VecDeque::new(),
+                        fs: self.clone(),
+                        do_meta: meta,
+                        buffer: VecDeque::new(),
                         dir_cache: self.dir_cache_builder(path2),
-                        iterator:  Some(iterator),
-                        fut:       None,
+                        iterator: Some(iterator),
+                        fut: None,
                     };
                     Ok(Box::pin(strm) as FsStream<Box<dyn DavDirEntry>>)
-                },
+                }
                 Err(e) => Err(e.into()),
             }
         }
@@ -375,7 +374,11 @@ impl DavFileSystem for LocalFs {
 
     fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
         async move {
-            trace!("FS: rename {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
+            trace!(
+                "FS: rename {:?} {:?}",
+                self.fspath_dbg(from),
+                self.fspath_dbg(to)
+            );
             if self.is_forbidden(from) || self.is_forbidden(to) {
                 return Err(FsError::Forbidden);
             }
@@ -395,7 +398,7 @@ impl DavFileSystem for LocalFs {
                         } else {
                             Err(e.into())
                         }
-                    },
+                    }
                 }
             })
             .await
@@ -405,14 +408,21 @@ impl DavFileSystem for LocalFs {
 
     fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
         async move {
-            trace!("FS: copy {:?} {:?}", self.fspath_dbg(from), self.fspath_dbg(to));
+            trace!(
+                "FS: copy {:?} {:?}",
+                self.fspath_dbg(from),
+                self.fspath_dbg(to)
+            );
             if self.is_forbidden(from) || self.is_forbidden(to) {
                 return Err(FsError::Forbidden);
             }
             let path_from = self.fspath(from);
             let path_to = self.fspath(to);
 
-            match self.blocking(move || std::fs::copy(path_from, path_to)).await {
+            match self
+                .blocking(move || std::fs::copy(path_from, path_to))
+                .await
+            {
                 Ok(_) => Ok(()),
                 Err(e) => {
                     debug!(
@@ -422,7 +432,7 @@ impl DavFileSystem for LocalFs {
                         e
                     );
                     Err(e.into())
-                },
+                }
             }
         }
         .boxed()
@@ -432,12 +442,16 @@ impl DavFileSystem for LocalFs {
 // read_batch() result.
 struct ReadDirBatch {
     iterator: Option<std::fs::ReadDir>,
-    buffer:   VecDeque<io::Result<LocalFsDirEntry>>,
+    buffer: VecDeque<io::Result<LocalFsDirEntry>>,
 }
 
 // Read the next batch of LocalFsDirEntry structs (up to 256).
 // This is sync code, must be run in `blocking()`.
-fn read_batch(iterator: Option<std::fs::ReadDir>, fs: LocalFs, do_meta: ReadDirMeta) -> ReadDirBatch {
+fn read_batch(
+    iterator: Option<std::fs::ReadDir>,
+    fs: LocalFs,
+    do_meta: ReadDirMeta,
+) -> ReadDirBatch {
     let mut buffer = VecDeque::new();
     let mut iterator = match iterator {
         Some(i) => i,
@@ -446,7 +460,7 @@ fn read_batch(iterator: Option<std::fs::ReadDir>, fs: LocalFs, do_meta: ReadDirM
                 buffer,
                 iterator: None,
             }
-        },
+        }
     };
     let _guard = match do_meta {
         ReadDirMeta::None => None,
@@ -461,15 +475,15 @@ fn read_batch(iterator: Option<std::fs::ReadDir>, fs: LocalFs, do_meta: ReadDirM
                     ReadDirMeta::None => Meta::Fs(fs.clone()),
                 };
                 let d = LocalFsDirEntry {
-                    meta:  meta,
+                    meta: meta,
                     entry: entry,
                 };
                 buffer.push_back(Ok(d))
-            },
+            }
             Some(Err(e)) => {
                 buffer.push_back(Err(e));
                 break;
-            },
+            }
             None => break,
         }
     }
@@ -489,7 +503,8 @@ impl LocalFsReadDir {
         let fs = self.fs.clone();
         let do_meta = self.do_meta;
 
-        let fut: BoxFuture<ReadDirBatch> = blocking(move || read_batch(iterator, fs, do_meta)).boxed();
+        let fut: BoxFuture<ReadDirBatch> =
+            blocking(move || read_batch(iterator, fs, do_meta)).boxed();
         fut
     }
 }
@@ -526,7 +541,7 @@ impl<'a> Stream for LocalFsReadDir {
                     }
                     this.buffer = batch.buffer;
                     this.iterator = batch.iterator;
-                },
+                }
                 Poll::Pending => return Poll::Pending,
             }
         }
@@ -543,7 +558,7 @@ impl<'a> Stream for LocalFsReadDir {
                 }
                 // return end-of-stream.
                 Poll::Ready(None)
-            },
+            }
         }
     }
 }
@@ -557,13 +572,11 @@ enum Is {
 impl LocalFsDirEntry {
     async fn is_a(&self, is: Is) -> FsResult<bool> {
         match self.meta {
-            Meta::Data(Ok(ref meta)) => {
-                Ok(match is {
-                    Is::File => meta.file_type().is_file(),
-                    Is::Dir => meta.file_type().is_dir(),
-                    Is::Symlink => meta.file_type().is_symlink(),
-                })
-            },
+            Meta::Data(Ok(ref meta)) => Ok(match is {
+                Is::File => meta.file_type().is_file(),
+                Is::Dir => meta.file_type().is_dir(),
+                Is::Symlink => meta.file_type().is_symlink(),
+            }),
             Meta::Data(Err(ref e)) => Err(e.into()),
             Meta::Fs(ref fs) => {
                 let fullpath = self.entry.path();
@@ -576,7 +589,7 @@ impl LocalFsDirEntry {
                     Is::Dir => ft.is_dir(),
                     Is::Symlink => ft.is_symlink(),
                 })
-            },
+            }
         }
     }
 }
@@ -590,17 +603,15 @@ impl DavDirEntry for LocalFsDirEntry {
                     Err(e) => Err(e.into()),
                 };
                 Box::pin(future::ready(m))
-            },
+            }
             Meta::Fs(ref fs) => {
                 let fullpath = self.entry.path();
-                fs.blocking(move || {
-                    match std::fs::metadata(&fullpath) {
-                        Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
-                        Err(e) => Err(e.into()),
-                    }
+                fs.blocking(move || match std::fs::metadata(&fullpath) {
+                    Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
+                    Err(e) => Err(e.into()),
                 })
                 .boxed()
-            },
+            }
         }
     }
 
@@ -768,7 +779,7 @@ impl From<&io::Error> for FsError {
                 libc::ENOENT => return FsError::NotFound,
                 libc::ENOSYS => return FsError::NotImplemented,
                 libc::EXDEV => return FsError::IsRemote,
-                _ => {},
+                _ => {}
             }
         } else {
             // not an OS error - must be "not implemented"

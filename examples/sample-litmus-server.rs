@@ -23,7 +23,7 @@ use dav_server::{body::Body, fakels, localfs, memfs, memls, DavConfig, DavHandle
 
 #[derive(Clone)]
 struct Server {
-    dh:   DavHandler,
+    dh: DavHandler,
     auth: bool,
 }
 
@@ -48,7 +48,10 @@ impl Server {
         }
     }
 
-    async fn handle(&self, req: hyper::Request<hyper::Body>) -> Result<hyper::Response<Body>, Infallible> {
+    async fn handle(
+        &self,
+        req: hyper::Request<hyper::Body>,
+    ) -> Result<hyper::Response<Body>, Infallible> {
         let user = if self.auth {
             // we want the client to authenticate.
             match req.headers().typed_get::<Authorization<Basic>>() {
@@ -61,7 +64,7 @@ impl Server {
                         .body(Body::from("please auth".to_string()))
                         .unwrap();
                     return Ok(response);
-                },
+                }
             }
         } else {
             None

@@ -26,7 +26,7 @@ pub struct MemLs(Arc<Mutex<MemLsInner>>);
 
 #[derive(Debug)]
 struct MemLsInner {
-    tree:  Tree,
+    tree: Tree,
     #[allow(dead_code)]
     locks: HashMap<Vec<u8>, u64>,
 }
@@ -35,7 +35,7 @@ impl MemLs {
     /// Create a new "memls" locksystem.
     pub fn new() -> Box<MemLs> {
         let inner = MemLsInner {
-            tree:  Tree::new(Vec::new()),
+            tree: Tree::new(Vec::new()),
             locks: HashMap::new(),
         };
         Box::new(MemLs(Arc::new(Mutex::new(inner))))
@@ -51,8 +51,7 @@ impl DavLockSystem for MemLs {
         timeout: Option<Duration>,
         shared: bool,
         deep: bool,
-    ) -> Result<DavLock, DavLock>
-    {
+    ) -> Result<DavLock, DavLock> {
         let inner = &mut *self.0.lock().unwrap();
 
         // any locks in the path?
@@ -74,14 +73,14 @@ impl DavLockSystem for MemLs {
             Some(d) => Some(SystemTime::now() + d),
         };
         let lock = DavLock {
-            token:      Uuid::new_v4().to_urn().to_string(),
-            path:       path.clone(),
-            principal:  principal.map(|s| s.to_string()),
-            owner:      owner.cloned(),
+            token: Uuid::new_v4().to_urn().to_string(),
+            path: path.clone(),
+            principal: principal.map(|s| s.to_string()),
+            owner: owner.cloned(),
             timeout_at: timeout_at,
-            timeout:    timeout,
-            shared:     shared,
-            deep:       deep,
+            timeout: timeout,
+            shared: shared,
+            deep: deep,
         };
         trace!("lock {} created", &lock.token);
         let slock = lock.clone();
@@ -95,7 +94,7 @@ impl DavLockSystem for MemLs {
             None => {
                 trace!("unlock: {} not found at {}", token, path);
                 return Err(());
-            },
+            }
             Some(n) => n,
         };
         let len = {
@@ -110,14 +109,19 @@ impl DavLockSystem for MemLs {
         Ok(())
     }
 
-    fn refresh(&self, path: &DavPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()> {
+    fn refresh(
+        &self,
+        path: &DavPath,
+        token: &str,
+        timeout: Option<Duration>,
+    ) -> Result<DavLock, ()> {
         trace!("refresh lock {}", token);
         let inner = &mut *self.0.lock().unwrap();
         let node_id = match lookup_lock(&inner.tree, path, token) {
             None => {
                 trace!("lock not found");
                 return Err(());
-            },
+            }
             Some(n) => n,
         };
         let node = (&mut inner.tree).get_node_mut(node_id).unwrap();
@@ -139,8 +143,7 @@ impl DavLockSystem for MemLs {
         ignore_principal: bool,
         deep: bool,
         submitted_tokens: Vec<&str>,
-    ) -> Result<(), DavLock>
-    {
+    ) -> Result<(), DavLock> {
         let inner = &*self.0.lock().unwrap();
         let _st = submitted_tokens.clone();
         let rc = check_locks_to_path(
@@ -192,8 +195,7 @@ fn check_locks_to_path(
     ignore_principal: bool,
     submitted_tokens: &Vec<&str>,
     shared_ok: bool,
-) -> Result<(), DavLock>
-{
+) -> Result<(), DavLock> {
     // path segments
     let segs = path_to_segs(path, true);
     let last_seg = segs.len() - 1;
@@ -218,8 +220,8 @@ fn check_locks_to_path(
             if i < last_seg && !nl.deep {
                 continue;
             }
-            if submitted_tokens.iter().any(|t| &nl.token == t) &&
-                (ignore_principal || principal == nl.principal.as_ref().map(|p| p.as_str()))
+            if submitted_tokens.iter().any(|t| &nl.token == t)
+                && (ignore_principal || principal == nl.principal.as_ref().map(|p| p.as_str()))
             {
                 // fine, we hold this lock.
                 holds_lock = true;
@@ -252,8 +254,7 @@ fn check_locks_from_path(
     ignore_principal: bool,
     submitted_tokens: &Vec<&str>,
     shared_ok: bool,
-) -> Result<(), DavLock>
-{
+) -> Result<(), DavLock> {
     let node_id = match lookup_node(tree, path) {
         Some(id) => id,
         None => return Ok(()),
@@ -276,16 +277,15 @@ fn check_locks_from_node(
     ignore_principal: bool,
     submitted_tokens: &Vec<&str>,
     shared_ok: bool,
-) -> Result<(), DavLock>
-{
+) -> Result<(), DavLock> {
     let node_locks = match tree.get_node(node_id) {
         Ok(n) => n,
         Err(_) => return Ok(()),
     };
     for nl in node_locks {
         if !nl.shared || !shared_ok {
-            if !submitted_tokens.iter().any(|t| t == &nl.token) ||
-                (!ignore_principal && principal != nl.principal.as_ref().map(|p| p.as_str()))
+            if !submitted_tokens.iter().any(|t| t == &nl.token)
+                || (!ignore_principal && principal != nl.principal.as_ref().map(|p| p.as_str()))
             {
                 return Err(nl.to_owned());
             }
@@ -314,7 +314,9 @@ fn get_or_create_path_node<'a>(tree: &'a mut Tree, path: &DavPath) -> &'a mut Ve
     for seg in path_to_segs(path, false) {
         node_id = match tree.get_child(node_id, seg) {
             Ok(n) => n,
-            Err(_) => tree.add_child(node_id, seg.to_vec(), Vec::new(), false).unwrap(),
+            Err(_) => tree
+                .add_child(node_id, seg.to_vec(), Vec::new(), false)
+                .unwrap(),
         };
     }
     tree.get_node_mut(node_id).unwrap()

@@ -16,21 +16,21 @@ use xmltree::Element;
 #[derive(Debug, Clone)]
 pub struct DavLock {
     /// Token.
-    pub token:      String,
+    pub token: String,
     /// Path/
-    pub path:       DavPath,
+    pub path: DavPath,
     /// Principal.
-    pub principal:  Option<String>,
+    pub principal: Option<String>,
     /// Owner.
-    pub owner:      Option<Element>,
+    pub owner: Option<Element>,
     /// When the lock turns stale (absolute).
     pub timeout_at: Option<SystemTime>,
     /// When the lock turns stale (relative).
-    pub timeout:    Option<Duration>,
+    pub timeout: Option<Duration>,
     /// Shared.
-    pub shared:     bool,
+    pub shared: bool,
     /// Deep.
-    pub deep:       bool,
+    pub deep: bool,
 }
 
 /// The trait that defines a locksystem.
@@ -52,7 +52,12 @@ pub trait DavLockSystem: Debug + Sync + Send + BoxCloneLs {
     fn unlock(&self, path: &DavPath, token: &str) -> Result<(), ()>;
 
     /// Refresh lock. Returns updated lock if succeeded.
-    fn refresh(&self, path: &DavPath, token: &str, timeout: Option<Duration>) -> Result<DavLock, ()>;
+    fn refresh(
+        &self,
+        path: &DavPath,
+        token: &str,
+        timeout: Option<Duration>,
+    ) -> Result<DavLock, ()>;
 
     /// Check if node is locked and if so, if we own all the locks.
     /// If not, returns as Err one conflicting lock.
