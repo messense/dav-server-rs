@@ -20,6 +20,7 @@ pub const ROOT_ID: u64 = 1;
 /// Node itself. "data" contains user-modifiable data.
 pub struct Node<K: Eq + Hash, D> {
     pub data:  D,
+    #[allow(dead_code)]
     id:        u64,
     parent_id: u64,
     children:  HashMap<K, u64>,

@@ -28,7 +28,7 @@ async fn main() -> io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .data(dav_server.clone())
+            .app_data(web::Data::new(dav_server.clone()))
             .service(web::resource("/{tail:.*}").to(dav_handler))
     })
     .bind(addr)?

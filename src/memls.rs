@@ -27,6 +27,7 @@ pub struct MemLs(Arc<Mutex<MemLsInner>>);
 #[derive(Debug)]
 struct MemLsInner {
     tree:  Tree,
+    #[allow(dead_code)]
     locks: HashMap<Vec<u8>, u64>,
 }
 
