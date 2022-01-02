@@ -110,18 +110,18 @@ async fn main() {
         .map_err(|e| eprintln!("server error: {}", e));
 }
 ```
-[DavHandler]: https://docs.rs/dav-server/0.2.0/dav_server/struct.DavHandler.html
-[DavFileSystem]: https://docs.rs/dav-server/0.2.0/dav_server/fs/index.html
-[DavLockSystem]: https://docs.rs/dav-server/0.2.0/dav_server/ls/index.html
-[DavProp]: https://docs.rs/dav-server/0.2.0/dav_server/fs/struct.DavProp.html
+[DavHandler]: https://docs.rs/dav-server/latest/dav_server/struct.DavHandler.html
+[DavFileSystem]: https://docs.rs/dav-server/latest/dav_server/fs/index.html
+[DavLockSystem]: https://docs.rs/dav-server/latest/dav_server/ls/index.html
+[DavProp]: https://docs.rs/dav-server/latest/dav_server/fs/struct.DavProp.html
 [`WebDav`]: https://tools.ietf.org/html/rfc4918
 [RFC4918]: https://tools.ietf.org/html/rfc4918
-[`MemLs`]: https://docs.rs/dav-server/0.2.0/dav_server/memls/index.html
-[`MemFs`]: https://docs.rs/dav-server/0.2.0/dav_server/memfs/index.html
-[`LocalFs`]: https://docs.rs/dav-server/0.2.0/dav_server/localfs/index.html
-[`FakeLs`]: https://docs.rs/dav-server/0.2.0/dav_server/fakels/index.html
-[actix-compat]: https://docs.rs/dav-server/0.2.0/dav_server/actix/index.html
-[warp-compat]: https://docs.rs/dav-server/0.2.0/dav_server/warp/index.html
+[`MemLs`]: https://docs.rs/dav-server/latest/dav_server/memls/index.html
+[`MemFs`]: https://docs.rs/dav-server/latest/dav_server/memfs/index.html
+[`LocalFs`]: https://docs.rs/dav-server/latest/dav_server/localfs/index.html
+[`FakeLs`]: https://docs.rs/dav-server/latest/dav_server/fakels/index.html
+[actix-compat]: https://docs.rs/dav-server/latest/dav_server/actix/index.html
+[warp-compat]: https://docs.rs/dav-server/latest/dav_server/warp/index.html
 [README_litmus]: https://github.com/messense/dav-server-rs/blob/master/README.litmus-test.md
 [examples]: https://github.com/messense/dav-server-rs/tree/master/examples/
 [PUT]: https://github.com/messense/dav-server-rs/tree/master/doc/Apache-PUT-with-Content-Range.md
