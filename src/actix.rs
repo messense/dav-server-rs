@@ -19,6 +19,7 @@ use std::task::{Context, Poll};
 
 use actix_web::error::PayloadError;
 use actix_web::{dev, Error, FromRequest, HttpRequest, HttpResponse};
+use actix_web::body::BoxBody;
 use bytes::Bytes;
 use futures_util::{future, Stream};
 use pin_project::pin_project;
@@ -39,7 +40,6 @@ impl DavRequest {
 }
 
 impl FromRequest for DavRequest {
-    type Config = ();
     type Error = Error;
     type Future = future::Ready<Result<DavRequest, Error>>;
 
@@ -122,8 +122,9 @@ impl From<http::Response<crate::body::Body>> for DavResponse {
 }
 
 impl actix_web::Responder for DavResponse {
+    type Body = BoxBody;
 
-    fn respond_to(self, _req: &HttpRequest) -> HttpResponse {
+    fn respond_to(self, _req: &HttpRequest) -> HttpResponse<BoxBody> {
         use crate::body::{Body, BodyType};
 
         let (parts, body) = self.0.into_parts();
