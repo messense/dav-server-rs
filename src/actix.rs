@@ -4,7 +4,7 @@
 //! handler for actix:
 //!
 //! ```no_run
-//! use webdav_handler::{DavHandler, actix::DavRequest, actix::DavResponse};
+//! use dav_server::{DavHandler, actix::DavRequest, actix::DavResponse};
 //! use actix_web::web;
 //!
 //! pub async fn dav_handler(req: DavRequest, davhandler: web::Data<DavHandler>) -> DavResponse {

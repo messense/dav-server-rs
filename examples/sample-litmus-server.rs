@@ -19,7 +19,7 @@ use hyper;
 
 use headers::{authorization::Basic, Authorization, HeaderMapExt};
 
-use webdav_handler::{body::Body, fakels, localfs, memfs, memls, DavConfig, DavHandler};
+use dav_server::{body::Body, fakels, localfs, memfs, memls, DavConfig, DavHandler};
 
 #[derive(Clone)]
 struct Server {

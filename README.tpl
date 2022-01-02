@@ -13,7 +13,7 @@ This crate uses std::future::Future and async/await, so it only works with Rust 
 ### Testing.
 
 ```
-RUST_LOG=webdav_handler=debug cargo run --example sample-litmus-server
+RUST_LOG=dav_server=debug cargo run --example sample-litmus-server
 ```
 
 This will start a server on port 4918, serving an in-memory filesystem.

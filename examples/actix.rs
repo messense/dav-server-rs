@@ -1,8 +1,8 @@
 use std::io;
 
 use actix_web::{web, App, HttpServer};
-use webdav_handler::actix::*;
-use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavConfig, DavHandler};
+use dav_server::actix::*;
+use dav_server::{fakels::FakeLs, localfs::LocalFs, DavConfig, DavHandler};
 
 pub async fn dav_handler(req: DavRequest, davhandler: web::Data<DavHandler>) -> DavResponse {
     if let Some(prefix) = req.prefix() {

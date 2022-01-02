@@ -5,7 +5,7 @@
 //! ```rust ignore
 //! use futures_util::StreamExt;
 //! use futures_executor::block_on;
-//! # use webdav_handler::async_stream;
+//! # use dav_server::async_stream;
 //! use async_stream::AsyncStream;
 //!
 //! let mut strm = AsyncStream::<u8, std::io::Error>::new(|mut tx| async move {

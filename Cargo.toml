@@ -1,5 +1,5 @@
 [package]
-name = "webdav-handler"
+name = "dav-server"
 
 # When releasing to crates.io:
 # - Update html_root_url in src/lib.rs
@@ -9,11 +9,9 @@ name = "webdav-handler"
 version = "0.2.0"
 
 readme = "README.md"
-description = "handler for the HTTP and Webdav protocols with filesystem backend"
-documentation = "https://docs.rs/webdav-handler"
-repository = "https://github.com/miquels/webdav-handler-rs"
-homepage = "https://github.com/miquels/webdav-handler-rs"
-authors = ["Miquel van Smoorenburg <mike@langeraar.net>"]
+description = "Rust WebDAV server library. A fork of the webdav-handler crate."
+repository = "https://github.com/messense/dav-server-rs"
+authors = ["Miquel van Smoorenburg <mike@langeraar.net>", "messense <messense@icloud.com>"]
 edition = "2018"
 license = "Apache-2.0"
 keywords = ["webdav"]
@@ -25,10 +23,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.playground]
 features = ["full"]
-
-[lib]
-name = "webdav_handler"
-path = "src/lib.rs"
 
 [features]
 default = ["handlebars", "localfs", "memfs"]

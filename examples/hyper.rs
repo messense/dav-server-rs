@@ -1,5 +1,5 @@
 use std::convert::Infallible;
-use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
+use dav_server::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 
 #[tokio::main]
 async fn main() {

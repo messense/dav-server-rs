@@ -76,7 +76,7 @@ for other frameworks are also available.
 
 ```rust
 use std::convert::Infallible;
-use webdav_handler::{fakels::FakeLs, localfs::LocalFs, DavHandler};
+use dav_server::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 
 #[tokio::main]
 async fn main() {
@@ -108,18 +108,18 @@ async fn main() {
         .map_err(|e| eprintln!("server error: {}", e));
 }
 ```
-[DavHandler]: https://docs.rs/webdav-handler/0.2.0/webdav_handler/struct.DavHandler.html
-[DavFileSystem]: https://docs.rs/webdav-handler/0.2.0/webdav_handler/fs/index.html
-[DavLockSystem]: https://docs.rs/webdav-handler/0.2.0/webdav_handler/ls/index.html
-[DavProp]: https://docs.rs/webdav-handler/0.2.0/webdav_handler/fs/struct.DavProp.html
+[DavHandler]: https://docs.rs/webdav-handler/0.2.0/dav_server/struct.DavHandler.html
+[DavFileSystem]: https://docs.rs/webdav-handler/0.2.0/dav_server/fs/index.html
+[DavLockSystem]: https://docs.rs/webdav-handler/0.2.0/dav_server/ls/index.html
+[DavProp]: https://docs.rs/webdav-handler/0.2.0/dav_server/fs/struct.DavProp.html
 [`WebDav`]: https://tools.ietf.org/html/rfc4918
 [RFC4918]: https://tools.ietf.org/html/rfc4918
-[`MemLs`]: https://docs.rs/webdav-handler/0.2.0/webdav_handler/memls/index.html
-[`MemFs`]: https://docs.rs/webdav-handler/0.2.0/webdav_handler/memfs/index.html
-[`LocalFs`]: https://docs.rs/webdav-handler/0.2.0/webdav_handler/localfs/index.html
-[`FakeLs`]: https://docs.rs/webdav-handler/0.2.0/webdav_handler/fakels/index.html
-[actix-compat]: https://docs.rs/webdav-handler/0.2.0/webdav_handler/actix/index.html
-[warp-compat]: https://docs.rs/webdav-handler/0.2.0/webdav_handler/warp/index.html
+[`MemLs`]: https://docs.rs/webdav-handler/0.2.0/dav_server/memls/index.html
+[`MemFs`]: https://docs.rs/webdav-handler/0.2.0/dav_server/memfs/index.html
+[`LocalFs`]: https://docs.rs/webdav-handler/0.2.0/dav_server/localfs/index.html
+[`FakeLs`]: https://docs.rs/webdav-handler/0.2.0/dav_server/fakels/index.html
+[actix-compat]: https://docs.rs/webdav-handler/0.2.0/dav_server/actix/index.html
+[warp-compat]: https://docs.rs/webdav-handler/0.2.0/dav_server/warp/index.html
 [README_litmus]: https://github.com/miquels/webdav-handler-rs/blob/master/README.litmus-test.md
 [examples]: https://github.com/miquels/webdav-handler-rs/tree/master/examples/
 [PUT]: https://github.com/miquels/webdav-handler-rs/tree/master/doc/Apache-PUT-with-Content-Range.md
@@ -135,7 +135,7 @@ This crate uses std::future::Future and async/await, so it only works with Rust 
 ### Testing.
 
 ```
-RUST_LOG=webdav_handler=debug cargo run --example sample-litmus-server
+RUST_LOG=dav_server=debug cargo run --example sample-litmus-server
 ```
 
 This will start a server on port 4918, serving an in-memory filesystem.
