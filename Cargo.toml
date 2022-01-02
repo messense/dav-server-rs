@@ -18,7 +18,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 features = ["full"]
 
 [features]
-default = ["handlebars", "localfs", "memfs"]
+default = ["localfs", "memfs"]
 actix-compat = [ "actix-web" ]
 warp-compat = [ "warp", "hyper" ]
 all = [ "actix-compat", "warp-compat" ]
@@ -37,7 +37,6 @@ required-features = [ "warp-compat" ]
 bytes = "1.0.1"
 futures-util = "0.3.16"
 futures-channel = "0.3.16"
-handlebars = { version = "4.1.2", optional = true }
 headers = "0.3.0"
 htmlescape = "0.3.1"
 http = "0.2.3"

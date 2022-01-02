@@ -33,7 +33,6 @@ impl crate::DavInner {
     pub(crate) async fn handle_get(&self, req: &Request<()>) -> DavResult<Response<Body>> {
         let head = req.method() == &http::Method::HEAD;
         let mut path = self.path(&req);
-        let mut is_hbs = false;
 
         // check if it's a directory.
         let meta = self.fs.metadata(&path).await?;
@@ -58,7 +57,6 @@ impl crate::DavInner {
             // If indexfile was set, use it.
             if let Some(indexfile) = self.indexfile.as_ref() {
                 path.push_segment(indexfile.as_bytes());
-                is_hbs = indexfile.ends_with(".hbs");
             } else {
                 // Otherwise see if we need to generate a directory index.
                 return self.handle_autoindex(req, head).await;
@@ -71,14 +69,6 @@ impl crate::DavInner {
         let mut meta = file.metadata().await?;
         if !meta.is_file() {
             return Err(DavError::Status(StatusCode::METHOD_NOT_ALLOWED));
-        }
-
-        // if it was a .hbs file, process it.
-        #[cfg(feature = "handlebars")]
-        if is_hbs {
-            let (f, m) = read_handlebars(req, file).await?;
-            file = f;
-            meta = m;
         }
 
         let len = meta.len();
@@ -186,11 +176,7 @@ impl crate::DavInner {
         }
 
         // set content-length and start if we're not doing multipart.
-        let content_type = if is_hbs {
-            "text/html; charset=UTF-8"
-        } else {
-            path.get_mime_type_str()
-        };
+        let content_type = path.get_mime_type_str();
         if ranges.len() <= 1 {
             res.headers_mut()
                 .typed_insert(davheaders::ContentType(content_type.to_owned()));
@@ -494,160 +480,4 @@ fn display_path(path: &DavPath) -> String {
     }
 
     dpath
-}
-
-use crate::fs::{DavMetaData, FsResult};
-use std::time::SystemTime;
-
-#[cfg(feature = "handlebars")]
-use crate::fs::{DavFile, FsFuture};
-#[cfg(feature = "handlebars")]
-use futures_util::future::{self, FutureExt};
-#[cfg(feature = "handlebars")]
-use handlebars::Handlebars;
-#[cfg(feature = "handlebars")]
-use headers::{authorization::Basic, Authorization};
-#[cfg(feature = "handlebars")]
-use std::collections::HashMap;
-#[cfg(feature = "handlebars")]
-use std::convert::TryInto;
-#[cfg(feature = "handlebars")]
-use std::io::{Error, ErrorKind, SeekFrom};
-
-#[cfg(feature = "handlebars")]
-async fn read_handlebars(
-    req: &Request<()>,
-    mut file: Box<dyn DavFile>,
-) -> DavResult<(Box<dyn DavFile>, Box<dyn DavMetaData>)> {
-    let hbs = Handlebars::new();
-    let mut vars = HashMap::new();
-    let headers = req.headers();
-
-    // Read .hbs file into memory.
-    let len = file.metadata().await?.len();
-    let buffer = file.read_bytes(len.try_into().unwrap()).await?;
-    let data = std::str::from_utf8(&buffer)?;
-
-    // Set variables.
-    for hdr in &["User-Agent", "Host", "Referer"] {
-        if let Some(val) = headers.get(*hdr) {
-            let mut var = "HTTP_".to_string() + &hdr.replace('-', "_");
-            var.make_ascii_uppercase();
-            if let Ok(valstr) = val.to_str() {
-                vars.insert(var, valstr.to_string());
-            }
-        }
-    }
-    match headers.typed_get::<Authorization<Basic>>() {
-        Some(Authorization(basic)) => {
-            vars.insert("AUTH_TYPE".to_string(), "Basic".to_string());
-            vars.insert("REMOTE_USER".to_string(), basic.username().to_string());
-        }
-        _ => {}
-    }
-
-    // Render.
-    let result = hbs
-        .render_template(data, &vars)
-        .map_err(|_| DavError::Status(StatusCode::INTERNAL_SERVER_ERROR))?;
-
-    let mut hbsfile = HbsFile::new(result);
-    let hbsmeta = hbsfile.metadata().await?;
-    Ok((hbsfile, hbsmeta))
-}
-
-#[derive(Clone, Debug)]
-struct HbsMeta {
-    mtime: SystemTime,
-    size: u64,
-}
-
-impl DavMetaData for HbsMeta {
-    fn len(&self) -> u64 {
-        self.size
-    }
-
-    fn created(&self) -> FsResult<SystemTime> {
-        Ok(self.mtime)
-    }
-
-    fn modified(&self) -> FsResult<SystemTime> {
-        Ok(self.mtime)
-    }
-
-    fn is_dir(&self) -> bool {
-        false
-    }
-}
-
-#[cfg(feature = "handlebars")]
-#[derive(Clone, Debug)]
-struct HbsFile {
-    meta: HbsMeta,
-    pos: usize,
-    data: Vec<u8>,
-}
-
-#[cfg(feature = "handlebars")]
-impl HbsFile {
-    fn new(data: String) -> Box<dyn DavFile> {
-        Box::new(HbsFile {
-            meta: HbsMeta {
-                mtime: SystemTime::now(),
-                size: data.len() as u64,
-            },
-            data: data.into_bytes(),
-            pos: 0,
-        })
-    }
-}
-
-#[cfg(feature = "handlebars")]
-impl DavFile for HbsFile {
-    fn metadata<'a>(&'a mut self) -> FsFuture<Box<dyn DavMetaData>> {
-        async move { Ok(Box::new(self.meta.clone()) as Box<dyn DavMetaData>) }.boxed()
-    }
-
-    fn read_bytes<'a>(&'a mut self, count: usize) -> FsFuture<Bytes> {
-        async move {
-            let start = self.pos;
-            let end = std::cmp::min(self.pos + count, self.data.len());
-            self.pos += end - start;
-            let b = Bytes::copy_from_slice(&self.data[start..end]);
-            Ok(b)
-        }
-        .boxed()
-    }
-
-    fn seek<'a>(&'a mut self, pos: SeekFrom) -> FsFuture<u64> {
-        async move {
-            let (start, offset): (u64, i64) = match pos {
-                SeekFrom::Start(npos) => (0, npos as i64),
-                SeekFrom::Current(npos) => (self.pos as u64, npos),
-                SeekFrom::End(npos) => (self.data.len() as u64, npos),
-            };
-            if offset < 0 {
-                if -offset as u64 > start {
-                    return Err(Error::new(ErrorKind::InvalidInput, "invalid seek").into());
-                }
-                self.pos = (start - (-offset as u64)) as usize;
-            } else {
-                self.pos = (start + offset as u64) as usize;
-            }
-            Ok(self.pos as u64)
-        }
-        .boxed()
-    }
-
-    fn write_buf<'a>(&'a mut self, _buf: Box<dyn bytes::Buf + Send>) -> FsFuture<()> {
-        Box::pin(future::ready(Err(FsError::NotImplemented)))
-    }
-
-    fn write_bytes<'a>(&'a mut self, _buf: bytes::Bytes) -> FsFuture<()> {
-        Box::pin(future::ready(Err(FsError::NotImplemented)))
-    }
-
-    fn flush<'a>(&'a mut self) -> FsFuture<()> {
-        Box::pin(future::ready(Ok(())))
-    }
 }
