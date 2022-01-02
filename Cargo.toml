@@ -1,13 +1,6 @@
 [package]
 name = "dav-server"
-
-# When releasing to crates.io:
-# - Update html_root_url in src/lib.rs
-# - Update CHANGELOG.md.
-# - Run ./generate-readme
-# - Create git tag v0.x.y
 version = "0.2.0"
-
 readme = "README.md"
 description = "Rust WebDAV server library. A fork of the webdav-handler crate."
 repository = "https://github.com/messense/dav-server-rs"

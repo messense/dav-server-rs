@@ -1,8 +1,10 @@
-# webdav-handler
+# dav-server-rs
 
 [![Apache-2.0 licensed](https://img.shields.io/badge/license-Apache2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0.txt)
-[![crates.io](https://meritbadge.herokuapp.com/webdav-handler)](https://crates.io/crates/webdav-handler)
-[![Released API docs](https://docs.rs/webdav-handler/badge.svg)](https://docs.rs/webdav-handler)
+[![Crates.io](https://img.shields.io/crates/v/dav-server.svg)](https://crates.io/crates/dav-server)
+[![docs.rs](https://docs.rs/dav-server/badge.svg)](https://docs.rs/dav-server)
+
+A fork of the [webdav-handler-rs](https://github.com/miquels/webdav-handler-rs) project.
 
 ### Generic async HTTP/Webdav handler
 
@@ -108,22 +110,22 @@ async fn main() {
         .map_err(|e| eprintln!("server error: {}", e));
 }
 ```
-[DavHandler]: https://docs.rs/webdav-handler/0.2.0/dav_server/struct.DavHandler.html
-[DavFileSystem]: https://docs.rs/webdav-handler/0.2.0/dav_server/fs/index.html
-[DavLockSystem]: https://docs.rs/webdav-handler/0.2.0/dav_server/ls/index.html
-[DavProp]: https://docs.rs/webdav-handler/0.2.0/dav_server/fs/struct.DavProp.html
+[DavHandler]: https://docs.rs/dav-server/0.2.0/dav_server/struct.DavHandler.html
+[DavFileSystem]: https://docs.rs/dav-server/0.2.0/dav_server/fs/index.html
+[DavLockSystem]: https://docs.rs/dav-server/0.2.0/dav_server/ls/index.html
+[DavProp]: https://docs.rs/dav-server/0.2.0/dav_server/fs/struct.DavProp.html
 [`WebDav`]: https://tools.ietf.org/html/rfc4918
 [RFC4918]: https://tools.ietf.org/html/rfc4918
-[`MemLs`]: https://docs.rs/webdav-handler/0.2.0/dav_server/memls/index.html
-[`MemFs`]: https://docs.rs/webdav-handler/0.2.0/dav_server/memfs/index.html
-[`LocalFs`]: https://docs.rs/webdav-handler/0.2.0/dav_server/localfs/index.html
-[`FakeLs`]: https://docs.rs/webdav-handler/0.2.0/dav_server/fakels/index.html
-[actix-compat]: https://docs.rs/webdav-handler/0.2.0/dav_server/actix/index.html
-[warp-compat]: https://docs.rs/webdav-handler/0.2.0/dav_server/warp/index.html
-[README_litmus]: https://github.com/miquels/webdav-handler-rs/blob/master/README.litmus-test.md
-[examples]: https://github.com/miquels/webdav-handler-rs/tree/master/examples/
-[PUT]: https://github.com/miquels/webdav-handler-rs/tree/master/doc/Apache-PUT-with-Content-Range.md
-[PATCH]: https://github.com/miquels/webdav-handler-rs/tree/master/doc/SABREDAV-partialupdate.md
+[`MemLs`]: https://docs.rs/dav-server/0.2.0/dav_server/memls/index.html
+[`MemFs`]: https://docs.rs/dav-server/0.2.0/dav_server/memfs/index.html
+[`LocalFs`]: https://docs.rs/dav-server/0.2.0/dav_server/localfs/index.html
+[`FakeLs`]: https://docs.rs/dav-server/0.2.0/dav_server/fakels/index.html
+[actix-compat]: https://docs.rs/dav-server/0.2.0/dav_server/actix/index.html
+[warp-compat]: https://docs.rs/dav-server/0.2.0/dav_server/warp/index.html
+[README_litmus]: https://github.com/messense/dav-server-rs/blob/master/README.litmus-test.md
+[examples]: https://github.com/messense/dav-server-rs/tree/master/examples/
+[PUT]: https://github.com/messense/dav-server-rs/tree/master/doc/Apache-PUT-with-Content-Range.md
+[PATCH]: https://github.com/messense/dav-server-rs/tree/master/doc/SABREDAV-partialupdate.md
 [hyper]: https://hyper.rs/
 [warp]: https://crates.io/crates/warp
 [actix-web]: https://actix.rs/
@@ -145,4 +147,5 @@ For other options, run `cargo run --example sample-litmus-server -- --help`
 
  * © 2018, 2019, 2020 XS4ALL Internet bv
  * © 2018, 2019, 2020 Miquel van Smoorenburg
+ * © 2021, 2022 Messense Lv
  * [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0)
