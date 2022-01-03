@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::io::{Read, Write};
 
-use xml;
 use xml::common::XmlVersion;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
@@ -17,7 +16,7 @@ pub(crate) trait ElementExt {
     /// Builder.
     fn ns<S: Into<String>>(self, prefix: S, namespace: S) -> Self;
     /// Builder.
-    fn text<'a, T: Into<String>>(self, t: T) -> Self;
+    fn text<T: Into<String>>(self, t: T) -> Self;
     /// Like parse, but returns DavError.
     fn parse2<R: Read>(r: R) -> Result<Element, DavError>;
     /// Add a child element.
@@ -36,7 +35,7 @@ pub(crate) trait ElementExt {
 
 impl ElementExt for Element {
     fn ns<S: Into<String>>(mut self, prefix: S, namespace: S) -> Element {
-        let mut ns = self.namespaces.unwrap_or(xmltree::Namespace::empty());
+        let mut ns = self.namespaces.unwrap_or_else(xmltree::Namespace::empty);
         ns.force_put(prefix.into(), namespace.into());
         self.namespaces = Some(ns);
         self

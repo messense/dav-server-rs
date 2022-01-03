@@ -45,9 +45,9 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
         let id = self.node_id;
         self.node_id += 1;
         let node = Node {
-            id: id,
+            id,
             parent_id: parent,
-            data: data,
+            data,
             children: HashMap::new(),
         };
         self.nodes.insert(id, node);
@@ -145,7 +145,7 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
     pub fn delete_node(&mut self, id: u64) -> FsResult<Node<K, D>> {
         {
             let n = self.nodes.get(&id).ok_or(FsError::NotFound)?;
-            if n.children.len() > 0 {
+            if !n.children.is_empty() {
                 return Err(FsError::Forbidden);
             }
         }
@@ -180,7 +180,7 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
             let pnode = self.nodes.get(&new_parent).ok_or(FsError::NotFound)?;
             if let Some(cid) = pnode.children.get(&new_name) {
                 let cnode = self.nodes.get(cid).unwrap();
-                if !overwrite || cnode.children.len() > 0 {
+                if !overwrite || !cnode.children.is_empty() {
                     return Err(FsError::Exists);
                 }
                 Some(*cid)

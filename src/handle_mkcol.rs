@@ -9,11 +9,11 @@ use crate::{DavError, DavResult};
 
 impl crate::DavInner {
     pub(crate) async fn handle_mkcol(&self, req: &Request<()>) -> DavResult<Response<Body>> {
-        let mut path = self.path(&req);
+        let mut path = self.path(req);
         let meta = self.fs.metadata(&path).await;
 
         // check the If and If-* headers.
-        let res = if_match_get_tokens(&req, meta.as_ref().ok(), &self.fs, &self.ls, &path).await;
+        let res = if_match_get_tokens(req, meta.as_ref().ok(), &self.fs, &self.ls, &path).await;
         let tokens = match res {
             Ok(t) => t,
             Err(s) => return Err(DavError::Status(s)),
@@ -22,7 +22,7 @@ impl crate::DavInner {
         // if locked check if we hold that lock.
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-            let principal = self.principal.as_ref().map(|s| s.as_str());
+            let principal = self.principal.as_deref();
             if let Err(_l) = locksystem.check(&path, principal, false, false, t) {
                 return Err(DavError::Status(StatusCode::LOCKED));
             }

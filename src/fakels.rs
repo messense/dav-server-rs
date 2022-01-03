@@ -62,14 +62,14 @@ impl DavLockSystem for FakeLs {
         let token = format!("opaquetoken:{}/{}/{}", Uuid::new_v4().to_hyphenated(), d, s);
 
         let lock = DavLock {
-            token: token,
+            token,
             path: path.clone(),
             principal: principal.map(|s| s.to_string()),
             owner: owner.cloned(),
             timeout_at: Some(timeout_at),
             timeout: Some(timeout),
-            shared: shared,
-            deep: deep,
+            shared,
+            deep,
         };
         debug!("lock {} created", &lock.token);
         Ok(lock)
@@ -100,8 +100,8 @@ impl DavLockSystem for FakeLs {
             owner: None,
             timeout_at: Some(timeout_at),
             timeout: Some(timeout),
-            shared: shared,
-            deep: deep,
+            shared,
+            deep,
         };
         Ok(lock)
     }

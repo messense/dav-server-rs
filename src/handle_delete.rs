@@ -37,7 +37,7 @@ async fn dir_status<'a>(res: &'a mut MultiError, path: &'a DavPath, e: FsError) 
 impl crate::DavInner {
     pub(crate) fn delete_items<'a>(
         &'a self,
-        mut res: &'a mut MultiError,
+        res: &'a mut MultiError,
         depth: Depth,
         meta: Box<dyn DavMetaData + 'a>,
         path: &'a DavPath,
@@ -47,21 +47,21 @@ impl crate::DavInner {
                 trace!("delete_items (file) {} {:?}", path, depth);
                 return match self.fs.remove_file(path).await {
                     Ok(x) => Ok(x),
-                    Err(e) => Err(add_status(&mut res, path, e).await),
+                    Err(e) => Err(add_status(res, path, e).await),
                 };
             }
             if depth == Depth::Zero {
                 trace!("delete_items (dir) {} {:?}", path, depth);
                 return match self.fs.remove_dir(path).await {
                     Ok(x) => Ok(x),
-                    Err(e) => Err(add_status(&mut res, path, e).await),
+                    Err(e) => Err(add_status(res, path, e).await),
                 };
             }
 
             // walk over all entries.
             let mut entries = match self.fs.read_dir(path, ReadDirMeta::DataSymlink).await {
                 Ok(x) => Ok(x),
-                Err(e) => Err(add_status(&mut res, path, e).await),
+                Err(e) => Err(add_status(res, path, e).await),
             }?;
 
             let mut result = Ok(());
@@ -71,7 +71,7 @@ impl crate::DavInner {
                 let meta = match dirent.metadata().await {
                     Ok(m) => m,
                     Err(e) => {
-                        result = Err(add_status(&mut res, path, e).await);
+                        result = Err(add_status(res, path, e).await);
                         continue;
                     }
                 };
@@ -82,7 +82,7 @@ impl crate::DavInner {
 
                 // do the actual work. If this fails with a non-fs related error,
                 // return immediately.
-                if let Err(e) = self.delete_items(&mut res, depth, meta, &npath).await {
+                if let Err(e) = self.delete_items(res, depth, meta, &npath).await {
                     match e {
                         DavError::Status(_) => {
                             result = Err(e);
@@ -99,7 +99,7 @@ impl crate::DavInner {
 
             match self.fs.remove_dir(path).await {
                 Ok(x) => Ok(x),
-                Err(e) => Err(dir_status(&mut res, path, e).await),
+                Err(e) => Err(dir_status(res, path, e).await),
             }
         }
         .boxed()
@@ -114,7 +114,7 @@ impl crate::DavInner {
             _ => return Err(DavError::Status(StatusCode::BAD_REQUEST)),
         };
 
-        let mut path = self.path(&req);
+        let mut path = self.path(req);
         let meta = self.fs.symlink_metadata(&path).await?;
         if meta.is_symlink() {
             if let Ok(m2) = self.fs.metadata(&path).await {
@@ -124,7 +124,7 @@ impl crate::DavInner {
         path.add_slash_if(meta.is_dir());
 
         // check the If and If-* headers.
-        let tokens_res = if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path).await;
+        let tokens_res = if_match_get_tokens(req, Some(&meta), &self.fs, &self.ls, &path).await;
         let tokens = match tokens_res {
             Ok(t) => t,
             Err(s) => return Err(DavError::Status(s)),
@@ -135,7 +135,7 @@ impl crate::DavInner {
         // just a simple status.
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-            let principal = self.principal.as_ref().map(|s| s.as_str());
+            let principal = self.principal.as_deref();
             if let Err(_l) = locksystem.check(&path, principal, false, true, t) {
                 return Err(DavError::Status(StatusCode::LOCKED));
             }

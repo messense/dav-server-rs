@@ -25,7 +25,7 @@ lazy_static! {
 }
 
 // Do a case-insensitive path lookup.
-pub(crate) fn resolve<'a>(base: impl Into<PathBuf>, path: &DavPath) -> PathBuf {
+pub(crate) fn resolve(base: impl Into<PathBuf>, path: &DavPath) -> PathBuf {
     let base = base.into();
     let path = path.as_rel_ospath();
 
@@ -43,7 +43,7 @@ pub(crate) fn resolve<'a>(base: impl Into<PathBuf>, path: &DavPath) -> PathBuf {
     };
 
     // deref in advance: first lazy_static, then Arc.
-    let cache = &*(&*CACHE);
+    let cache = &*CACHE;
 
     // In the cache?
     if let Some((path, _)) = cache.get(&fullpath) {
@@ -57,7 +57,7 @@ pub(crate) fn resolve<'a>(base: impl Into<PathBuf>, path: &DavPath) -> PathBuf {
 
     // we need the path as a list of segments.
     let segs = path.iter().collect::<Vec<_>>();
-    if segs.len() == 0 {
+    if segs.is_empty() {
         return fullpath;
     }
 

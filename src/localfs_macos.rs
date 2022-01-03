@@ -146,7 +146,7 @@ impl DUCacheBuilder {
     // return a new instance.
     pub fn start(dir: PathBuf) -> DUCacheBuilder {
         DUCacheBuilder {
-            dir: dir,
+            dir,
             entries: Vec::new(),
             done: false,
         }
@@ -201,8 +201,8 @@ impl DUCacheBuilder {
         path.push(".");
         let entry = Entry {
             time: now,
-            dir_modtime: dir_modtime,
-            dir_id: dir_id,
+            dir_modtime,
+            dir_id,
         };
         cache.put(path, entry);
 
@@ -213,8 +213,8 @@ impl DUCacheBuilder {
             path.push(filename);
             let entry = Entry {
                 time: now,
-                dir_modtime: dir_modtime,
-                dir_id: dir_id,
+                dir_modtime,
+                dir_id,
             };
             cache.put(path, entry);
         }
