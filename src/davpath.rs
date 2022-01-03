@@ -109,29 +109,26 @@ fn encode_path(src: &[u8]) -> Vec<u8> {
 // - do not allow NUL or '/' in segments.
 fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
     // must consist of printable ASCII
-    if rp.iter().any(|&x| x < 32 || x > 126) {
-        Err(ParseError::InvalidPath)?;
+    if rp.iter().any(|&x| !(32..=126).contains(&x)) {
+        return Err(ParseError::InvalidPath);
     }
 
     // don't allow fragments. query part gets deleted.
     let mut rawpath = rp;
     if let Some(pos) = rawpath.iter().position(|&x| x == b'?' || x == b'#') {
         if rawpath[pos] == b'#' {
-            Err(ParseError::InvalidPath)?;
+            return Err(ParseError::InvalidPath);
         }
         rawpath = &rawpath[..pos];
     }
 
     // must start with "/"
     if rawpath.is_empty() || rawpath[0] != b'/' {
-        Err(ParseError::InvalidPath)?;
+        return Err(ParseError::InvalidPath);
     }
 
     // split up in segments
-    let isdir = match rawpath.last() {
-        Some(x) if *x == b'/' => true,
-        _ => false,
-    };
+    let isdir = matches!(rawpath.last(), Some(x) if *x == b'/');
     let segments = rawpath.split(|c| *c == b'/');
     let mut v: Vec<&[u8]> = Vec::new();
     for segment in segments {
@@ -146,7 +143,7 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
             }
             s => {
                 if let Err(e) = valid_segment(s) {
-                    Err(e)?;
+                    return Err(e);
                 }
                 v.push(b"/");
                 v.push(s);
@@ -230,7 +227,7 @@ impl DavPath {
                 fullpath: b"*".to_vec(),
                 pfxlen: None,
             }),
-            path if path.starts_with("/") => DavPath::from_str_and_prefix(path, prefix),
+            path if path.starts_with('/') => DavPath::from_str_and_prefix(path, prefix),
             _ => Err(ParseError::InvalidPath),
         }
     }
@@ -268,7 +265,7 @@ impl DavPath {
     // as URL encoded string, with prefix.
     pub(crate) fn as_url_string_with_prefix_debug(&self) -> String {
         let mut p = encode_path(self.get_path());
-        if self.get_prefix().len() > 0 {
+        if !self.get_prefix().is_empty() {
             let mut u = encode_path(self.get_prefix());
             u.extend_from_slice(b"[");
             u.extend_from_slice(&p);
@@ -293,10 +290,10 @@ impl DavPath {
         let mut segs = self
             .fullpath
             .split(|&c| c == b'/')
-            .filter(|e| e.len() > 0)
+            .filter(|e| !e.is_empty())
             .collect::<Vec<&[u8]>>();
         segs.pop();
-        if segs.len() > 0 {
+        if !segs.is_empty() {
             segs.push(b"");
         }
         segs.insert(0, b"");
@@ -370,7 +367,11 @@ impl DavPathRef {
     /// Used to `push()` onto a pathbuf.
     pub fn as_rel_ospath(&self) -> &Path {
         let spath = self.get_path();
-        let mut path = if spath.len() > 0 { &spath[1..] } else { spath };
+        let mut path = if !spath.is_empty() {
+            &spath[1..]
+        } else {
+            spath
+        };
         if path.ends_with(b"/") {
             path = &path[..path.len() - 1];
         }
@@ -404,9 +405,9 @@ impl DavPathRef {
         let segs = self
             .get_path()
             .split(|&c| c == b'/')
-            .filter(|e| e.len() > 0)
+            .filter(|e| !e.is_empty())
             .collect::<Vec<&[u8]>>();
-        if segs.len() > 0 {
+        if !segs.is_empty() {
             segs[segs.len() - 1]
         } else {
             b""

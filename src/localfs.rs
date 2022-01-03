@@ -143,9 +143,9 @@ impl LocalFs {
     ) -> Box<LocalFs> {
         let inner = LocalFsInner {
             basedir: base.as_ref().to_path_buf(),
-            public: public,
-            macos: macos,
-            case_insensitive: case_insensitive,
+            public,
+            macos,
+            case_insensitive,
             is_file: false,
             fs_access_guard: None,
         };
@@ -163,7 +163,7 @@ impl LocalFs {
     pub fn new_file<P: AsRef<Path>>(file: P, public: bool) -> Box<LocalFs> {
         let inner = LocalFsInner {
             basedir: file.as_ref().to_path_buf(),
-            public: public,
+            public,
             macos: false,
             case_insensitive: false,
             is_file: true,
@@ -187,11 +187,11 @@ impl LocalFs {
     ) -> Box<LocalFs> {
         let inner = LocalFsInner {
             basedir: base.as_ref().to_path_buf(),
-            public: public,
-            macos: macos,
-            case_insensitive: case_insensitive,
+            public,
+            macos,
+            case_insensitive,
             is_file: false,
-            fs_access_guard: fs_access_guard,
+            fs_access_guard,
         };
         Box::new({
             LocalFs {
@@ -210,7 +210,7 @@ impl LocalFs {
 
     fn fspath(&self, path: &DavPath) -> PathBuf {
         if self.inner.case_insensitive {
-            crate::localfs_windows::resolve(&self.inner.basedir, &path)
+            crate::localfs_windows::resolve(&self.inner.basedir, path)
         } else {
             let mut pathbuf = self.inner.basedir.clone();
             if !self.inner.is_file {
@@ -498,10 +498,7 @@ fn read_batch(
                     ReadDirMeta::DataSymlink => Meta::Data(entry.metadata()),
                     ReadDirMeta::None => Meta::Fs(fs.clone()),
                 };
-                let d = LocalFsDirEntry {
-                    meta: meta,
-                    entry: entry,
-                };
+                let d = LocalFsDirEntry { meta, entry };
                 buffer.push_back(Ok(d))
             }
             Some(Err(e)) => {
@@ -541,7 +538,7 @@ impl<'a> Stream for LocalFsReadDir {
         let this = Pin::into_inner(self);
 
         // If the buffer is empty, fill it.
-        if this.buffer.len() == 0 {
+        if this.buffer.is_empty() {
             // If we have no pending future, create one.
             if this.fut.is_none() {
                 if this.iterator.is_none() {
@@ -557,11 +554,11 @@ impl<'a> Stream for LocalFsReadDir {
                 Poll::Ready(batch) => {
                     this.fut.take();
                     if let Some(ref mut nb) = this.dir_cache {
-                        for e in &batch.buffer {
+                        batch.buffer.iter().for_each(|e| {
                             if let Ok(ref e) = e {
                                 nb.add(e.entry.file_name());
                             }
-                        }
+                        });
                     }
                     this.buffer = batch.buffer;
                     this.iterator = batch.iterator;
@@ -619,7 +616,7 @@ impl LocalFsDirEntry {
 }
 
 impl DavDirEntry for LocalFsDirEntry {
-    fn metadata<'a>(&'a self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata(&self) -> FsFuture<Box<dyn DavMetaData>> {
         match self.meta {
             Meta::Data(ref meta) => {
                 let m = match meta {
@@ -649,21 +646,21 @@ impl DavDirEntry for LocalFsDirEntry {
         self.entry.file_name().to_str().unwrap().as_bytes().to_vec()
     }
 
-    fn is_dir<'a>(&'a self) -> FsFuture<bool> {
+    fn is_dir(&self) -> FsFuture<bool> {
         Box::pin(self.is_a(Is::Dir))
     }
 
-    fn is_file<'a>(&'a self) -> FsFuture<bool> {
+    fn is_file(&self) -> FsFuture<bool> {
         Box::pin(self.is_a(Is::File))
     }
 
-    fn is_symlink<'a>(&'a self) -> FsFuture<bool> {
+    fn is_symlink(&self) -> FsFuture<bool> {
         Box::pin(self.is_a(Is::Symlink))
     }
 }
 
 impl DavFile for LocalFsFile {
-    fn metadata<'a>(&'a mut self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata(&mut self) -> FsFuture<Box<dyn DavMetaData>> {
         async move {
             let file = self.0.take().unwrap();
             let (meta, file) = blocking(move || (file.metadata(), file)).await;
@@ -673,7 +670,7 @@ impl DavFile for LocalFsFile {
         .boxed()
     }
 
-    fn write_bytes<'a>(&'a mut self, buf: Bytes) -> FsFuture<()> {
+    fn write_bytes(&mut self, buf: Bytes) -> FsFuture<()> {
         async move {
             let mut file = self.0.take().unwrap();
             let (res, file) = blocking(move || (file.write_all(&buf), file)).await;
@@ -683,7 +680,7 @@ impl DavFile for LocalFsFile {
         .boxed()
     }
 
-    fn write_buf<'a>(&'a mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<()> {
+    fn write_buf(&mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<()> {
         async move {
             let mut file = self.0.take().unwrap();
             let (res, file) = blocking(move || {
@@ -703,7 +700,7 @@ impl DavFile for LocalFsFile {
         .boxed()
     }
 
-    fn read_bytes<'a>(&'a mut self, count: usize) -> FsFuture<Bytes> {
+    fn read_bytes(&mut self, count: usize) -> FsFuture<Bytes> {
         async move {
             let mut file = self.0.take().unwrap();
             let (res, file) = blocking(move || {
@@ -724,7 +721,7 @@ impl DavFile for LocalFsFile {
         .boxed()
     }
 
-    fn seek<'a>(&'a mut self, pos: SeekFrom) -> FsFuture<u64> {
+    fn seek(&mut self, pos: SeekFrom) -> FsFuture<u64> {
         async move {
             let mut file = self.0.take().unwrap();
             let (res, file) = blocking(move || (file.seek(pos), file)).await;
@@ -734,7 +731,7 @@ impl DavFile for LocalFsFile {
         .boxed()
     }
 
-    fn flush<'a>(&'a mut self) -> FsFuture<()> {
+    fn flush(&mut self) -> FsFuture<()> {
         async move {
             let mut file = self.0.take().unwrap();
             let (res, file) = blocking(move || (file.flush(), file)).await;

@@ -34,10 +34,10 @@ impl crate::DavInner {
             }
         };
 
-        let path = self.path(&req);
+        let path = self.path(req);
         let meta = self.fs.metadata(&path).await;
         let is_unmapped = meta.is_err();
-        let is_file = meta.and_then(|m| Ok(m.is_file())).unwrap_or_default();
+        let is_file = meta.map(|m| m.is_file()).unwrap_or_default();
         let is_star = path.is_star() && method == DavMethod::Options;
 
         let mut v = Vec::new();
@@ -64,7 +64,7 @@ impl crate::DavInner {
             mm(&mut v, "UNLOCK", DavMethod::Unlock);
         }
 
-        let a = v.clone().join(",").parse().unwrap();
+        let a = v.join(",").parse().unwrap();
         res.headers_mut().insert("allow", a);
 
         Ok(res)

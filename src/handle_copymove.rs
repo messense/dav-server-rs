@@ -32,7 +32,7 @@ impl crate::DavInner {
         topdest: &'a DavPath,
         dest: &'a DavPath,
         depth: Depth,
-        mut multierror: &'a mut MultiError,
+        multierror: &'a mut MultiError,
     ) -> BoxFuture<'a, DavResult<()>> {
         async move {
             // when doing "COPY /a/b /a/b/c make sure we don't recursively
@@ -43,7 +43,7 @@ impl crate::DavInner {
 
             // source must exist.
             let meta = match self.fs.metadata(source).await {
-                Err(e) => return add_status(&mut multierror, source, e).await,
+                Err(e) => return add_status(multierror, source, e).await,
                 Ok(m) => m,
             };
 
@@ -53,7 +53,7 @@ impl crate::DavInner {
                     Ok(_) => Ok(()),
                     Err(e) => {
                         debug!("do_copy: self.fs.copy error: {:?}", e);
-                        add_status(&mut multierror, source, e).await
+                        add_status(multierror, source, e).await
                     }
                 };
             }
@@ -64,7 +64,7 @@ impl crate::DavInner {
             if let Err(e) = self.fs.create_dir(dest).await {
                 if depth != Depth::Zero || e != FsError::Exists {
                     debug!("do_copy: self.fs.create_dir({}) error: {:?}", dest, e);
-                    return add_status(&mut multierror, dest, e).await;
+                    return add_status(multierror, dest, e).await;
                 }
             }
 
@@ -77,7 +77,7 @@ impl crate::DavInner {
                 Ok(entries) => entries,
                 Err(e) => {
                     debug!("do_copy: self.fs.read_dir error: {:?}", e);
-                    return add_status(&mut multierror, source, e).await;
+                    return add_status(multierror, source, e).await;
                 }
             };
 
@@ -88,7 +88,7 @@ impl crate::DavInner {
                 // NOTE: dirent.metadata() behaves like symlink_metadata()
                 let meta = match dirent.metadata().await {
                     Ok(meta) => meta,
-                    Err(e) => return add_status(&mut multierror, source, e).await,
+                    Err(e) => return add_status(multierror, source, e).await,
                 };
                 let name = dirent.name();
                 let mut nsrc = source.clone();
@@ -131,10 +131,10 @@ impl crate::DavInner {
         &'a self,
         source: &'a DavPath,
         dest: &'a DavPath,
-        mut multierror: &'a mut MultiError,
+        multierror: &'a mut MultiError,
     ) -> DavResult<()> {
         if let Err(e) = self.fs.rename(source, dest).await {
-            add_status(&mut multierror, &source, e).await
+            add_status(multierror, source, e).await
         } else {
             Ok(())
         }
@@ -164,7 +164,7 @@ impl crate::DavInner {
 
         // for MOVE, tread with care- if the path ends in "/" but it actually
         // is a symlink, we want to move the symlink, not what it points to.
-        let mut path = self.path(&req);
+        let mut path = self.path(req);
         let meta = if method == DavMethod::Move {
             let meta = self.fs.symlink_metadata(&path).await?;
             if meta.is_symlink() {
@@ -212,7 +212,7 @@ impl crate::DavInner {
         }
 
         // check If and If-* headers for source URL
-        let tokens = match if_match_get_tokens(&req, Some(&meta), &self.fs, &self.ls, &path).await {
+        let tokens = match if_match_get_tokens(req, Some(&meta), &self.fs, &self.ls, &path).await {
             Ok(t) => t,
             Err(s) => return Err(s.into()),
         };
@@ -222,7 +222,7 @@ impl crate::DavInner {
         // just a simple status.
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-            let principal = self.principal.as_ref().map(|s| s.as_str());
+            let principal = self.principal.as_deref();
             if method == DavMethod::Move {
                 // for MOVE check if source path is locked
                 if let Err(_l) = locksystem.check(&path, principal, false, true, t.clone()) {
@@ -244,9 +244,10 @@ impl crate::DavInner {
                 // see if we need to delete the destination first.
                 if overwrite && exists && depth != Depth::Zero && !dest_is_file {
                     trace!("handle_copymove: deleting destination {}", dest);
-                    if let Err(_) = self
+                    if self
                         .delete_items(&mut multierror, Depth::Infinity, dmeta.unwrap(), &dest)
                         .await
+                        .is_err()
                     {
                         return Ok(());
                     }
@@ -258,9 +259,10 @@ impl crate::DavInner {
 
                 // COPY or MOVE.
                 if method == DavMethod::Copy {
-                    if let Ok(_) = self
+                    if self
                         .do_copy(&path, &dest, &dest, depth, &mut multierror)
                         .await
+                        .is_ok()
                     {
                         let s = if exists {
                             StatusCode::NO_CONTENT
@@ -271,7 +273,7 @@ impl crate::DavInner {
                     }
                 } else {
                     // move and if successful, remove locks at old location.
-                    if let Ok(_) = self.do_move(&path, &dest, &mut multierror).await {
+                    if self.do_move(&path, &dest, &mut multierror).await.is_ok() {
                         if let Some(ref locksystem) = self.ls {
                             locksystem.delete(&path).ok();
                         }

@@ -56,6 +56,18 @@ jobs:
         with:
           command: test
           args: --all-features --all
+      - name: litmus protocol compliance test
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cargo build --example sample-litmus-server
+          cargo run --example sample-litmus-server -- --memfs --auth &
+          sleep 5
+          curl -O http://www.webdav.org/neon/litmus/litmus-0.13.tar.gz
+          tar xf litmus-0.13.tar.gz
+          cd litmus-0.13
+          ./configure
+          make
+          TESTS="http basic copymove locks props" HTDOCS=htdocs TESTROOT=. ./litmus http://localhost:4918/ someuser somepass
 
   fmt:
     name: Rustfmt

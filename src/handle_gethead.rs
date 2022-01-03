@@ -3,7 +3,6 @@ use std::io::Write;
 
 use futures_util::StreamExt;
 use headers::HeaderMapExt;
-use htmlescape;
 use http::{status::StatusCode, Request, Response};
 
 use bytes::Bytes;
@@ -31,8 +30,8 @@ const READ_BUF_SIZE: usize = 16384;
 
 impl crate::DavInner {
     pub(crate) async fn handle_get(&self, req: &Request<()>) -> DavResult<Response<Body>> {
-        let head = req.method() == &http::Method::HEAD;
-        let mut path = self.path(&req);
+        let head = req.method() == http::Method::HEAD;
+        let mut path = self.path(req);
 
         // check if it's a directory.
         let meta = self.fs.metadata(&path).await?;
@@ -101,7 +100,7 @@ impl crate::DavInner {
             .typed_insert(headers::AcceptRanges::bytes());
 
         // handle the if-headers.
-        if let Some(s) = conditional::if_match(&req, Some(&meta), &self.fs, &self.ls, &path).await {
+        if let Some(s) = conditional::if_match(req, Some(&meta), &self.fs, &self.ls, &path).await {
             *res.status_mut() = s;
             no_body = true;
             do_range = false;
@@ -136,9 +135,13 @@ impl crate::DavInner {
             }
         }
 
-        if ranges.len() > 0 {
+        if !ranges.is_empty() {
             // seek to beginning of the first range.
-            if let Err(_) = file.seek(std::io::SeekFrom::Start(ranges[0].start)).await {
+            if file
+                .seek(std::io::SeekFrom::Start(ranges[0].start))
+                .await
+                .is_err()
+            {
                 let r = format!("bytes */{}", len);
                 res.headers_mut()
                     .insert("Content-Range", r.parse().unwrap());
@@ -148,7 +151,7 @@ impl crate::DavInner {
             }
         }
 
-        if ranges.len() > 0 {
+        if !ranges.is_empty() {
             curpos = ranges[0].start;
 
             *res.status_mut() = StatusCode::PARTIAL_CONTENT;
@@ -227,7 +230,7 @@ impl crate::DavInner {
                             len
                         );
                         let _ = writeln!(hdrs, "Content-Type: {}", content_type);
-                        let _ = writeln!(hdrs, "");
+                        let _ = writeln!(hdrs);
                         tx.send(Bytes::from(hdrs)).await;
                     }
 
@@ -235,7 +238,7 @@ impl crate::DavInner {
                     while count > 0 {
                         let blen = cmp::min(count, read_buf_size as u64) as usize;
                         let mut buf = file.read_bytes(blen).await?;
-                        if buf.len() == 0 {
+                        if buf.is_empty() {
                             // this is a cop out. if the file got truncated, just
                             // return zeroed bytes instead of file content.
                             let n = if count > 4096 { 4096 } else { count as usize };
@@ -264,7 +267,7 @@ impl crate::DavInner {
         head: bool,
     ) -> DavResult<Response<Body>> {
         let mut res = Response::new(Body::empty());
-        let path = self.path(&req);
+        let path = self.path(req);
 
         // Is PROPFIND explicitly allowed?
         let allow_propfind = self
@@ -320,7 +323,7 @@ impl crate::DavInner {
                         dirents.push(Dirent {
                             path: npath.with_prefix().as_url_string(),
                             name: String::from_utf8_lossy(&name).to_string(),
-                            meta: meta,
+                            meta,
                         });
                     }
                 }
@@ -452,18 +455,18 @@ fn display_path(path: &DavPath) -> String {
     let path_dsp = String::from_utf8_lossy(path.with_prefix().as_bytes());
     let path_url = path.with_prefix().as_url_string();
     let dpath_segs = path_dsp
-        .split("/")
+        .split('/')
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>();
     let upath_segs = path_url
-        .split("/")
+        .split('/')
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>();
     let mut dpath = String::new();
     let mut upath = String::new();
 
-    if dpath_segs.len() == 0 {
-        dpath.push_str("/");
+    if dpath_segs.is_empty() {
+        dpath.push('/');
     } else {
         dpath.push_str("<a href = \"/\">/</a>");
     }

@@ -14,7 +14,7 @@ use crate::davheaders;
 use crate::fs::*;
 use crate::{DavError, DavResult};
 
-const SABRE: &'static str = "application/x-sabredav-partialupdate";
+const SABRE: &str = "application/x-sabredav-partialupdate";
 
 // This is a nice hack. If the type 'E' is actually an io::Error or a Box<io::Error>,
 // convert it back into a real io::Error. If it is a DavError or a Box<DavError>,
@@ -88,7 +88,7 @@ impl crate::DavInner {
                 oo.size = Some(count);
             }
         }
-        let path = self.path(&req);
+        let path = self.path(req);
         let meta = self.fs.metadata(&path).await;
 
         // close connection on error.
@@ -96,7 +96,7 @@ impl crate::DavInner {
         res.headers_mut().typed_insert(headers::Connection::close());
 
         // SabreDAV style PATCH?
-        if req.method() == &http::Method::PATCH {
+        if req.method() == http::Method::PATCH {
             if !req
                 .headers()
                 .typed_get::<davheaders::ContentType>()
@@ -163,7 +163,7 @@ impl crate::DavInner {
         }
 
         // check the If and If-* headers.
-        let tokens = if_match_get_tokens(&req, meta.as_ref().ok(), &self.fs, &self.ls, &path);
+        let tokens = if_match_get_tokens(req, meta.as_ref().ok(), &self.fs, &self.ls, &path);
         let tokens = match tokens.await {
             Ok(t) => t,
             Err(s) => return Err(DavError::StatusClose(s)),
@@ -172,7 +172,7 @@ impl crate::DavInner {
         // if locked check if we hold that lock.
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-            let principal = self.principal.as_ref().map(|s| s.as_str());
+            let principal = self.principal.as_deref();
             if let Err(_l) = locksystem.check(&path, principal, false, false, t) {
                 return Err(DavError::StatusClose(SC::LOCKED));
             }
@@ -182,14 +182,14 @@ impl crate::DavInner {
         if req
             .headers()
             .typed_get::<davheaders::IfMatch>()
-            .map_or(false, |h| &h.0 == &davheaders::ETagList::Star)
+            .map_or(false, |h| h.0 == davheaders::ETagList::Star)
         {
             oo.create = false;
         }
         if req
             .headers()
             .typed_get::<davheaders::IfNoneMatch>()
-            .map_or(false, |h| &h.0 == &davheaders::ETagList::Star)
+            .map_or(false, |h| h.0 == davheaders::ETagList::Star)
         {
             oo.create_new = true;
         }
@@ -209,7 +209,7 @@ impl crate::DavInner {
 
         if do_range {
             // seek to beginning of requested data.
-            if let Err(_) = file.seek(std::io::SeekFrom::Start(start)).await {
+            if file.seek(std::io::SeekFrom::Start(start)).await.is_err() {
                 return Err(DavError::StatusClose(SC::RANGE_NOT_SATISFIABLE));
             }
         }

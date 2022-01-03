@@ -33,23 +33,23 @@ impl crate::DavInner {
         let mut res = Response::new(Body::empty());
 
         // path and meta
-        let mut path = self.path(&req);
+        let mut path = self.path(req);
         let meta = match self.fs.metadata(&path).await {
             Ok(meta) => Some(self.fixpath(&mut res, &mut path, meta)),
             Err(_) => None,
         };
 
         // lock refresh?
-        if xmldata.len() == 0 {
+        if xmldata.is_empty() {
             // get locktoken
-            let (_, tokens) = dav_if_match(&req, &self.fs, &self.ls, &path).await;
+            let (_, tokens) = dav_if_match(req, &self.fs, &self.ls, &path).await;
             if tokens.len() != 1 {
                 return Err(SC::BAD_REQUEST.into());
             }
 
             // try refresh
             // FIXME: you can refresh a lock owned by someone else. is that OK?
-            let timeout = get_timeout(&req, true, false);
+            let timeout = get_timeout(req, true, false);
             let lock = match locksystem.refresh(&path, &tokens[0], timeout) {
                 Ok(lock) => lock,
                 Err(_) => return Err(SC::PRECONDITION_FAILED.into()),
@@ -75,7 +75,7 @@ impl crate::DavInner {
         };
 
         // handle the if-headers.
-        if let Some(s) = if_match(&req, meta.as_ref(), &self.fs, &self.ls, &path).await {
+        if let Some(s) = if_match(req, meta.as_ref(), &self.fs, &self.ls, &path).await {
             return Err(s.into());
         }
 
@@ -85,14 +85,14 @@ impl crate::DavInner {
         if req
             .headers()
             .typed_get::<davheaders::IfMatch>()
-            .map_or(false, |h| &h.0 == &davheaders::ETagList::Star)
+            .map_or(false, |h| h.0 == davheaders::ETagList::Star)
         {
             oo.create = false;
         }
         if req
             .headers()
             .typed_get::<davheaders::IfNoneMatch>()
-            .map_or(false, |h| &h.0 == &davheaders::ETagList::Star)
+            .map_or(false, |h| h.0 == davheaders::ETagList::Star)
         {
             oo.create_new = true;
         }
@@ -135,21 +135,21 @@ impl crate::DavInner {
         }
 
         // sanity check.
-        if !shared.is_some() || !locktype {
+        if shared.is_none() || !locktype {
             return Err(DavError::XmlParseError);
         };
         let shared = shared.unwrap();
 
         // create lock
-        let timeout = get_timeout(&req, false, shared);
-        let principal = self.principal.as_ref().map(|s| s.as_str());
+        let timeout = get_timeout(req, false, shared);
+        let principal = self.principal.as_deref();
         let lock = match locksystem.lock(&path, principal, owner.as_ref(), timeout, shared, deep) {
             Ok(lock) => lock,
             Err(_) => return Err(SC::LOCKED.into()),
         };
 
         // try to create file if it doesn't exist.
-        if let None = meta {
+        if meta.is_none() {
             match self.fs.open(&path, oo).await {
                 Ok(_) => {}
                 Err(FsError::NotFound) | Err(FsError::Exists) => {
@@ -173,7 +173,7 @@ impl crate::DavInner {
         let ct = "application/xml; charset=utf-8".to_owned();
         res.headers_mut().typed_insert(davheaders::LockToken(lt));
         res.headers_mut().typed_insert(davheaders::ContentType(ct));
-        if let None = meta {
+        if meta.is_none() {
             *res.status_mut() = SC::CREATED;
         } else {
             *res.status_mut() = SC::OK;
@@ -185,7 +185,7 @@ impl crate::DavInner {
         let buffer = emitter.into_inner().take();
 
         *res.body_mut() = Body::from(buffer);
-        return Ok(res);
+        Ok(res)
     }
 
     pub(crate) async fn handle_unlock(&self, req: &Request<()>) -> DavResult<Response<Body>> {
@@ -204,7 +204,7 @@ impl crate::DavInner {
 
         let mut res = Response::new(Body::empty());
 
-        let mut path = self.path(&req);
+        let mut path = self.path(req);
         if let Ok(meta) = self.fs.metadata(&path).await {
             self.fixpath(&mut res, &mut path, meta);
         }
@@ -269,7 +269,7 @@ fn get_timeout(req: &Request<()>, refresh: bool, shared: bool) -> Option<Duratio
         Duration::new(600, 0)
     };
     match req.headers().typed_get::<davheaders::Timeout>() {
-        Some(davheaders::Timeout(ref vec)) if vec.len() > 0 => match vec[0] {
+        Some(davheaders::Timeout(ref vec)) if !vec.is_empty() => match vec[0] {
             DavTimeout::Infinite => {
                 if refresh {
                     None

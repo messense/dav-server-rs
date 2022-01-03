@@ -2,7 +2,6 @@ use std::error::Error;
 use std::io::{self, ErrorKind};
 
 use http::StatusCode;
-use xml;
 
 use crate::fs::FsError;
 
@@ -32,11 +31,11 @@ impl Error for DavError {
     }
 
     fn cause(&self) -> Option<&dyn Error> {
-        match self {
-            &DavError::FsError(ref e) => Some(e),
-            &DavError::IoError(ref e) => Some(e),
-            &DavError::XmlReaderError(ref e) => Some(e),
-            &DavError::XmlWriterError(ref e) => Some(e),
+        match *self {
+            DavError::FsError(ref e) => Some(e),
+            DavError::IoError(ref e) => Some(e),
+            DavError::XmlReaderError(ref e) => Some(e),
+            DavError::XmlWriterError(ref e) => Some(e),
             _ => None,
         }
     }
@@ -44,10 +43,10 @@ impl Error for DavError {
 
 impl std::fmt::Display for DavError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            &DavError::XmlReaderError(_) => write!(f, "XML parse error"),
-            &DavError::XmlWriterError(_) => write!(f, "XML generate error"),
-            &DavError::IoError(_) => write!(f, "I/O error"),
+        match *self {
+            DavError::XmlReaderError(_) => write!(f, "XML parse error"),
+            DavError::XmlWriterError(_) => write!(f, "XML generate error"),
+            DavError::IoError(_) => write!(f, "I/O error"),
             _ => write!(f, "{:?}", self),
         }
     }
@@ -159,33 +158,31 @@ fn fserror_to_status(e: &FsError) -> StatusCode {
 
 impl DavError {
     pub(crate) fn statuscode(&self) -> StatusCode {
-        match self {
-            &DavError::XmlReadError => StatusCode::BAD_REQUEST,
-            &DavError::XmlParseError => StatusCode::BAD_REQUEST,
-            &DavError::InvalidPath => StatusCode::BAD_REQUEST,
-            &DavError::IllegalPath => StatusCode::BAD_GATEWAY,
-            &DavError::ForbiddenPath => StatusCode::FORBIDDEN,
-            &DavError::UnknownDavMethod => StatusCode::NOT_IMPLEMENTED,
-            &DavError::ChanError => StatusCode::INTERNAL_SERVER_ERROR,
-            &DavError::Utf8Error => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            &DavError::IoError(ref e) => ioerror_to_status(e),
-            &DavError::FsError(ref e) => fserror_to_status(e),
-            &DavError::Status(e) => e,
-            &DavError::StatusClose(e) => e,
-            &DavError::XmlReaderError(ref _e) => StatusCode::BAD_REQUEST,
-            &DavError::XmlWriterError(ref _e) => StatusCode::INTERNAL_SERVER_ERROR,
+        match *self {
+            DavError::XmlReadError => StatusCode::BAD_REQUEST,
+            DavError::XmlParseError => StatusCode::BAD_REQUEST,
+            DavError::InvalidPath => StatusCode::BAD_REQUEST,
+            DavError::IllegalPath => StatusCode::BAD_GATEWAY,
+            DavError::ForbiddenPath => StatusCode::FORBIDDEN,
+            DavError::UnknownDavMethod => StatusCode::NOT_IMPLEMENTED,
+            DavError::ChanError => StatusCode::INTERNAL_SERVER_ERROR,
+            DavError::Utf8Error => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            DavError::IoError(ref e) => ioerror_to_status(e),
+            DavError::FsError(ref e) => fserror_to_status(e),
+            DavError::Status(e) => e,
+            DavError::StatusClose(e) => e,
+            DavError::XmlReaderError(ref _e) => StatusCode::BAD_REQUEST,
+            DavError::XmlWriterError(ref _e) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
     pub(crate) fn must_close(&self) -> bool {
-        match self {
-            // non-fatal, keep the connnection open.
+        !matches!(
+            self,
             &DavError::Status(_)
-            | &DavError::FsError(FsError::NotFound)
-            | &DavError::FsError(FsError::Forbidden)
-            | &DavError::FsError(FsError::Exists) => false,
-            // close the connection to be sure.
-            _ => true,
-        }
+                | &DavError::FsError(FsError::NotFound)
+                | &DavError::FsError(FsError::Forbidden)
+                | &DavError::FsError(FsError::Exists)
+        )
     }
 }

@@ -136,15 +136,15 @@ impl DavConfig {
 
     fn merge(&self, new: DavConfig) -> DavConfig {
         DavConfig {
-            prefix: new.prefix.or(self.prefix.clone()),
-            fs: new.fs.or(self.fs.clone()),
-            ls: new.ls.or(self.ls.clone()),
-            allow: new.allow.or(self.allow.clone()),
-            principal: new.principal.or(self.principal.clone()),
-            hide_symlinks: new.hide_symlinks.or(self.hide_symlinks.clone()),
-            autoindex: new.autoindex.or(self.autoindex.clone()),
-            indexfile: new.indexfile.or(self.indexfile.clone()),
-            read_buf_size: new.read_buf_size.or(self.read_buf_size.clone()),
+            prefix: new.prefix.or_else(|| self.prefix.clone()),
+            fs: new.fs.or_else(|| self.fs.clone()),
+            ls: new.ls.or_else(|| self.ls.clone()),
+            allow: new.allow.or(self.allow),
+            principal: new.principal.or_else(|| self.principal.clone()),
+            hide_symlinks: new.hide_symlinks.or(self.hide_symlinks),
+            autoindex: new.autoindex.or(self.autoindex),
+            indexfile: new.indexfile.or_else(|| self.indexfile.clone()),
+            read_buf_size: new.read_buf_size.or(self.read_buf_size),
         }
     }
 }
@@ -168,8 +168,8 @@ pub(crate) struct DavInner {
 impl From<DavConfig> for DavInner {
     fn from(cfg: DavConfig) -> Self {
         DavInner {
-            prefix: cfg.prefix.unwrap_or("".to_string()),
-            fs: cfg.fs.unwrap_or(VoidFs::new()),
+            prefix: cfg.prefix.unwrap_or_else(|| "".to_string()),
+            fs: cfg.fs.unwrap_or_else(|| VoidFs::new()),
             ls: cfg.ls,
             allow: cfg.allow,
             principal: cfg.principal,
@@ -188,15 +188,15 @@ impl From<&DavConfig> for DavInner {
                 .prefix
                 .as_ref()
                 .map(|p| p.to_owned())
-                .unwrap_or("".to_string()),
+                .unwrap_or_else(|| "".to_string()),
             fs: cfg.fs.clone().unwrap(),
             ls: cfg.ls.clone(),
             allow: cfg.allow,
             principal: cfg.principal.clone(),
-            hide_symlinks: cfg.hide_symlinks.clone(),
-            autoindex: cfg.autoindex.clone(),
+            hide_symlinks: cfg.hide_symlinks,
+            autoindex: cfg.autoindex,
             indexfile: cfg.indexfile.clone(),
-            read_buf_size: cfg.read_buf_size.clone(),
+            read_buf_size: cfg.read_buf_size,
         }
     }
 }
@@ -207,12 +207,12 @@ impl Clone for DavInner {
             prefix: self.prefix.clone(),
             fs: self.fs.clone(),
             ls: self.ls.clone(),
-            allow: self.allow.clone(),
+            allow: self.allow,
             principal: self.principal.clone(),
-            hide_symlinks: self.hide_symlinks.clone(),
-            autoindex: self.autoindex.clone(),
+            hide_symlinks: self.hide_symlinks,
+            autoindex: self.autoindex,
             indexfile: self.indexfile.clone(),
-            read_buf_size: self.read_buf_size.clone(),
+            read_buf_size: self.read_buf_size,
         }
     }
 }
@@ -309,6 +309,12 @@ impl DavHandler {
     }
 }
 
+impl Default for DavHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DavInner {
     // helper.
     pub(crate) async fn has_parent<'a>(&'a self, path: &'a DavPath) -> bool {
@@ -344,8 +350,8 @@ impl DavInner {
     }
 
     // drain request body and return length.
-    pub(crate) async fn read_request<'a, ReqBody, ReqData, ReqError>(
-        &'a self,
+    pub(crate) async fn read_request<ReqBody, ReqData, ReqError>(
+        &self,
         body: ReqBody,
         max_size: usize,
     ) -> DavResult<Vec<u8>>
@@ -507,7 +513,7 @@ impl DavInner {
             | DavMethod::PropPatch
             | DavMethod::Lock => {}
             _ => {
-                if body_data.len() > 0 {
+                if !body_data.is_empty() {
                     return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into());
                 }
             }

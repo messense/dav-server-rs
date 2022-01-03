@@ -25,12 +25,12 @@ pub(crate) fn ifrange_match(
     tag: Option<&davheaders::ETag>,
     date: Option<SystemTime>,
 ) -> bool {
-    match hdr {
-        &davheaders::IfRange::Date(ref d) => match date {
+    match *hdr {
+        davheaders::IfRange::Date(ref d) => match date {
             Some(date) => round_time(date) == round_time(*d),
             None => false,
         },
-        &davheaders::IfRange::ETag(ref t) => match tag {
+        davheaders::IfRange::ETag(ref t) => match tag {
             Some(tag) => t == tag,
             None => false,
         },
@@ -42,9 +42,9 @@ pub(crate) fn etaglist_match(
     exists: bool,
     tag: Option<&davheaders::ETag>,
 ) -> bool {
-    match tags {
-        &davheaders::ETagList::Star => exists,
-        &davheaders::ETagList::Tags(ref t) => match tag {
+    match *tags {
+        davheaders::ETagList::Star => exists,
+        davheaders::ETagList::Tags(ref t) => match tag {
             Some(tag) => t.iter().any(|x| x == tag),
             None => false,
         },
@@ -59,7 +59,7 @@ pub(crate) fn http_if_match(
     let file_modified = meta.and_then(|m| m.modified().ok());
 
     if let Some(r) = req.headers().typed_get::<davheaders::IfMatch>() {
-        let etag = meta.and_then(|m| ETag::from_meta(m));
+        let etag = meta.and_then(ETag::from_meta);
         if !etaglist_match(&r.0, meta.is_some(), etag.as_ref()) {
             trace!("precondition fail: If-Match {:?}", r);
             return Some(StatusCode::PRECONDITION_FAILED);
@@ -77,17 +77,17 @@ pub(crate) fn http_if_match(
     }
 
     if let Some(r) = req.headers().typed_get::<davheaders::IfNoneMatch>() {
-        let etag = meta.and_then(|m| ETag::from_meta(m));
+        let etag = meta.and_then(ETag::from_meta);
         if etaglist_match(&r.0, meta.is_some(), etag.as_ref()) {
             trace!("precondition fail: If-None-Match {:?}", r);
-            if req.method() == &Method::GET || req.method() == &Method::HEAD {
+            if req.method() == Method::GET || req.method() == Method::HEAD {
                 return Some(StatusCode::NOT_MODIFIED);
             } else {
                 return Some(StatusCode::PRECONDITION_FAILED);
             }
         }
     } else if let Some(r) = req.headers().typed_get::<headers::IfModifiedSince>() {
-        if req.method() == &Method::GET || req.method() == &Method::HEAD {
+        if req.method() == Method::GET || req.method() == Method::HEAD {
             if let Some(file_modified) = file_modified {
                 if round_time(file_modified) <= round_time(r) {
                     trace!("not-modified If-Modified-Since {:?}", r);
@@ -123,14 +123,14 @@ pub(crate) async fn dav_if_match<'a>(
 
     for iflist in r.0.iter() {
         // save and return all statetokens that we encountered.
-        let toks = iflist.conditions.iter().filter_map(|c| match &c.item {
-            &davheaders::IfItem::StateToken(ref t) => Some(t.to_owned()),
+        let toks = iflist.conditions.iter().filter_map(|c| match c.item {
+            davheaders::IfItem::StateToken(ref t) => Some(t.to_owned()),
             _ => None,
         });
         tokens.extend(toks);
 
         // skip over if a previous list already evaluated to true.
-        if any_list_ok == true {
+        if any_list_ok {
             continue;
         }
 
@@ -159,9 +159,9 @@ pub(crate) async fn dav_if_match<'a>(
                     if !valid || s.starts_with("DAV:") {
                         false
                     } else {
-                        match ls {
-                            &Some(ref ls) => ls.check(p, None, true, false, vec![s]).is_ok(),
-                            &None => false,
+                        match *ls {
+                            Some(ref ls) => ls.check(p, None, true, false, vec![s]).is_ok(),
+                            None => false,
                         }
                     }
                 }

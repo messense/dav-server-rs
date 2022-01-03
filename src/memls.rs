@@ -68,19 +68,16 @@ impl DavLockSystem for MemLs {
 
         // create lock.
         let node = get_or_create_path_node(&mut inner.tree, path);
-        let timeout_at = match timeout {
-            None => None,
-            Some(d) => Some(SystemTime::now() + d),
-        };
+        let timeout_at = timeout.map(|d| SystemTime::now() + d);
         let lock = DavLock {
             token: Uuid::new_v4().to_urn().to_string(),
             path: path.clone(),
             principal: principal.map(|s| s.to_string()),
             owner: owner.cloned(),
-            timeout_at: timeout_at,
-            timeout: timeout,
-            shared: shared,
-            deep: deep,
+            timeout_at,
+            timeout,
+            shared,
+            deep,
         };
         trace!("lock {} created", &lock.token);
         let slock = lock.clone();
@@ -127,10 +124,7 @@ impl DavLockSystem for MemLs {
         let node = (&mut inner.tree).get_node_mut(node_id).unwrap();
         let idx = node.iter().position(|n| n.token.as_str() == token).unwrap();
         let lock = &mut node[idx];
-        let timeout_at = match timeout {
-            None => None,
-            Some(d) => Some(SystemTime::now() + d),
-        };
+        let timeout_at = timeout.map(|d| SystemTime::now() + d);
         lock.timeout = timeout;
         lock.timeout_at = timeout_at;
         Ok(lock.clone())
@@ -193,7 +187,7 @@ fn check_locks_to_path(
     path: &DavPath,
     principal: Option<&str>,
     ignore_principal: bool,
-    submitted_tokens: &Vec<&str>,
+    submitted_tokens: &[&str],
     shared_ok: bool,
 ) -> Result<(), DavLock> {
     // path segments
@@ -221,7 +215,7 @@ fn check_locks_to_path(
                 continue;
             }
             if submitted_tokens.iter().any(|t| &nl.token == t)
-                && (ignore_principal || principal == nl.principal.as_ref().map(|p| p.as_str()))
+                && (ignore_principal || principal == nl.principal.as_deref())
             {
                 // fine, we hold this lock.
                 holds_lock = true;
@@ -239,8 +233,10 @@ fn check_locks_to_path(
     }
 
     // return conflicting lock on error.
-    if !holds_lock && first_lock_seen.is_some() {
-        return Err(first_lock_seen.unwrap().to_owned());
+    if !holds_lock {
+        if let Some(first_lock_seen) = first_lock_seen {
+            return Err(first_lock_seen.to_owned());
+        }
     }
 
     Ok(())
@@ -252,7 +248,7 @@ fn check_locks_from_path(
     path: &DavPath,
     principal: Option<&str>,
     ignore_principal: bool,
-    submitted_tokens: &Vec<&str>,
+    submitted_tokens: &[&str],
     shared_ok: bool,
 ) -> Result<(), DavLock> {
     let node_id = match lookup_node(tree, path) {
@@ -275,7 +271,7 @@ fn check_locks_from_node(
     node_id: u64,
     principal: Option<&str>,
     ignore_principal: bool,
-    submitted_tokens: &Vec<&str>,
+    submitted_tokens: &[&str],
     shared_ok: bool,
 ) -> Result<(), DavLock> {
     let node_locks = match tree.get_node(node_id) {
@@ -283,12 +279,11 @@ fn check_locks_from_node(
         Err(_) => return Ok(()),
     };
     for nl in node_locks {
-        if !nl.shared || !shared_ok {
-            if !submitted_tokens.iter().any(|t| t == &nl.token)
-                || (!ignore_principal && principal != nl.principal.as_ref().map(|p| p.as_str()))
-            {
-                return Err(nl.to_owned());
-            }
+        if (!nl.shared || !shared_ok)
+            && (!submitted_tokens.iter().any(|t| t == &nl.token)
+                || (!ignore_principal && principal != nl.principal.as_deref()))
+        {
+            return Err(nl.to_owned());
         }
     }
     if let Ok(children) = tree.get_children(node_id) {
@@ -381,7 +376,10 @@ fn list_locks(tree: &Tree, path: &DavPath) -> Vec<DavLock> {
 
 fn path_to_segs(path: &DavPath, include_root: bool) -> Vec<&[u8]> {
     let path = path.as_bytes();
-    let mut segs: Vec<&[u8]> = path.split(|&c| c == b'/').filter(|s| s.len() > 0).collect();
+    let mut segs: Vec<&[u8]> = path
+        .split(|&c| c == b'/')
+        .filter(|s| !s.is_empty())
+        .collect();
     if include_root {
         segs.insert(0, b"");
     }
@@ -389,7 +387,7 @@ fn path_to_segs(path: &DavPath, include_root: bool) -> Vec<&[u8]> {
 }
 
 fn get_child(tree: &Tree, node_id: u64, seg: &[u8]) -> FsResult<u64> {
-    if seg.len() == 0 {
+    if seg.is_empty() {
         return Ok(node_id);
     }
     tree.get_child(node_id, seg)

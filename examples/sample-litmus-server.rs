@@ -13,9 +13,7 @@ use std::str::FromStr;
 #[macro_use]
 extern crate clap;
 
-use env_logger;
 use futures_util::future::TryFutureExt;
-use hyper;
 
 use headers::{authorization::Basic, Authorization, HeaderMapExt};
 
@@ -30,7 +28,7 @@ struct Server {
 impl Server {
     pub fn new(directory: String, memls: bool, fakels: bool, auth: bool) -> Self {
         let mut config = DavHandler::builder();
-        if directory != "" {
+        if !directory.is_empty() {
             config = config.filesystem(localfs::LocalFs::new(directory, true, true, true));
         } else {
             config = config.filesystem(memfs::MemFs::new());

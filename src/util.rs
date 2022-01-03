@@ -32,13 +32,13 @@ pub enum DavMethod {
 
 // translate method into our own enum that has webdav methods as well.
 pub(crate) fn dav_method(m: &http::Method) -> DavResult<DavMethod> {
-    let m = match m {
-        &http::Method::HEAD => DavMethod::Head,
-        &http::Method::GET => DavMethod::Get,
-        &http::Method::PUT => DavMethod::Put,
-        &http::Method::PATCH => DavMethod::Patch,
-        &http::Method::DELETE => DavMethod::Delete,
-        &http::Method::OPTIONS => DavMethod::Options,
+    let m = match *m {
+        http::Method::HEAD => DavMethod::Head,
+        http::Method::GET => DavMethod::Get,
+        http::Method::PUT => DavMethod::Put,
+        http::Method::PATCH => DavMethod::Patch,
+        http::Method::DELETE => DavMethod::Delete,
+        http::Method::OPTIONS => DavMethod::Options,
         _ => match m.as_str() {
             "PROPFIND" => DavMethod::PropFind,
             "PROPPATCH" => DavMethod::PropPatch,
@@ -183,7 +183,7 @@ impl MemBuffer {
     }
 
     pub fn take(&mut self) -> Bytes {
-        let buf = std::mem::replace(self.0.get_mut(), Vec::new());
+        let buf = std::mem::take(self.0.get_mut());
         self.0.set_position(0);
         Bytes::from(buf)
     }
