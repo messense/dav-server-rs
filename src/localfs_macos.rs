@@ -9,6 +9,7 @@
 // - fake a ".ql_disablethumbnails" file in the root.
 //
 use std::ffi::OsString;
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -152,9 +153,20 @@ impl DUCacheBuilder {
     }
 
     // add a filename to the list we have
+    #[cfg(unix)]
     pub fn add(&mut self, filename: OsString) {
         if let Some(f) = Path::new(&filename).file_name() {
             if f.as_bytes().starts_with(b"._") {
+                self.entries.push(filename);
+            }
+        }
+    }
+
+    // add a filename to the list we have
+    #[cfg(windows)]
+    pub fn add(&mut self, filename: OsString) {
+        if let Some(f) = Path::new(&filename).file_name() {
+            if f.to_str().unwrap().as_bytes().starts_with(b"._") {
                 self.entries.push(filename);
             }
         }
@@ -258,12 +270,27 @@ impl LocalFs {
     }
 
     // File might not exists because of negative cache entry.
+    #[cfg(unix)]
     #[inline]
     pub(crate) fn is_notfound(&self, path: &PathBuf) -> bool {
         if !self.inner.macos {
             return false;
         }
         match path.file_name().map(|p| p.as_bytes()) {
+            Some(b".localized") => true,
+            Some(name) if name.starts_with(b"._") => DU_CACHE.negative(path),
+            _ => false,
+        }
+    }
+
+    // File might not exists because of negative cache entry.
+    #[cfg(windows)]
+    #[inline]
+    pub(crate) fn is_notfound(&self, path: &PathBuf) -> bool {
+        if !self.inner.macos {
+            return false;
+        }
+        match path.file_name().map(|p| p.to_str().unwrap().as_bytes()) {
             Some(b".localized") => true,
             Some(name) if name.starts_with(b"._") => DU_CACHE.negative(path),
             _ => false,

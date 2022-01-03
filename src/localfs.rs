@@ -8,11 +8,13 @@ use std::any::Any;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
-use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::DirBuilderExt;
-use std::os::unix::fs::MetadataExt;
-use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::os::unix::{
+    ffi::OsStrExt,
+    fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt},
+};
+#[cfg(target_os = "windows")]
+use std::os::windows::prelude::*;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -91,6 +93,7 @@ pub struct LocalFs {
 // inner struct.
 pub(crate) struct LocalFsInner {
     pub basedir: PathBuf,
+    #[allow(dead_code)]
     pub public: bool,
     pub case_insensitive: bool,
     pub macos: bool,
@@ -308,9 +311,11 @@ impl DavFileSystem for LocalFs {
             if self.is_forbidden(path) {
                 return Err(FsError::Forbidden);
             }
+            #[cfg(unix)]
             let mode = if self.inner.public { 0o644 } else { 0o600 };
             let path = self.fspath(path);
             self.blocking(move || {
+                #[cfg(unix)]
                 let res = std::fs::OpenOptions::new()
                     .read(options.read)
                     .write(options.write)
@@ -319,6 +324,15 @@ impl DavFileSystem for LocalFs {
                     .create(options.create)
                     .create_new(options.create_new)
                     .mode(mode)
+                    .open(path);
+                #[cfg(windows)]
+                let res = std::fs::OpenOptions::new()
+                    .read(options.read)
+                    .write(options.write)
+                    .append(options.append)
+                    .truncate(options.truncate)
+                    .create(options.create)
+                    .create_new(options.create_new)
                     .open(path);
                 match res {
                     Ok(file) => Ok(Box::new(LocalFsFile(Some(file))) as Box<dyn DavFile>),
@@ -336,13 +350,23 @@ impl DavFileSystem for LocalFs {
             if self.is_forbidden(path) {
                 return Err(FsError::Forbidden);
             }
+            #[cfg(unix)]
             let mode = if self.inner.public { 0o755 } else { 0o700 };
             let path = self.fspath(path);
             self.blocking(move || {
-                std::fs::DirBuilder::new()
-                    .mode(mode)
-                    .create(path)
-                    .map_err(|e| e.into())
+                #[cfg(unix)]
+                {
+                    std::fs::DirBuilder::new()
+                        .mode(mode)
+                        .create(path)
+                        .map_err(|e| e.into())
+                }
+                #[cfg(windows)]
+                {
+                    std::fs::DirBuilder::new()
+                        .create(path)
+                        .map_err(|e| e.into())
+                }
             })
             .await
         }
@@ -615,8 +639,14 @@ impl DavDirEntry for LocalFsDirEntry {
         }
     }
 
+    #[cfg(unix)]
     fn name(&self) -> Vec<u8> {
         self.entry.file_name().as_bytes().to_vec()
+    }
+
+    #[cfg(windows)]
+    fn name(&self) -> Vec<u8> {
+        self.entry.file_name().to_str().unwrap().as_bytes().to_vec()
     }
 
     fn is_dir<'a>(&'a self) -> FsFuture<bool> {
@@ -729,8 +759,14 @@ impl DavMetaData for LocalFsMetaData {
         self.0.accessed().map_err(|e| e.into())
     }
 
+    #[cfg(unix)]
     fn status_changed(&self) -> FsResult<SystemTime> {
         Ok(UNIX_EPOCH + Duration::new(self.0.ctime() as u64, 0))
+    }
+
+    #[cfg(windows)]
+    fn status_changed(&self) -> FsResult<SystemTime> {
+        Ok(UNIX_EPOCH + Duration::from_nanos(self.0.creation_time() - 116444736000000000))
     }
 
     fn is_dir(&self) -> bool {
@@ -742,6 +778,8 @@ impl DavMetaData for LocalFsMetaData {
     fn is_symlink(&self) -> bool {
         self.0.file_type().is_symlink()
     }
+
+    #[cfg(unix)]
     fn executable(&self) -> FsResult<bool> {
         if self.0.is_file() {
             return Ok((self.0.permissions().mode() & 0o100) > 0);
@@ -749,7 +787,14 @@ impl DavMetaData for LocalFsMetaData {
         Err(FsError::NotImplemented)
     }
 
+    #[cfg(windows)]
+    fn executable(&self) -> FsResult<bool> {
+        // FIXME: implement
+        Err(FsError::NotImplemented)
+    }
+
     // same as the default apache etag.
+    #[cfg(unix)]
     fn etag(&self) -> Option<String> {
         let modified = self.0.modified().ok()?;
         let t = modified.duration_since(UNIX_EPOCH).ok()?;
@@ -760,6 +805,19 @@ impl DavMetaData for LocalFsMetaData {
             Some(format!("{:x}-{:x}", self.0.ino(), t))
         }
     }
+
+    // same as the default apache etag.
+    #[cfg(windows)]
+    fn etag(&self) -> Option<String> {
+        let modified = self.0.modified().ok()?;
+        let t = modified.duration_since(UNIX_EPOCH).ok()?;
+        let t = t.as_secs() * 1000000 + t.subsec_nanos() as u64 / 1000;
+        if self.is_file() {
+            Some(format!("{:x}-{:x}", self.0.len(), t))
+        } else {
+            Some(format!("{:x}", t))
+        }
+    }
 }
 
 impl From<&io::Error> for FsError {
@@ -767,7 +825,10 @@ impl From<&io::Error> for FsError {
         if let Some(errno) = e.raw_os_error() {
             // specific errors.
             match errno {
+                #[cfg(unix)]
                 libc::EMLINK | libc::ENOSPC | libc::EDQUOT => return FsError::InsufficientStorage,
+                #[cfg(windows)]
+                libc::EMLINK | libc::ENOSPC => return FsError::InsufficientStorage,
                 libc::EFBIG => return FsError::TooLarge,
                 libc::EACCES | libc::EPERM => return FsError::Forbidden,
                 libc::ENOTEMPTY | libc::EEXIST => return FsError::Exists,
