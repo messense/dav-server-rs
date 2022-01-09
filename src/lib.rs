@@ -142,9 +142,11 @@ mod handle_mkcol;
 mod handle_options;
 mod handle_props;
 mod handle_put;
-#[cfg(feature = "localfs")]
+#[cfg(any(docsrs, feature = "localfs"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "localfs")))]
 mod localfs_macos;
-#[cfg(feature = "localfs")]
+#[cfg(any(docsrs, feature = "localfs"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "localfs")))]
 mod localfs_windows;
 mod multierror;
 mod tree;
@@ -156,10 +158,12 @@ pub mod body;
 pub mod davpath;
 pub mod fakels;
 pub mod fs;
-#[cfg(feature = "localfs")]
+#[cfg(any(docsrs, feature = "localfs"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "localfs")))]
 pub mod localfs;
 pub mod ls;
-#[cfg(feature = "memfs")]
+#[cfg(any(docsrs, feature = "memfs"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "memfs")))]
 pub mod memfs;
 pub mod memls;
 
