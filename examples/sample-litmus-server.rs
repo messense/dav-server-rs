@@ -10,11 +10,8 @@ use std::error::Error;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
-#[macro_use]
-extern crate clap;
-
+use clap::Parser;
 use futures_util::future::TryFutureExt;
-
 use headers::{authorization::Basic, Authorization, HeaderMapExt};
 
 use dav_server::{body::Body, fakels, localfs, memfs, memls, DavConfig, DavHandler};
@@ -77,28 +74,42 @@ impl Server {
     }
 }
 
+#[derive(Debug, clap::Parser)]
+#[clap(about, version)]
+struct Cli {
+    /// port to listen on
+    #[clap(short = 'p', long, default_value = "4918")]
+    port: u16,
+    /// local directory to serve
+    #[clap(short = 'd', long)]
+    dir: Option<String>,
+    /// serve from ephemeral memory filesystem
+    #[clap(short = 'm', long)]
+    memfs: bool,
+    /// use ephemeral memory locksystem
+    #[clap(short = 'l', long)]
+    memls: bool,
+    /// use fake memory locksystem
+    #[clap(short = 'f', long)]
+    fakels: bool,
+    /// require basic authentication
+    #[clap(short = 'a', long)]
+    auth: bool,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let matches = clap_app!(webdav_lib =>
-        (version: "0.1")
-        (@arg PORT: -p --port +takes_value "port to listen on (4918)")
-        (@arg DIR: -d --dir +takes_value "local directory to serve")
-        (@arg MEMFS: -m --memfs "serve from ephemeral memory filesystem (default)")
-        (@arg MEMLS: -l --memls "use ephemeral memory locksystem (default with --memfs)")
-        (@arg FAKELS: -f --fakels "use fake memory locksystem (default with --memfs)")
-        (@arg AUTH: -a --auth "require basic authentication")
-    )
-    .get_matches();
+    let args = Cli::parse();
 
-    let (dir, name) = match matches.value_of("DIR") {
-        Some(dir) => (dir, dir),
+    let (dir, name) = match args.dir.as_ref() {
+        Some(dir) => (dir.as_str(), dir.as_str()),
         None => ("", "memory filesystem"),
     };
-    let auth = matches.is_present("AUTH");
-    let memls = matches.is_present("MEMFS") || matches.is_present("MEMLS");
-    let fakels = matches.is_present("FAKELS");
+    let auth = args.auth;
+    let memls = args.memfs || args.memls;
+    let fakels = args.fakels;
 
     let dav_server = Server::new(dir.to_string(), memls, fakels, auth);
     let make_service = hyper::service::make_service_fn(|_| {
@@ -112,8 +123,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    let port = matches.value_of("PORT").unwrap_or("4918");
-    let addr = "0.0.0.0:".to_string() + port;
+    let port = args.port;
+    let addr = format!("0.0.0.0:{}", port);
     let addr = SocketAddr::from_str(&addr)?;
 
     let server = hyper::Server::try_bind(&addr)?

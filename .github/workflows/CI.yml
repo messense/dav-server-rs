@@ -56,17 +56,34 @@ jobs:
         with:
           command: test
           args: --all-features --all
-      - name: litmus protocol compliance test
-        if: matrix.os == 'ubuntu-latest'
+
+  compliance:
+    name: Compliance Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: Swatinem/rust-cache@v1
+      - name: Build sample litmus server
+        run: cargo build --example sample-litmus-server
+      - name: Run sample litmus server
         run: |
-          cargo build --example sample-litmus-server
           cargo run --example sample-litmus-server -- --memfs --auth &
           sleep 5
+      - name: Build litmus
+        run: |
           curl -O http://www.webdav.org/neon/litmus/litmus-0.13.tar.gz
           tar xf litmus-0.13.tar.gz
           cd litmus-0.13
           ./configure
           make
+      - name: Run litmus protocol compliance test
+        run: |
+          cd litmus-0.13
           TESTS="http basic copymove locks props" HTDOCS=htdocs TESTROOT=. ./litmus http://localhost:4918/ someuser somepass
 
   fmt:
