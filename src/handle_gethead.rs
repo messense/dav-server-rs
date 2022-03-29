@@ -245,7 +245,7 @@ impl crate::DavInner {
                             buf = Bytes::copy_from_slice(&zero[..n]);
                         }
                         let len = buf.len() as u64;
-                        count -= len;
+                        count = count.saturating_sub(len);
                         curpos += len;
                         trace!("sending {} bytes", len);
                         tx.send(buf).await;
