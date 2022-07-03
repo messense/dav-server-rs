@@ -83,15 +83,6 @@ impl From<ParseError> for DavError {
     }
 }
 
-// a decoded segment can contain any value except '/' or '\0'
-fn valid_segment(src: &[u8]) -> Result<(), ParseError> {
-    let mut p = pct::percent_decode(src);
-    if p.any(|x| x == 0 || x == b'/') {
-        return Err(ParseError::InvalidPath);
-    }
-    Ok(())
-}
-
 // encode path segment with user-defined ENCODE_SET
 fn encode_path(src: &[u8]) -> Vec<u8> {
     pct::percent_encode(src, PATH_ENCODE_SET)
@@ -104,8 +95,8 @@ fn encode_path(src: &[u8]) -> Vec<u8> {
 // - make sure path is absolute
 // - remove query part (everything after ?)
 // - merge consecutive slashes
-// - process . and ..
 // - decode percent encoded bytes, fail on invalid encodings.
+// - process . and ..
 // - do not allow NUL or '/' in segments.
 fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
     // must consist of printable ASCII
@@ -129,10 +120,13 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
 
     // split up in segments
     let isdir = matches!(rawpath.last(), Some(x) if *x == b'/');
-    let segments = rawpath.split(|c| *c == b'/');
+    let segments: Vec<Vec<u8>> = rawpath
+        .split(|c| *c == b'/')
+        .map(|segment| pct::percent_decode(segment).collect())
+        .collect();
     let mut v: Vec<&[u8]> = Vec::new();
-    for segment in segments {
-        match segment {
+    for segment in &segments {
+        match &segment[..] {
             b"." | b"" => {}
             b".." => {
                 if v.len() < 2 {
@@ -142,8 +136,9 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
                 v.pop();
             }
             s => {
-                if let Err(e) = valid_segment(s) {
-                    return Err(e);
+                // a decoded segment can contain any value except '/' or '\0'
+                if s.iter().any(|x| *x == 0 || *x == b'/') {
+                    return Err(ParseError::InvalidPath);
                 }
                 v.push(b"/");
                 v.push(s);
@@ -153,7 +148,7 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
     if isdir || v.is_empty() {
         v.push(b"/");
     }
-    Ok(v.iter().flat_map(|s| pct::percent_decode(s)).collect())
+    Ok(v.join(&b""[..]))
 }
 
 /// Comparision ignores any trailing slash, so /foo == /foo/
