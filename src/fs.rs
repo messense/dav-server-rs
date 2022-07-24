@@ -383,7 +383,7 @@ impl<MD: Clone + DavMetaData + 'static> BoxCloneMd for MD {
 }
 
 /// OpenOptions for `open()`.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct OpenOptions {
     /// open for reading
     pub read: bool,
@@ -399,6 +399,8 @@ pub struct OpenOptions {
     pub create_new: bool,
     /// write file total size
     pub size: Option<u64>,
+    /// checksum, owncloud extension
+    pub checksum: Option<String>,
 }
 
 impl OpenOptions {
@@ -412,6 +414,7 @@ impl OpenOptions {
             create: false,
             create_new: false,
             size: None,
+            checksum: None,
         }
     }
 
@@ -424,6 +427,7 @@ impl OpenOptions {
             create: false,
             create_new: false,
             size: None,
+            checksum: None,
         }
     }
 
@@ -436,6 +440,7 @@ impl OpenOptions {
             create: false,
             create_new: false,
             size: None,
+            checksum: None,
         }
     }
 }

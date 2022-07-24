@@ -149,11 +149,13 @@ impl crate::DavInner {
         };
 
         // try to create file if it doesn't exist.
+        let create = oo.create;
+        let create_new = oo.create_new;
         if meta.is_none() {
             match self.fs.open(&path, oo).await {
                 Ok(_) => {}
                 Err(FsError::NotFound) | Err(FsError::Exists) => {
-                    let s = if !oo.create || oo.create_new {
+                    let s = if !create || create_new {
                         SC::PRECONDITION_FAILED
                     } else {
                         SC::CONFLICT

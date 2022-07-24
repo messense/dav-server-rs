@@ -88,6 +88,12 @@ impl crate::DavInner {
                 oo.size = Some(count);
             }
         }
+        let checksum = req
+            .headers()
+            .get("OC-Checksum")
+            .and_then(|v| v.to_str().ok().map(|s| s.to_string()));
+        oo.checksum = checksum;
+
         let path = self.path(req);
         let meta = self.fs.metadata(&path).await;
 
@@ -194,10 +200,12 @@ impl crate::DavInner {
             oo.create_new = true;
         }
 
+        let create = oo.create;
+        let create_new = oo.create_new;
         let mut file = match self.fs.open(&path, oo).await {
             Ok(f) => f,
             Err(FsError::NotFound) | Err(FsError::Exists) => {
-                let s = if !oo.create || oo.create_new {
+                let s = if !create || create_new {
                     SC::PRECONDITION_FAILED
                 } else {
                     SC::CONFLICT
