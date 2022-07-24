@@ -59,7 +59,7 @@ impl DavLockSystem for FakeLs {
 
         let d = if deep { 'I' } else { '0' };
         let s = if shared { 'S' } else { 'E' };
-        let token = format!("opaquetoken:{}/{}/{}", Uuid::new_v4().to_hyphenated(), d, s);
+        let token = format!("opaquetoken:{}/{}/{}", Uuid::new_v4().hyphenated(), d, s);
 
         let lock = DavLock {
             token,
