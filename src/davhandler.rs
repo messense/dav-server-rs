@@ -56,7 +56,7 @@ pub struct DavConfig {
     // read buffer size in bytes
     pub(crate) read_buf_size: Option<usize>,
     // Dose GET on a file return 302 redirect.
-    pub(crate) redirect: Option<bool>
+    pub(crate) redirect: Option<bool>,
 }
 
 impl DavConfig {
@@ -153,7 +153,7 @@ impl DavConfig {
             autoindex: new.autoindex.or(self.autoindex),
             indexfile: new.indexfile.or_else(|| self.indexfile.clone()),
             read_buf_size: new.read_buf_size.or(self.read_buf_size),
-            redirect: new.redirect.or(self.redirect)
+            redirect: new.redirect.or(self.redirect),
         }
     }
 }
@@ -172,7 +172,7 @@ pub(crate) struct DavInner {
     pub autoindex: Option<bool>,
     pub indexfile: Option<String>,
     pub read_buf_size: Option<usize>,
-    pub redirect: Option<bool>
+    pub redirect: Option<bool>,
 }
 
 impl From<DavConfig> for DavInner {
@@ -187,7 +187,7 @@ impl From<DavConfig> for DavInner {
             autoindex: cfg.autoindex,
             indexfile: cfg.indexfile,
             read_buf_size: cfg.read_buf_size,
-            redirect: cfg.redirect
+            redirect: cfg.redirect,
         }
     }
 }
@@ -208,7 +208,7 @@ impl From<&DavConfig> for DavInner {
             autoindex: cfg.autoindex,
             indexfile: cfg.indexfile.clone(),
             read_buf_size: cfg.read_buf_size,
-            redirect: cfg.redirect
+            redirect: cfg.redirect,
         }
     }
 }
@@ -225,7 +225,7 @@ impl Clone for DavInner {
             autoindex: self.autoindex,
             indexfile: self.indexfile.clone(),
             read_buf_size: self.read_buf_size,
-            redirect: self.redirect
+            redirect: self.redirect,
         }
     }
 }
