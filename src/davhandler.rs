@@ -55,7 +55,7 @@ pub struct DavConfig {
     pub(crate) indexfile: Option<String>,
     // read buffer size in bytes
     pub(crate) read_buf_size: Option<usize>,
-    // Dose GET on a file return 302 redirect.
+    // Does GET on a file return 302 redirect.
     pub(crate) redirect: Option<bool>,
 }
 
