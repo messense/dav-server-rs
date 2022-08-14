@@ -361,6 +361,7 @@ impl crate::DavInner {
                 w.push_str(
                     "\
                     <html><head>\n\
+                    <meta name=\"referrer\" content=\"no-referrer\" />\n\
                     <title>Index of ",
                 );
                 w.push_str(&upath);
