@@ -93,6 +93,20 @@ impl crate::DavInner {
             res.headers_mut().typed_insert(etag);
         }
 
+        match self.redirect {
+            Some(redirect) => {
+                if redirect {
+                    *res.status_mut() = StatusCode::FOUND;
+                    res.headers_mut().insert(
+                    "Location",
+                    file.redirect_url().await?.parse().unwrap(),
+                    );
+                    return Ok(res);
+                }
+            }
+            None => {}
+        }
+
         // Apache always adds an Accept-Ranges header, even with partial
         // responses where it should be pretty obvious. So something somewhere
         // probably depends on that.

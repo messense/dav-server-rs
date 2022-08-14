@@ -295,6 +295,9 @@ pub trait DavFile: Debug + Send + Sync {
     fn read_bytes(&mut self, count: usize) -> FsFuture<bytes::Bytes>;
     fn seek(&mut self, pos: SeekFrom) -> FsFuture<u64>;
     fn flush(&mut self) -> FsFuture<()>;
+    fn redirect_url(&mut self) -> FsFuture<String> {
+        notimplemented_fut!("redirect_url")
+    }
 }
 
 /// File metadata. Basically type, length, and some timestamps.
