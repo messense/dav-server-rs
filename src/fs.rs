@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use futures_util::{future, Future, Stream, TryFutureExt};
 use http::StatusCode;
+use url::Url;
 
 use crate::davpath::DavPath;
 
@@ -295,7 +296,7 @@ pub trait DavFile: Debug + Send + Sync {
     fn read_bytes(&mut self, count: usize) -> FsFuture<bytes::Bytes>;
     fn seek(&mut self, pos: SeekFrom) -> FsFuture<u64>;
     fn flush(&mut self) -> FsFuture<()>;
-    fn redirect_url(&mut self) -> FsFuture<String> {
+    fn redirect_url(&mut self) -> FsFuture<Url> {
         notimplemented_fut!("redirect_url")
     }
 }

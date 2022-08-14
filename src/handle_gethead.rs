@@ -97,8 +97,10 @@ impl crate::DavInner {
             Some(redirect) => {
                 if redirect {
                     *res.status_mut() = StatusCode::FOUND;
-                    res.headers_mut()
-                        .insert("Location", file.redirect_url().await?.parse().unwrap());
+                    res.headers_mut().insert(
+                        "Location",
+                        file.redirect_url().await?.as_str().parse().unwrap(),
+                    );
                     return Ok(res);
                 }
             }
