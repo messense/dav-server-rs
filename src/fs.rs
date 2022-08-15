@@ -8,9 +8,8 @@ use std::io::SeekFrom;
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures_util::{future, Future, Stream, TryFutureExt};
+use futures_util::{future, Future, FutureExt, Stream, TryFutureExt};
 use http::StatusCode;
-use url::Url;
 
 use crate::davpath::DavPath;
 
@@ -296,8 +295,8 @@ pub trait DavFile: Debug + Send + Sync {
     fn read_bytes(&mut self, count: usize) -> FsFuture<bytes::Bytes>;
     fn seek(&mut self, pos: SeekFrom) -> FsFuture<u64>;
     fn flush(&mut self) -> FsFuture<()>;
-    fn redirect_url(&mut self) -> FsFuture<Url> {
-        notimplemented_fut!("redirect_url")
+    fn redirect_url(&mut self) -> FsFuture<Option<String>> {
+        future::ready(Ok(None)).boxed()
     }
 }
 

@@ -96,12 +96,14 @@ impl crate::DavInner {
         match self.redirect {
             Some(redirect) => {
                 if redirect {
-                    *res.status_mut() = StatusCode::FOUND;
-                    res.headers_mut().insert(
-                        "Location",
-                        file.redirect_url().await?.as_str().parse().unwrap(),
-                    );
-                    return Ok(res);
+                    match file.redirect_url().await? {
+                        Some(url) => {
+                            res.headers_mut().insert("Location", url.parse().unwrap());
+                            *res.status_mut() = StatusCode::FOUND;
+                            return Ok(res);
+                        }
+                        None => {}
+                    }
                 }
             }
             None => {}
