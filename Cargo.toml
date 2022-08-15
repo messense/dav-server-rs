@@ -1,6 +1,6 @@
 [package]
 name = "dav-server"
-version = "0.4.0"
+version = "0.5.0"
 readme = "README.md"
 description = "Rust WebDAV server library. A fork of the webdav-handler crate."
 repository = "https://github.com/messense/dav-server-rs"
