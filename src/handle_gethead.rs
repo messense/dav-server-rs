@@ -93,6 +93,22 @@ impl crate::DavInner {
             res.headers_mut().typed_insert(etag);
         }
 
+        match self.redirect {
+            Some(redirect) => {
+                if redirect {
+                    match file.redirect_url().await? {
+                        Some(url) => {
+                            res.headers_mut().insert("Location", url.parse().unwrap());
+                            *res.status_mut() = StatusCode::FOUND;
+                            return Ok(res);
+                        }
+                        None => {}
+                    }
+                }
+            }
+            None => {}
+        }
+
         // Apache always adds an Accept-Ranges header, even with partial
         // responses where it should be pretty obvious. So something somewhere
         // probably depends on that.
@@ -347,6 +363,7 @@ impl crate::DavInner {
                 w.push_str(
                     "\
                     <html><head>\n\
+                    <meta name=\"referrer\" content=\"no-referrer\" />\n\
                     <title>Index of ",
                 );
                 w.push_str(&upath);
