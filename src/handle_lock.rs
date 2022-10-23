@@ -248,16 +248,20 @@ pub(crate) fn list_supportedlock(ls: Option<&Box<dyn DavLockSystem>>) -> Element
 
     let mut entry = Element::new2("D:lockentry");
     let mut scope = Element::new2("D:lockscope");
+    let mut ltype = Element::new2("D:locktype");
     scope.push_element(Element::new2("D:exclusive"));
-    scope.push_element(Element::new2("D:write"));
+    ltype.push_element(Element::new2("D:write"));
     entry.push_element(scope);
+    entry.push_element(ltype);
     elem.push_element(entry);
 
     let mut entry = Element::new2("D:lockentry");
     let mut scope = Element::new2("D:lockscope");
+    let mut ltype = Element::new2("D:locktype");
     scope.push_element(Element::new2("D:shared"));
-    scope.push_element(Element::new2("D:write"));
+    ltype.push_element(Element::new2("D:write"));
     entry.push_element(scope);
+    entry.push_element(ltype);
     elem.push_element(entry);
 
     elem
