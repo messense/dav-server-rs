@@ -6,6 +6,7 @@
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::ErrorKind;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
@@ -203,7 +204,7 @@ impl Cache {
             }
         });
         Cache {
-            cache: Mutex::new(LruCache::new(size)),
+            cache: Mutex::new(LruCache::new(NonZeroUsize::new(size).unwrap())),
         }
     }
 
