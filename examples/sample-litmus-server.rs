@@ -75,25 +75,25 @@ impl Server {
 }
 
 #[derive(Debug, clap::Parser)]
-#[clap(about, version)]
+#[command(about, version)]
 struct Cli {
     /// port to listen on
-    #[clap(short = 'p', long, default_value = "4918")]
+    #[arg(short = 'p', long, default_value = "4918")]
     port: u16,
     /// local directory to serve
-    #[clap(short = 'd', long)]
+    #[arg(short = 'd', long)]
     dir: Option<String>,
     /// serve from ephemeral memory filesystem
-    #[clap(short = 'm', long)]
+    #[arg(short = 'm', long)]
     memfs: bool,
     /// use ephemeral memory locksystem
-    #[clap(short = 'l', long)]
+    #[arg(short = 'l', long)]
     memls: bool,
     /// use fake memory locksystem
-    #[clap(short = 'f', long)]
+    #[arg(short = 'f', long)]
     fakels: bool,
     /// require basic authentication
-    #[clap(short = 'a', long)]
+    #[arg(short = 'a', long)]
     auth: bool,
 }
 
