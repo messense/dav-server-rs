@@ -51,7 +51,7 @@ impl FromRequest for DavRequest {
         for (name, value) in req.headers().iter() {
             builder = builder.header(name, value);
         }
-        let path = req.match_info().path();
+        let path = req.match_info().as_str();
         let tail = req.match_info().unprocessed();
         let prefix = match &path[..path.len() - tail.len()] {
             "" | "/" => None,
