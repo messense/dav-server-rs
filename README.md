@@ -147,5 +147,5 @@ For other options, run `cargo run --example sample-litmus-server -- --help`
 
  * © 2018, 2019, 2020 XS4ALL Internet bv
  * © 2018, 2019, 2020 Miquel van Smoorenburg
- * © 2021, 2022 Messense Lv
+ * © 2021 - 2023 Messense Lv
  * [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0)
