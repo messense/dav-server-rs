@@ -23,7 +23,7 @@ actix-compat = [ "actix-web" ]
 warp-compat = [ "warp", "hyper" ]
 all = [ "actix-compat", "warp-compat" ]
 localfs = ["libc", "lru", "parking_lot"]
-memfs = []
+memfs = ["libc"]
 
 [[example]]
 name = "actix"
