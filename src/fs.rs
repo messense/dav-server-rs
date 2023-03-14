@@ -4,6 +4,8 @@
 //! filesystem backend. Otherwise, just use 'LocalFs' or 'MemFs'.
 //!
 use std::fmt::Debug;
+use std::io;
+use std::io::ErrorKind;
 use std::io::SeekFrom;
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -54,6 +56,49 @@ pub enum FsError {
 /// The Result type.
 pub type FsResult<T> = std::result::Result<T, FsError>;
 
+#[cfg(any(feature = "memfs", feature = "localfs"))]
+impl From<&io::Error> for FsError {
+    fn from(e: &io::Error) -> Self {
+        if let Some(errno) = e.raw_os_error() {
+            // specific errors.
+            match errno {
+                #[cfg(unix)]
+                libc::EMLINK | libc::ENOSPC | libc::EDQUOT => return FsError::InsufficientStorage,
+                #[cfg(windows)]
+                libc::EMLINK | libc::ENOSPC => return FsError::InsufficientStorage,
+                libc::EFBIG => return FsError::TooLarge,
+                libc::EACCES | libc::EPERM => return FsError::Forbidden,
+                libc::ENOTEMPTY | libc::EEXIST => return FsError::Exists,
+                libc::ELOOP => return FsError::LoopDetected,
+                libc::ENAMETOOLONG => return FsError::PathTooLong,
+                libc::ENOTDIR => return FsError::Forbidden,
+                libc::EISDIR => return FsError::Forbidden,
+                libc::EROFS => return FsError::Forbidden,
+                libc::ENOENT => return FsError::NotFound,
+                libc::ENOSYS => return FsError::NotImplemented,
+                libc::EXDEV => return FsError::IsRemote,
+                _ => {}
+            }
+        } else {
+            // not an OS error - must be "not implemented"
+            // (e.g. metadata().created() on systems without st_crtime)
+            return FsError::NotImplemented;
+        }
+        // generic mappings for-whatever is left.
+        match e.kind() {
+            ErrorKind::NotFound => FsError::NotFound,
+            ErrorKind::PermissionDenied => FsError::Forbidden,
+            _ => FsError::GeneralFailure,
+        }
+    }
+}
+
+#[cfg(any(feature = "memfs", feature = "localfs"))]
+impl From<io::Error> for FsError {
+    fn from(e: io::Error) -> Self {
+        (&e).into()
+    }
+}
 /// A webdav property.
 #[derive(Debug, Clone)]
 pub struct DavProp {

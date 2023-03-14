@@ -7,7 +7,7 @@
 use std::any::Any;
 use std::collections::VecDeque;
 use std::future::Future;
-use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
 use std::os::unix::{
     ffi::OsStrExt,
@@ -814,47 +814,5 @@ impl DavMetaData for LocalFsMetaData {
         } else {
             Some(format!("{:x}", t))
         }
-    }
-}
-
-impl From<&io::Error> for FsError {
-    fn from(e: &io::Error) -> Self {
-        if let Some(errno) = e.raw_os_error() {
-            // specific errors.
-            match errno {
-                #[cfg(unix)]
-                libc::EMLINK | libc::ENOSPC | libc::EDQUOT => return FsError::InsufficientStorage,
-                #[cfg(windows)]
-                libc::EMLINK | libc::ENOSPC => return FsError::InsufficientStorage,
-                libc::EFBIG => return FsError::TooLarge,
-                libc::EACCES | libc::EPERM => return FsError::Forbidden,
-                libc::ENOTEMPTY | libc::EEXIST => return FsError::Exists,
-                libc::ELOOP => return FsError::LoopDetected,
-                libc::ENAMETOOLONG => return FsError::PathTooLong,
-                libc::ENOTDIR => return FsError::Forbidden,
-                libc::EISDIR => return FsError::Forbidden,
-                libc::EROFS => return FsError::Forbidden,
-                libc::ENOENT => return FsError::NotFound,
-                libc::ENOSYS => return FsError::NotImplemented,
-                libc::EXDEV => return FsError::IsRemote,
-                _ => {}
-            }
-        } else {
-            // not an OS error - must be "not implemented"
-            // (e.g. metadata().created() on systems without st_crtime)
-            return FsError::NotImplemented;
-        }
-        // generic mappings for-whatever is left.
-        match e.kind() {
-            ErrorKind::NotFound => FsError::NotFound,
-            ErrorKind::PermissionDenied => FsError::Forbidden,
-            _ => FsError::GeneralFailure,
-        }
-    }
-}
-
-impl From<io::Error> for FsError {
-    fn from(e: io::Error) -> Self {
-        (&e).into()
     }
 }
