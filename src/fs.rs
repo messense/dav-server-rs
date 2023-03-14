@@ -4,8 +4,6 @@
 //! filesystem backend. Otherwise, just use 'LocalFs' or 'MemFs'.
 //!
 use std::fmt::Debug;
-use std::io;
-use std::io::ErrorKind;
 use std::io::SeekFrom;
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -57,8 +55,10 @@ pub enum FsError {
 pub type FsResult<T> = std::result::Result<T, FsError>;
 
 #[cfg(any(feature = "memfs", feature = "localfs"))]
-impl From<&io::Error> for FsError {
-    fn from(e: &io::Error) -> Self {
+impl From<&std::io::Error> for FsError {
+    fn from(e: &std::io::Error) -> Self {
+        use std::io::ErrorKind;
+
         if let Some(errno) = e.raw_os_error() {
             // specific errors.
             match errno {
@@ -94,8 +94,8 @@ impl From<&io::Error> for FsError {
 }
 
 #[cfg(any(feature = "memfs", feature = "localfs"))]
-impl From<io::Error> for FsError {
-    fn from(e: io::Error) -> Self {
+impl From<std::io::Error> for FsError {
+    fn from(e: std::io::Error) -> Self {
         (&e).into()
     }
 }
