@@ -453,19 +453,13 @@ impl crate::DavInner {
 }
 
 fn display_size(size: u64) -> String {
-    if size <= 1000 {
-        return format!("{}    ", size);
-    }
-    if size <= 1_000_000 {
-        return format!("{} KiB", ((size / 10) as f64) / 100f64);
-    }
-    if size <= 1_000_000_000 {
-        return format!("{} MiB", ((size / 10_000) as f64) / 100f64);
-    }
-    if size <= 1_000_000_000_000 {
-        return format!("{} GiB", ((size / 10_000_000) as f64) / 100f64);
-    }
-    format!("{:2}TiB", ((size / 10_000_000_000) as f64) / 100f64)
+    let (formatted, unit) = ["KiB", "MiB", "GiB", "TiB", "PiB"]
+        .iter()
+        .zip(1..)
+        .find(|(_, power)| size >= 1024u64.pow(*power) && size < 1024u64.pow(power + 1))
+        .map(|(unit, power)| (size as f64 / 1024u64.pow(power) as f64, unit))
+        .unwrap_or_else(|| (size as f64, &"B"));
+    format!("{} {}", (formatted * 100f64).round() / 100f64, unit)
 }
 
 fn display_path(path: &DavPath) -> String {
