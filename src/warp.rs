@@ -69,17 +69,22 @@ pub fn dav_handler(handler: DavHandler) -> BoxedFilter<(impl Reply,)> {
 /// The behaviour for serving a directory depends on the flags:
 ///
 /// - `index_html`: if an `index.html` file is found, serve it.
-/// - `auto_index`: create a directory listing.
+/// - `auto_index_over_get`: Create a directory index page when accessing over HTTP `GET` (but NOT
+/// - affecting WebDAV `PROPFIND` method currently). In the current implementation, this only
+///   affects HTTP `GET` method (commonly used for listing the directories when accessing through a
+///   `http://` or `https://` URL for a directory in a browser), but NOT WebDAV listing of a
+///   directory (HTTP `PROPFIND`). BEWARE: The name and behaviour of this parameter variable may
+///   change, and later it may control WebDAV `PROPFIND`, too (but not as of now).
 /// - no flags set: 404.
 pub fn dav_dir(
     base: impl AsRef<Path>,
     index_html: bool,
-    auto_index: bool,
+    auto_index_over_get: bool,
 ) -> BoxedFilter<(impl Reply,)> {
     let mut builder = DavHandler::builder()
         .filesystem(LocalFs::new(base, false, false, false))
         .locksystem(FakeLs::new())
-        .autoindex(auto_index);
+        .autoindex(auto_index_over_get);
     if index_html {
         builder = builder.indexfile("index.html".to_string())
     }
