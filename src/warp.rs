@@ -70,17 +70,28 @@ pub fn dav_handler(handler: DavHandler) -> BoxedFilter<(impl Reply,)> {
 ///
 /// - `index_html`: if an `index.html` file is found, serve it.
 /// - `auto_index_over_get`: Create a directory index page when accessing over HTTP `GET` (but NOT
-/// - affecting WebDAV `PROPFIND` method currently). In the current implementation, this only
+///   affecting WebDAV `PROPFIND` method currently). In the current implementation, this only
 ///   affects HTTP `GET` method (commonly used for listing the directories when accessing through a
 ///   `http://` or `https://` URL for a directory in a browser), but NOT WebDAV listing of a
 ///   directory (HTTP `PROPFIND`). BEWARE: The name and behaviour of this parameter variable may
 ///   change, and later it may control WebDAV `PROPFIND`, too (but not as of now).
+///   
+///   In release mode, if `auto_index_over_get` is `true`, then this executes as described above
+///   (currently affecting only HTTP `GET`), but beware of this current behaviour.
+///   
+///   In debug mode, if `auto_index_over_get` is `false`, this _panics_. That is so that it alerts
+///   the developers to this current limitation, so they don't accidentally expect
+///   `auto_index_over_get` to control WebDAV.
 /// - no flags set: 404.
 pub fn dav_dir(
     base: impl AsRef<Path>,
     index_html: bool,
     auto_index_over_get: bool,
 ) -> BoxedFilter<(impl Reply,)> {
+    debug_assert!(
+        auto_index_over_get,
+        "See documentation of dav_server::warp::dav_dir(...)."
+    );
     let mut builder = DavHandler::builder()
         .filesystem(LocalFs::new(base, false, false, false))
         .locksystem(FakeLs::new())
