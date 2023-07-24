@@ -131,7 +131,7 @@ impl LocalFs {
     ///
     /// If "public" is set to true, all files and directories created will be
     /// publically readable (mode 644/755), otherwise they will be private
-    /// (mode 600/700). Umask stil overrides this.
+    /// (mode 600/700). Umask still overrides this.
     ///
     /// If "case_insensitive" is set to true, all filesystem lookups will
     /// be case insensitive. Note that this has a _lot_ of overhead!
