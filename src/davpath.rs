@@ -151,7 +151,7 @@ fn normalize_path(rp: &[u8]) -> Result<Vec<u8>, ParseError> {
     Ok(v.join(&b""[..]))
 }
 
-/// Comparision ignores any trailing slash, so /foo == /foo/
+/// Comparison ignores any trailing slash, so /foo == /foo/
 impl PartialEq for DavPath {
     fn eq(&self, rhs: &DavPath) -> bool {
         let mut a = self.fullpath.as_slice();

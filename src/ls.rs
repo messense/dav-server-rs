@@ -1,6 +1,6 @@
 //! Contains the structs and traits that define a `locksystem` backend.
 //!
-//! Note that the methods DO NOT return futures, they are sychronous.
+//! Note that the methods DO NOT return futures, they are synchronous.
 //! This is because currently only two locksystems exist, `MemLs` and `FakeLs`.
 //! Both of them do not do any I/O, all methods return instantly.
 //!
