@@ -127,7 +127,7 @@ impl crate::DavInner {
             if let Some(r) = req.headers().typed_get::<headers::Range>() {
                 trace!("handle_gethead: range header {:?}", r);
                 use std::ops::Bound::*;
-                for range in r.iter() {
+                for range in r.satisfiable_ranges(len) {
                     let (start, mut count, valid) = match range {
                         (Included(s), Included(e)) if e >= s => (s, e - s + 1, true),
                         (Included(s), Unbounded) if s <= len => (s, len - s, true),

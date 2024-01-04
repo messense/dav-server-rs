@@ -7,6 +7,7 @@ use headers::HeaderMapExt;
 use http::StatusCode as SC;
 use http::{self, Request, Response};
 use http_body::Body as HttpBody;
+use http_body_util::BodyExt;
 
 use crate::body::Body;
 use crate::conditional::if_match_get_tokens;
@@ -230,10 +231,14 @@ impl crate::DavInner {
         // loop, read body, write to file.
         let mut total = 0u64;
 
-        while let Some(data) = body.data().await {
-            let mut buf = data.map_err(|e| to_ioerror(e))?;
-            let buflen = buf.remaining();
-            total += buflen as u64;
+        while let Some(data) = body.frame().await {
+            let data_frame = data.map_err(|e| to_ioerror(e))?;
+
+            let Ok(mut buf) = data_frame.into_data() else {
+                continue;
+            };
+
+            total += buf.remaining() as u64;
             // consistency check.
             if have_count && total > count {
                 break;
