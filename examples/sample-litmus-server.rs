@@ -5,14 +5,13 @@
 //  Connect to http://localhost:4918/
 //
 
-use std::convert::Infallible;
-use std::error::Error;
-use std::net::SocketAddr;
-use std::str::FromStr;
+use std::{convert::Infallible, error::Error, net::SocketAddr, str::FromStr};
 
 use clap::Parser;
-use futures_util::future::TryFutureExt;
 use headers::{authorization::Basic, Authorization, HeaderMapExt};
+use hyper::{server::conn::http1, service::service_fn};
+use hyper_util::rt::TokioIo;
+use tokio::net::TcpListener;
 
 use dav_server::{body::Body, fakels, localfs, memfs, memls, DavConfig, DavHandler};
 
@@ -45,7 +44,7 @@ impl Server {
 
     async fn handle(
         &self,
-        req: hyper::Request<hyper::Body>,
+        req: hyper::Request<hyper::body::Incoming>,
     ) -> Result<hyper::Response<Body>, Infallible> {
         let user = if self.auth {
             // we want the client to authenticate.
@@ -112,26 +111,42 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let fakels = args.fakels;
 
     let dav_server = Server::new(dir.to_string(), memls, fakels, auth);
-    let make_service = hyper::service::make_service_fn(|_| {
-        let dav_server = dav_server.clone();
-        async move {
-            let func = move |req| {
-                let dav_server = dav_server.clone();
-                async move { dav_server.clone().handle(req).await }
-            };
-            Ok::<_, hyper::Error>(hyper::service::service_fn(func))
-        }
-    });
 
     let port = args.port;
     let addr = format!("0.0.0.0:{}", port);
     let addr = SocketAddr::from_str(&addr)?;
 
-    let server = hyper::Server::try_bind(&addr)?
-        .serve(make_service)
-        .map_err(|e| eprintln!("server error: {}", e));
+    let listener = TcpListener::bind(addr).await?;
 
     println!("Serving {} on {}", name, port);
-    let _ = server.await;
-    Ok(())
+
+    // We start a loop to continuously accept incoming connections
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let dav_server = dav_server.clone();
+
+        // Use an adapter to access something implementing `tokio::io` traits as if they implement
+        // `hyper::rt` IO traits.
+        let io = TokioIo::new(stream);
+
+        // Spawn a tokio task to serve multiple connections concurrently
+        tokio::task::spawn(async move {
+            // Finally, we bind the incoming connection to our `hello` service
+            if let Err(err) = http1::Builder::new()
+                // `service_fn` converts our function in a `Service`
+                .serve_connection(
+                    io,
+                    service_fn({
+                        move |req| {
+                            let dav_server = dav_server.clone();
+                            async move { dav_server.clone().handle(req).await }
+                        }
+                    }),
+                )
+                .await
+            {
+                println!("Error serving connection: {:?}", err);
+            }
+        });
+    }
 }
