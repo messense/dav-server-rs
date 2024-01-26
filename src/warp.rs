@@ -6,9 +6,12 @@
 //! rejection.
 //!
 use std::convert::Infallible;
+#[cfg(any(docsrs, feature = "localfs"))]
 use std::path::Path;
 
-use crate::{fakels::FakeLs, localfs::LocalFs, DavHandler};
+use crate::DavHandler;
+#[cfg(any(docsrs, feature = "localfs"))]
+use crate::{fakels::FakeLs, localfs::LocalFs};
 use warp::{filters::BoxedFilter, Filter, Reply};
 
 /// Reply-filter that runs a DavHandler.
@@ -83,6 +86,7 @@ pub fn dav_handler(handler: DavHandler) -> BoxedFilter<(impl Reply,)> {
 ///   the developers to this current limitation, so they don't accidentally expect
 ///   `auto_index_over_get` to control WebDAV.
 /// - no flags set: 404.
+#[cfg(any(docsrs, feature = "localfs"))]
 pub fn dav_dir(
     base: impl AsRef<Path>,
     index_html: bool,
@@ -105,6 +109,7 @@ pub fn dav_dir(
 
 /// Creates a Filter that serves a single file, ignoring the request path,
 /// like `warp::filters::fs::file`.
+#[cfg(any(docsrs, feature = "localfs"))]
 pub fn dav_file(file: impl AsRef<Path>) -> BoxedFilter<(impl Reply,)> {
     let handler = DavHandler::builder()
         .filesystem(LocalFs::new_file(file, false))
