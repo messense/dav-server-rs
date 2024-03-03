@@ -373,7 +373,7 @@ pub trait DavMetaData: Debug + BoxCloneMd + Send + Sync {
         None
     }
 
-    /// Is this a file and not a directory. Default: `!s_dir()`.
+    /// Is this a file and not a directory. Default: `!is_dir()`.
     fn is_file(&self) -> bool {
         !self.is_dir()
     }
