@@ -12,10 +12,12 @@
 //! }
 //! ```
 //!
-use std::io;
-
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    convert::TryInto,
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use actix_web::body::BoxBody;
 use actix_web::error::PayloadError;
@@ -45,11 +47,11 @@ impl FromRequest for DavRequest {
 
     fn from_request(req: &HttpRequest, payload: &mut dev::Payload) -> Self::Future {
         let mut builder = http::Request::builder()
-            .method(req.method().to_owned())
-            .uri(req.uri().to_owned())
-            .version(req.version().to_owned());
+            .method(req.method().as_ref())
+            .uri(req.uri().to_string())
+            .version(from_actix_http_version(req.version()));
         for (name, value) in req.headers().iter() {
-            builder = builder.header(name, value);
+            builder = builder.header(name.as_str(), value.as_ref());
         }
         let path = req.match_info().unprocessed();
         let tail = req.match_info().unprocessed();
@@ -82,29 +84,20 @@ impl http_body::Body for DavBody {
     type Data = Bytes;
     type Error = io::Error;
 
-    fn poll_data(
+    fn poll_frame(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let this = self.project();
-        match this.body.poll_next(cx) {
-            Poll::Ready(Some(Ok(data))) => Poll::Ready(Some(Ok(data))),
-            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(match err {
+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        self.project()
+            .body
+            .poll_next(cx)
+            .map_ok(http_body::Frame::data)
+            .map_err(|err| match err {
                 PayloadError::Incomplete(Some(err)) => err,
                 PayloadError::Incomplete(None) => io::ErrorKind::BrokenPipe.into(),
                 PayloadError::Io(err) => err,
-                other => io::Error::new(io::ErrorKind::Other, format!("{:?}", other)),
-            }))),
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
-        }
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _cx: &mut Context,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        Poll::Ready(Ok(None))
+                err => io::Error::new(io::ErrorKind::Other, format!("{err:?}")),
+            })
     }
 }
 
@@ -126,9 +119,9 @@ impl actix_web::Responder for DavResponse {
         use crate::body::{Body, BodyType};
 
         let (parts, body) = self.0.into_parts();
-        let mut builder = HttpResponse::build(parts.status);
+        let mut builder = HttpResponse::build(parts.status.as_u16().try_into().unwrap());
         for (name, value) in parts.headers.into_iter() {
-            builder.append_header((name.unwrap(), value));
+            builder.append_header((name.unwrap().as_str(), value.as_ref()));
         }
         // I noticed that actix-web returns an empty chunked body
         // (\r\n0\r\n\r\n) and _no_ Transfer-Encoding header on
@@ -142,5 +135,18 @@ impl actix_web::Responder for DavResponse {
             b @ BodyType::AsyncStream(..) => builder.streaming(Body { inner: b }),
         };
         resp
+    }
+}
+
+/// Converts HTTP version from `actix_web` version of `http` crate while `actix_web` remains on old version.
+/// https://github.com/actix/actix-web/issues/3384
+fn from_actix_http_version(v: actix_web::http::Version) -> http::Version {
+    match v {
+        actix_web::http::Version::HTTP_3 => http::Version::HTTP_3,
+        actix_web::http::Version::HTTP_2 => http::Version::HTTP_2,
+        actix_web::http::Version::HTTP_11 => http::Version::HTTP_11,
+        actix_web::http::Version::HTTP_10 => http::Version::HTTP_10,
+        actix_web::http::Version::HTTP_09 => http::Version::HTTP_09,
+        v => unreachable!("unexpected HTTP version {:?}", v),
     }
 }
