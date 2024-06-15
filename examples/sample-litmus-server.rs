@@ -5,7 +5,7 @@
 //  Connect to http://localhost:4918/
 //
 
-use std::{convert::Infallible, error::Error, net::SocketAddr, str::FromStr};
+use std::{convert::Infallible, error::Error, net::SocketAddr};
 
 use clap::Parser;
 use headers::{authorization::Basic, Authorization, HeaderMapExt};
@@ -113,9 +113,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let dav_server = Server::new(dir.to_string(), memls, fakels, auth);
 
     let port = args.port;
-    let addr = format!("0.0.0.0:{}", port);
-    let addr = SocketAddr::from_str(&addr)?;
-
+    let addr: SocketAddr = ([0, 0, 0, 0], port).into();
     let listener = TcpListener::bind(addr).await?;
 
     println!("Serving {} on {}", name, port);

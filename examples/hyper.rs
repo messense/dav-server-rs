@@ -10,7 +10,7 @@ use dav_server::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 async fn main() {
     env_logger::init();
     let dir = "/tmp";
-    let addr = SocketAddr::from(([127, 0, 0, 1], 4918));
+    let addr: SocketAddr = ([127, 0, 0, 1], 4918).into();
 
     let dav_server = DavHandler::builder()
         .filesystem(LocalFs::new(dir, false, false, false))

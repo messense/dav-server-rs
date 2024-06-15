@@ -78,7 +78,7 @@
 //! #[tokio::main]
 //! async fn main() {
 //!     let dir = "/tmp";
-//!     let addr = SocketAddr::from(([127, 0, 0, 1], 4918));
+//!     let addr: SocketAddr = ([127, 0, 0, 1], 4918).into();
 //!
 //!     let dav_server = DavHandler::builder()
 //!         .filesystem(LocalFs::new(dir, false, false, false))
