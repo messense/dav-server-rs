@@ -9,19 +9,22 @@ use std::convert::Infallible;
 #[cfg(any(docsrs, feature = "localfs"))]
 use std::path::Path;
 
-use crate::DavHandler;
+use warp::{
+    filters::BoxedFilter,
+    http::{HeaderMap, Method},
+    Filter, Reply,
+};
+
+use crate::{body::Body, DavHandler};
 #[cfg(any(docsrs, feature = "localfs"))]
 use crate::{fakels::FakeLs, localfs::LocalFs};
-use warp::{filters::BoxedFilter, Filter, Reply};
 
 /// Reply-filter that runs a DavHandler.
 ///
 /// Just pass in a pre-configured DavHandler. If a prefix was not
 /// configured, it will be the request path up to this point.
 pub fn dav_handler(handler: DavHandler) -> BoxedFilter<(impl Reply,)> {
-    use http::header::HeaderMap;
     use http::uri::Uri;
-    use http::Response;
     use warp::path::{FullPath, Tail};
 
     warp::method()
@@ -30,16 +33,20 @@ pub fn dav_handler(handler: DavHandler) -> BoxedFilter<(impl Reply,)> {
         .and(warp::header::headers_cloned())
         .and(warp::body::stream())
         .and_then(
-            move |method, path_full: FullPath, path_tail: Tail, headers: HeaderMap, body| {
+            move |method: Method,
+                  path_full: FullPath,
+                  path_tail: Tail,
+                  headers: HeaderMap,
+                  body| {
                 let handler = handler.clone();
 
                 async move {
                     // rebuild an http::Request struct.
                     let path_str = path_full.as_str();
                     let uri = path_str.parse::<Uri>().unwrap();
-                    let mut builder = http::Request::builder().method(method).uri(uri);
+                    let mut builder = http::Request::builder().method(method.as_ref()).uri(uri);
                     for (k, v) in headers.iter() {
-                        builder = builder.header(k, v);
+                        builder = builder.header(k.as_str(), v.as_ref());
                     }
                     let request = builder.body(body).unwrap();
 
@@ -56,8 +63,7 @@ pub fn dav_handler(handler: DavHandler) -> BoxedFilter<(impl Reply,)> {
                     };
 
                     // Need to remap the http_body::Body to a hyper::Body.
-                    let (parts, body) = response.into_parts();
-                    let response = Response::from_parts(parts, hyper::Body::wrap_stream(body));
+                    let response = warp_response(response).unwrap();
                     Ok::<_, Infallible>(response)
                 }
             },
@@ -116,4 +122,35 @@ pub fn dav_file(file: impl AsRef<Path>) -> BoxedFilter<(impl Reply,)> {
         .locksystem(FakeLs::new())
         .build_handler();
     dav_handler(handler)
+}
+
+/// Adapts the response to the `warp` versions of `hyper` and `http` while `warp` remains on old versions.
+/// https://github.com/seanmonstar/warp/issues/1088
+fn warp_response(
+    response: http::Response<Body>,
+) -> Result<warp::http::Response<warp::hyper::Body>, warp::http::Error> {
+    let (parts, body) = response.into_parts();
+    // Leave response extensions empty.
+    let mut response = warp::http::Response::builder()
+        .version(warp_http_version(parts.version))
+        .status(parts.status.as_u16());
+    // Ignore headers without the name.
+    let headers = parts.headers.into_iter().filter_map(|(k, v)| Some((k?, v)));
+    for (k, v) in headers {
+        response = response.header(k.as_str(), v.as_ref());
+    }
+    response.body(warp::hyper::Body::wrap_stream(body))
+}
+
+/// Adapts HTTP version to the `warp` version of `http` crate while `warp` remains on old version.
+/// https://github.com/seanmonstar/warp/issues/1088
+fn warp_http_version(v: http::Version) -> warp::http::Version {
+    match v {
+        http::Version::HTTP_3 => warp::http::Version::HTTP_3,
+        http::Version::HTTP_2 => warp::http::Version::HTTP_2,
+        http::Version::HTTP_11 => warp::http::Version::HTTP_11,
+        http::Version::HTTP_10 => warp::http::Version::HTTP_10,
+        http::Version::HTTP_09 => warp::http::Version::HTTP_09,
+        v => unreachable!("unexpected HTTP version {:?}", v),
+    }
 }
