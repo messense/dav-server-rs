@@ -70,6 +70,10 @@ Also included are two locksystems:
 - [`MemLs`]: ephemeral in-memory locksystem.
 - [`FakeLs`]: fake locksystem. just enough LOCK/UNLOCK support for macOS/Windows.
 
+External filesystems:
+
+- [`OpendalFs`](https://github.com/apache/opendal/tree/main/integrations/dav-server): serves different storage services via [opendal](https://github.com/apache/opendal)
+
 ### Example.
 
 Example server using [hyper] that serves the /tmp directory in r/w mode. You should be
