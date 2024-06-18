@@ -115,7 +115,7 @@ pub struct DavProp {
 /// Future returned by almost all of the DavFileSystem methods.
 pub type FsFuture<'a, T> = Pin<Box<dyn Future<Output = FsResult<T>> + Send + 'a>>;
 /// Convenience alias for a boxed Stream.
-pub type FsStream<T> = Pin<Box<dyn Stream<Item = T> + Send>>;
+pub type FsStream<T> = Pin<Box<dyn Stream<Item = FsResult<T>> + Send>>;
 
 /// Used as argument to the read_dir() method.
 /// It is:

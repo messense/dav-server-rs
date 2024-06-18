@@ -238,7 +238,7 @@ impl DavInner {
                 }
             };
 
-            while let Some(dirent) = entries.next().await {
+            while let Some(dirent) = entries.next().await.transpose()? {
                 let mut npath = path.clone();
                 npath.push_segment(&dirent.name());
                 let meta = match dirent.metadata().await {

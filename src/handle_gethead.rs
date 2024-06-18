@@ -324,7 +324,7 @@ impl crate::DavInner {
                 }
 
                 let mut dirents: Vec<Dirent> = Vec::new();
-                while let Some(dirent) = entries.next().await {
+                while let Some(dirent) = entries.next().await.transpose()? {
                     let mut name = dirent.name();
                     if name.starts_with(b".") {
                         continue;

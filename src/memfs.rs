@@ -15,6 +15,7 @@ use bytes::{Buf, Bytes};
 use futures_util::{
     future,
     future::{BoxFuture, FutureExt},
+    StreamExt,
 };
 use http::StatusCode;
 
@@ -152,7 +153,7 @@ impl DavFileSystem for MemFs {
                     v.push(Box::new(node.as_dirent(&name)));
                 }
             }
-            let strm = futures_util::stream::iter(v.into_iter());
+            let strm = futures_util::stream::iter(v.into_iter()).map(Ok);
             Ok(Box::pin(strm) as FsStream<Box<dyn DavDirEntry>>)
         }
         .boxed()

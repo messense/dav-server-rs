@@ -532,7 +532,7 @@ impl LocalFsReadDir {
 
 // The stream implementation tries to be smart and batch I/O operations
 impl<'a> Stream for LocalFsReadDir {
-    type Item = Box<dyn DavDirEntry>;
+    type Item = FsResult<Box<dyn DavDirEntry>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = Pin::into_inner(self);
@@ -569,8 +569,18 @@ impl<'a> Stream for LocalFsReadDir {
 
         // we filled the buffer, now pop from the buffer.
         match this.buffer.pop_front() {
-            Some(Ok(item)) => Poll::Ready(Some(Box::new(item))),
-            Some(Err(_)) | None => {
+            Some(Ok(item)) => Poll::Ready(Some(Ok(Box::new(item)))),
+            Some(Err(err)) => {
+                // fuse the iterator.
+                this.iterator.take();
+                // finish the cache.
+                if let Some(ref mut nb) = this.dir_cache {
+                    nb.finish();
+                }
+                // return error of stream.
+                Poll::Ready(Some(Err(err.into())))
+            }
+            None => {
                 // fuse the iterator.
                 this.iterator.take();
                 // finish the cache.

@@ -65,7 +65,7 @@ impl crate::DavInner {
             }?;
 
             let mut result = Ok(());
-            while let Some(dirent) = entries.next().await {
+            while let Some(dirent) = entries.next().await.transpose()? {
                 // if metadata() fails, skip to next entry.
                 // NOTE: dirent.metadata == symlink_metadata (!)
                 let meta = match dirent.metadata().await {
