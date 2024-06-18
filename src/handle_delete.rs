@@ -66,6 +66,14 @@ impl crate::DavInner {
 
             let mut result = Ok(());
             while let Some(dirent) = entries.next().await {
+                let dirent = match dirent {
+                    Ok(dirent) => dirent,
+                    Err(e) => {
+                        result = Err(add_status(res, path, e).await);
+                        continue;
+                    }
+                };
+
                 // if metadata() fails, skip to next entry.
                 // NOTE: dirent.metadata == symlink_metadata (!)
                 let meta = match dirent.metadata().await {
