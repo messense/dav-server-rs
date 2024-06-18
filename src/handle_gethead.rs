@@ -324,7 +324,15 @@ impl crate::DavInner {
                 }
 
                 let mut dirents: Vec<Dirent> = Vec::new();
-                while let Some(dirent) = entries.next().await.transpose()? {
+                while let Some(dirent) = entries.next().await {
+                    let dirent = match dirent {
+                        Ok(dirent) => dirent,
+                        Err(e) => {
+                            trace!("next dir entry error happened. Skipping {:?}", e);
+                            continue;
+                        }
+                    };
+
                     let mut name = dirent.name();
                     if name.starts_with(b".") {
                         continue;

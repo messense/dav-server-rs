@@ -84,7 +84,12 @@ impl crate::DavInner {
             // If we encounter errors, just print them, and keep going.
             // Last seen error is returned from function.
             let mut retval = Ok::<_, DavError>(());
-            while let Some(dirent) = entries.next().await.transpose()? {
+            while let Some(dirent) = entries.next().await {
+                let dirent = match dirent {
+                    Ok(dirent) => dirent,
+                    Err(e) => return add_status(multierror, source, e).await,
+                };
+
                 // NOTE: dirent.metadata() behaves like symlink_metadata()
                 let meta = match dirent.metadata().await {
                     Ok(meta) => meta,

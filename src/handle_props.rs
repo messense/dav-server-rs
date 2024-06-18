@@ -238,7 +238,15 @@ impl DavInner {
                 }
             };
 
-            while let Some(dirent) = entries.next().await.transpose()? {
+            while let Some(dirent) = entries.next().await {
+                let dirent = match dirent {
+                    Ok(dirent) => dirent,
+                    Err(e) => {
+                        trace!("next dir entry error happened. Skipping {:?}", e);
+                        continue;
+                    }
+                };
+
                 let mut npath = path.clone();
                 npath.push_segment(&dirent.name());
                 let meta = match dirent.metadata().await {
