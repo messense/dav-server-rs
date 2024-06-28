@@ -31,7 +31,8 @@ The backend interfaces are similar to the ones from the Go `x/net/webdav package
 
 - the library contains a [HTTP handler][DavHandler].
 - you supply a [filesystem][DavFileSystem] for backend storage, which can optionally
-  implement reading/writing [DAV properties][DavProp].
+  implement reading/writing [DAV properties][DavProp]. If the file system requires
+  authorization, implement a [special trait][GuardedFileSystem].
 - you can supply a [locksystem][DavLockSystem] that handles webdav locks.
 
 The handler in this library works with the standard http types
@@ -65,6 +66,11 @@ Included are two filesystems:
 - [`LocalFs`]: serves a directory on the local filesystem
 - [`MemFs`]: ephemeral in-memory filesystem. supports DAV properties.
 
+You're able to implement custom filesystem adapter:
+
+- [`DavFileSystem`][DavFileSystem]: without authorization.
+- [`GuardedFileSystem`][GuardedFileSystem]: when access control is required.
+
 Also included are two locksystems:
 
 - [`MemLs`]: ephemeral in-memory locksystem.
@@ -81,41 +87,61 @@ able to mount this network share from Linux, macOS and Windows. [Examples][examp
 for other frameworks are also available.
 
 ```rust
-use std::convert::Infallible;
+use std::{convert::Infallible, net::SocketAddr};
+use hyper::{server::conn::http1, service::service_fn};
+use hyper_util::rt::TokioIo;
+use tokio::net::TcpListener;
 use dav_server::{fakels::FakeLs, localfs::LocalFs, DavHandler};
 
 #[tokio::main]
 async fn main() {
     let dir = "/tmp";
-    let addr = ([127, 0, 0, 1], 4918).into();
+    let addr: SocketAddr = ([127, 0, 0, 1], 4918).into();
 
     let dav_server = DavHandler::builder()
         .filesystem(LocalFs::new(dir, false, false, false))
         .locksystem(FakeLs::new())
         .build_handler();
 
-    let make_service = hyper::service::make_service_fn(move |_| {
-        let dav_server = dav_server.clone();
-        async move {
-            let func = move |req| {
-                let dav_server = dav_server.clone();
-                async move {
-                    Ok::<_, Infallible>(dav_server.handle(req).await)
-                }
-            };
-            Ok::<_, Infallible>(hyper::service::service_fn(func))
-        }
-    });
+    let listener = TcpListener::bind(addr).await.unwrap();
 
-    println!("Serving {} on {}", dir, addr);
-    let _ = hyper::Server::bind(&addr)
-        .serve(make_service)
-        .await
-        .map_err(|e| eprintln!("server error: {}", e));
+    println!("Listening {addr}");
+
+    // We start a loop to continuously accept incoming connections
+    loop {
+        let (stream, _) = listener.accept().await.unwrap();
+        let dav_server = dav_server.clone();
+
+        // Use an adapter to access something implementing `tokio::io` traits as if they implement
+        // `hyper::rt` IO traits.
+        let io = TokioIo::new(stream);
+
+        // Spawn a tokio task to serve multiple connections concurrently
+        tokio::task::spawn(async move {
+            // Finally, we bind the incoming connection to our `hello` service
+            if let Err(err) = http1::Builder::new()
+                // `service_fn` converts our function in a `Service`
+                .serve_connection(
+                    io,
+                    service_fn({
+                        move |req| {
+                            let dav_server = dav_server.clone();
+                            async move { Ok::<_, Infallible>(dav_server.handle(req).await) }
+                        }
+                    }),
+                )
+                .await
+            {
+                eprintln!("Failed serving: {err:?}");
+            }
+        });
+    }
 }
 ```
+
 [DavHandler]: https://docs.rs/dav-server/latest/dav_server/struct.DavHandler.html
 [DavFileSystem]: https://docs.rs/dav-server/latest/dav_server/fs/index.html
+[GuardedFileSystem]: https://docs.rs/dav-server/latest/dav_server/fs/trait.GuardedFileSystem.html
 [DavLockSystem]: https://docs.rs/dav-server/latest/dav_server/ls/index.html
 [DavProp]: https://docs.rs/dav-server/latest/dav_server/fs/struct.DavProp.html
 [`WebDav`]: https://tools.ietf.org/html/rfc4918

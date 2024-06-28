@@ -16,9 +16,9 @@ use crate::fs::{FsError, OpenOptions};
 use crate::ls::*;
 use crate::util::MemBuffer;
 use crate::xmltree_ext::{self, ElementExt};
-use crate::DavResult;
+use crate::{DavInner, DavResult};
 
-impl crate::DavInner {
+impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     pub(crate) async fn handle_lock(
         &self,
         req: &Request<()>,
@@ -34,7 +34,7 @@ impl crate::DavInner {
 
         // path and meta
         let mut path = self.path(req);
-        let meta = match self.fs.metadata(&path).await {
+        let meta = match self.fs.metadata(&path, &self.credentials).await {
             Ok(meta) => Some(self.fixpath(&mut res, &mut path, meta)),
             Err(_) => None,
         };
@@ -42,7 +42,8 @@ impl crate::DavInner {
         // lock refresh?
         if xmldata.is_empty() {
             // get locktoken
-            let (_, tokens) = dav_if_match(req, &self.fs, &self.ls, &path).await;
+            let (_, tokens) =
+                dav_if_match(req, self.fs.as_ref(), &self.ls, &path, &self.credentials).await;
             if tokens.len() != 1 {
                 return Err(SC::BAD_REQUEST.into());
             }
@@ -75,7 +76,16 @@ impl crate::DavInner {
         };
 
         // handle the if-headers.
-        if let Some(s) = if_match(req, meta.as_ref(), &self.fs, &self.ls, &path).await {
+        if let Some(s) = if_match(
+            req,
+            meta.as_ref(),
+            self.fs.as_ref(),
+            &self.ls,
+            &path,
+            &self.credentials,
+        )
+        .await
+        {
             return Err(s.into());
         }
 
@@ -152,7 +162,7 @@ impl crate::DavInner {
         let create = oo.create;
         let create_new = oo.create_new;
         if meta.is_none() {
-            match self.fs.open(&path, oo).await {
+            match self.fs.open(&path, oo, &self.credentials).await {
                 Ok(_) => {}
                 Err(FsError::NotFound) | Err(FsError::Exists) => {
                     let s = if !create || create_new {
@@ -207,7 +217,7 @@ impl crate::DavInner {
         let mut res = Response::new(Body::empty());
 
         let mut path = self.path(req);
-        if let Ok(meta) = self.fs.metadata(&path).await {
+        if let Ok(meta) = self.fs.metadata(&path, &self.credentials).await {
             self.fixpath(&mut res, &mut path, meta);
         }
 

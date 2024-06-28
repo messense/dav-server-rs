@@ -5,7 +5,7 @@ use http::{Method, StatusCode};
 
 use crate::davheaders::{self, ETag};
 use crate::davpath::DavPath;
-use crate::fs::{DavFileSystem, DavMetaData};
+use crate::fs::{DavMetaData, GuardedFileSystem};
 use crate::ls::DavLockSystem;
 
 type Request = http::Request<()>;
@@ -107,12 +107,16 @@ pub(crate) fn http_if_match(
 // caller should set the http status to 412 PreconditionFailed if
 // the return value from this function is false.
 //
-pub(crate) async fn dav_if_match<'a>(
+pub(crate) async fn dav_if_match<'a, C>(
     req: &'a Request,
-    fs: &'a Box<dyn DavFileSystem + 'static>,
+    fs: &'a (dyn GuardedFileSystem<C> + 'static),
     ls: &'a Option<Box<dyn DavLockSystem + 'static>>,
     path: &'a DavPath,
-) -> (bool, Vec<String>) {
+    credentials: &C,
+) -> (bool, Vec<String>)
+where
+    C: Clone + Send + Sync + 'static,
+{
     let mut tokens: Vec<String> = Vec::new();
     let mut any_list_ok = false;
 
@@ -170,7 +174,7 @@ pub(crate) async fn dav_if_match<'a>(
                         // invalid location, so always false.
                         false
                     } else {
-                        match fs.metadata(p).await {
+                        match fs.metadata(p, credentials).await {
                             Ok(meta) => {
                                 // exists and may have metadata ..
                                 if let Some(mtag) = ETag::from_meta(meta) {
@@ -204,14 +208,18 @@ pub(crate) async fn dav_if_match<'a>(
 }
 
 // Handle both the HTTP conditional If: headers, and the webdav If: header.
-pub(crate) async fn if_match<'a>(
+pub(crate) async fn if_match<'a, C>(
     req: &'a Request,
     meta: Option<&'a Box<dyn DavMetaData + 'static>>,
-    fs: &'a Box<dyn DavFileSystem + 'static>,
+    fs: &'a (dyn GuardedFileSystem<C> + 'static),
     ls: &'a Option<Box<dyn DavLockSystem + 'static>>,
     path: &'a DavPath,
-) -> Option<StatusCode> {
-    match dav_if_match(req, fs, ls, path).await {
+    credentials: &C,
+) -> Option<StatusCode>
+where
+    C: Clone + Send + Sync + 'static,
+{
+    match dav_if_match(req, fs, ls, path, credentials).await {
         (true, _) => {}
         (false, _) => return Some(StatusCode::PRECONDITION_FAILED),
     }
@@ -219,17 +227,21 @@ pub(crate) async fn if_match<'a>(
 }
 
 // Like if_match, but also returns all "associated state-tokens"
-pub(crate) async fn if_match_get_tokens<'a>(
+pub(crate) async fn if_match_get_tokens<'a, C>(
     req: &'a Request,
     meta: Option<&'a Box<dyn DavMetaData + 'static>>,
-    fs: &'a Box<dyn DavFileSystem + 'static>,
+    fs: &'a (dyn GuardedFileSystem<C> + 'static),
     ls: &'a Option<Box<dyn DavLockSystem + 'static>>,
     path: &'a DavPath,
-) -> Result<Vec<String>, StatusCode> {
+    credentials: &C,
+) -> Result<Vec<String>, StatusCode>
+where
+    C: Clone + Send + Sync + 'static,
+{
     if let Some(code) = http_if_match(req, meta) {
         return Err(code);
     }
-    match dav_if_match(req, fs, ls, path).await {
+    match dav_if_match(req, fs, ls, path, credentials).await {
         (true, v) => Ok(v),
         (false, _) => Err(StatusCode::PRECONDITION_FAILED),
     }

@@ -5,15 +5,23 @@ use crate::body::Body;
 use crate::conditional::*;
 use crate::davheaders;
 use crate::fs::*;
-use crate::{DavError, DavResult};
+use crate::{DavError, DavInner, DavResult};
 
-impl crate::DavInner {
+impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     pub(crate) async fn handle_mkcol(&self, req: &Request<()>) -> DavResult<Response<Body>> {
         let mut path = self.path(req);
-        let meta = self.fs.metadata(&path).await;
+        let meta = self.fs.metadata(&path, &self.credentials).await;
 
         // check the If and If-* headers.
-        let res = if_match_get_tokens(req, meta.as_ref().ok(), &self.fs, &self.ls, &path).await;
+        let res = if_match_get_tokens(
+            req,
+            meta.as_ref().ok(),
+            self.fs.as_ref(),
+            &self.ls,
+            &path,
+            &self.credentials,
+        )
+        .await;
         let tokens = match res {
             Ok(t) => t,
             Err(s) => return Err(DavError::Status(s)),
@@ -30,7 +38,7 @@ impl crate::DavInner {
 
         let mut res = Response::new(Body::empty());
 
-        match self.fs.create_dir(&path).await {
+        match self.fs.create_dir(&path, &self.credentials).await {
             // RFC 4918 9.3.1 MKCOL Status Codes.
             Err(FsError::Exists) => return Err(DavError::Status(StatusCode::METHOD_NOT_ALLOWED)),
             Err(FsError::NotFound) => return Err(DavError::Status(StatusCode::CONFLICT)),
