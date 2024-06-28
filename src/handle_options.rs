@@ -3,9 +3,9 @@ use http::{Request, Response};
 
 use crate::body::Body;
 use crate::util::{dav_method, DavMethod};
-use crate::DavResult;
+use crate::{DavInner, DavResult};
 
-impl crate::DavInner {
+impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     pub(crate) async fn handle_options(&self, req: &Request<()>) -> DavResult<Response<Body>> {
         let mut res = Response::new(Body::empty());
 
@@ -35,7 +35,7 @@ impl crate::DavInner {
         };
 
         let path = self.path(req);
-        let meta = self.fs.metadata(&path).await;
+        let meta = self.fs.metadata(&path, &self.credentials).await;
         let is_unmapped = meta.is_err();
         let is_file = meta.map(|m| m.is_file()).unwrap_or_default();
         let is_star = path.is_star() && method == DavMethod::Options;

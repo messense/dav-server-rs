@@ -23,7 +23,8 @@
 //!
 //! - the library contains a [HTTP handler][DavHandler].
 //! - you supply a [filesystem][DavFileSystem] for backend storage, which can optionally
-//!   implement reading/writing [DAV properties][DavProp].
+//!   implement reading/writing [DAV properties][DavProp]. If the file system requires
+//!   authorization, implement a [special trait][GuardedFileSystem].
 //! - you can supply a [locksystem][DavLockSystem] that handles webdav locks.
 //!
 //! The handler in this library works with the standard http types
@@ -57,10 +58,20 @@
 //! - [`LocalFs`]: serves a directory on the local filesystem
 //! - [`MemFs`]: ephemeral in-memory filesystem. supports DAV properties.
 //!
+//! You're able to implement custom filesystem adapter:
+//!
+//! - [`DavFileSystem`]: without authorization.
+//! - [`GuardedFileSystem`]: when access control is required.
+//!
 //! Also included are two locksystems:
 //!
 //! - [`MemLs`]: ephemeral in-memory locksystem.
 //! - [`FakeLs`]: fake locksystem. just enough LOCK/UNLOCK support for macOS/Windows.
+//!
+//! External filesystem adapter implementations:
+//!
+//! - [`OpendalFs`](https://github.com/apache/opendal/tree/main/integrations/dav-server):
+//!   connects various storage protocols via [OpenDAL](https://github.com/apache/opendal).
 //!
 //! ## Example.
 //!

@@ -15,7 +15,7 @@ use crate::davpath::DavPath;
 use crate::errors::*;
 use crate::fs::*;
 use crate::util::systemtime_to_offsetdatetime;
-use crate::DavMethod;
+use crate::{DavInner, DavMethod};
 
 struct Range {
     start: u64,
@@ -28,13 +28,13 @@ const BOUNDARY_END: &str = "\n--BOUNDARY--\n";
 
 const READ_BUF_SIZE: usize = 16384;
 
-impl crate::DavInner {
+impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     pub(crate) async fn handle_get(&self, req: &Request<()>) -> DavResult<Response<Body>> {
         let head = req.method() == http::Method::HEAD;
         let mut path = self.path(req);
 
         // check if it's a directory.
-        let meta = self.fs.metadata(&path).await?;
+        let meta = self.fs.metadata(&path, &self.credentials).await?;
         if meta.is_dir() {
             //
             // This is a directory. If the path doesn't end in "/", send a redir.
@@ -63,7 +63,10 @@ impl crate::DavInner {
         }
 
         // double check, is it a regular file.
-        let mut file = self.fs.open(&path, OpenOptions::read()).await?;
+        let mut file = self
+            .fs
+            .open(&path, OpenOptions::read(), &self.credentials)
+            .await?;
         #[allow(unused_mut)]
         let mut meta = file.metadata().await?;
         if !meta.is_file() {
@@ -116,7 +119,16 @@ impl crate::DavInner {
             .typed_insert(headers::AcceptRanges::bytes());
 
         // handle the if-headers.
-        if let Some(s) = conditional::if_match(req, Some(&meta), &self.fs, &self.ls, &path).await {
+        if let Some(s) = conditional::if_match(
+            req,
+            Some(&meta),
+            self.fs.as_ref(),
+            &self.ls,
+            &path,
+            &self.credentials,
+        )
+        .await
+        {
             *res.status_mut() = s;
             no_body = true;
             do_range = false;
@@ -303,7 +315,10 @@ impl crate::DavInner {
         }
 
         // read directory or bail.
-        let mut entries = self.fs.read_dir(&path, ReadDirMeta::Data).await?;
+        let mut entries = self
+            .fs
+            .read_dir(&path, ReadDirMeta::Data, &self.credentials)
+            .await?;
 
         // start output
         res.headers_mut()

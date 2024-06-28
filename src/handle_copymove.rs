@@ -10,7 +10,7 @@ use crate::davpath::DavPath;
 use crate::errors::*;
 use crate::fs::*;
 use crate::multierror::{multi_error, MultiError};
-use crate::{util::DavMethod, DavResult};
+use crate::{util::DavMethod, DavInner, DavResult};
 
 // map_err helper.
 async fn add_status<'a>(
@@ -25,7 +25,7 @@ async fn add_status<'a>(
     Err(daverror)
 }
 
-impl crate::DavInner {
+impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     pub(crate) fn do_copy<'a>(
         &'a self,
         source: &'a DavPath,
@@ -42,14 +42,14 @@ impl crate::DavInner {
             }
 
             // source must exist.
-            let meta = match self.fs.metadata(source).await {
+            let meta = match self.fs.metadata(source, &self.credentials).await {
                 Err(e) => return add_status(multierror, source, e).await,
                 Ok(m) => m,
             };
 
             // if it's a file we can overwrite it.
             if !meta.is_dir() {
-                return match self.fs.copy(source, dest).await {
+                return match self.fs.copy(source, dest, &self.credentials).await {
                     Ok(_) => Ok(()),
                     Err(e) => {
                         debug!("do_copy: self.fs.copy error: {:?}", e);
@@ -61,7 +61,7 @@ impl crate::DavInner {
             // Copying a directory onto an existing directory with Depth 0
             // is not an error. It means "only copy properties" (which
             // we do not do yet).
-            if let Err(e) = self.fs.create_dir(dest).await {
+            if let Err(e) = self.fs.create_dir(dest, &self.credentials).await {
                 if depth != Depth::Zero || e != FsError::Exists {
                     debug!("do_copy: self.fs.create_dir({}) error: {:?}", dest, e);
                     return add_status(multierror, dest, e).await;
@@ -73,7 +73,11 @@ impl crate::DavInner {
                 return Ok(());
             }
 
-            let mut entries = match self.fs.read_dir(source, ReadDirMeta::DataSymlink).await {
+            let mut entries = match self
+                .fs
+                .read_dir(source, ReadDirMeta::DataSymlink, &self.credentials)
+                .await
+            {
                 Ok(entries) => entries,
                 Err(e) => {
                     debug!("do_copy: self.fs.read_dir error: {:?}", e);
@@ -138,7 +142,7 @@ impl crate::DavInner {
         dest: &'a DavPath,
         multierror: &'a mut MultiError,
     ) -> DavResult<()> {
-        if let Err(e) = self.fs.rename(source, dest).await {
+        if let Err(e) = self.fs.rename(source, dest, &self.credentials).await {
             add_status(multierror, source, e).await
         } else {
             Ok(())
@@ -171,14 +175,14 @@ impl crate::DavInner {
         // is a symlink, we want to move the symlink, not what it points to.
         let mut path = self.path(req);
         let meta = if method == DavMethod::Move {
-            let meta = self.fs.symlink_metadata(&path).await?;
+            let meta = self.fs.symlink_metadata(&path, &self.credentials).await?;
             if meta.is_symlink() {
-                let m2 = self.fs.metadata(&path).await?;
+                let m2 = self.fs.metadata(&path, &self.credentials).await?;
                 path.add_slash_if(m2.is_dir());
             }
             meta
         } else {
-            self.fs.metadata(&path).await?
+            self.fs.metadata(&path, &self.credentials).await?
         };
         path.add_slash_if(meta.is_dir());
 
@@ -189,11 +193,11 @@ impl crate::DavInner {
 
         // for the destination, also check if it's a symlink. If we are going
         // to remove it first, we want to remove the link, not what it points to.
-        let (dest_is_file, dmeta) = match self.fs.symlink_metadata(&dest).await {
+        let (dest_is_file, dmeta) = match self.fs.symlink_metadata(&dest, &self.credentials).await {
             Ok(meta) => {
                 let mut is_file = false;
                 if meta.is_symlink() {
-                    if let Ok(m) = self.fs.metadata(&dest).await {
+                    if let Ok(m) = self.fs.metadata(&dest, &self.credentials).await {
                         is_file = m.is_file();
                     }
                 }
@@ -217,7 +221,16 @@ impl crate::DavInner {
         }
 
         // check If and If-* headers for source URL
-        let tokens = match if_match_get_tokens(req, Some(&meta), &self.fs, &self.ls, &path).await {
+        let tokens = match if_match_get_tokens(
+            req,
+            Some(&meta),
+            self.fs.as_ref(),
+            &self.ls,
+            &path,
+            &self.credentials,
+        )
+        .await
+        {
             Ok(t) => t,
             Err(s) => return Err(s.into()),
         };

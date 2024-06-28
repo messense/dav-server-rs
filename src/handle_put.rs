@@ -13,7 +13,7 @@ use crate::body::Body;
 use crate::conditional::if_match_get_tokens;
 use crate::davheaders;
 use crate::fs::*;
-use crate::{DavError, DavResult};
+use crate::{DavError, DavInner, DavResult};
 
 const SABRE: &str = "application/x-sabredav-partialupdate";
 
@@ -53,7 +53,7 @@ where
     }
 }
 
-impl crate::DavInner {
+impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     pub(crate) async fn handle_put<ReqBody, ReqData, ReqError>(
         self,
         req: &Request<()>,
@@ -96,7 +96,7 @@ impl crate::DavInner {
         oo.checksum = checksum;
 
         let path = self.path(req);
-        let meta = self.fs.metadata(&path).await;
+        let meta = self.fs.metadata(&path, &self.credentials).await;
 
         // close connection on error.
         let mut res = Response::new(Body::empty());
@@ -170,7 +170,14 @@ impl crate::DavInner {
         }
 
         // check the If and If-* headers.
-        let tokens = if_match_get_tokens(req, meta.as_ref().ok(), &self.fs, &self.ls, &path);
+        let tokens = if_match_get_tokens(
+            req,
+            meta.as_ref().ok(),
+            self.fs.as_ref(),
+            &self.ls,
+            &path,
+            &self.credentials,
+        );
         let tokens = match tokens.await {
             Ok(t) => t,
             Err(s) => return Err(DavError::StatusClose(s)),
@@ -203,7 +210,7 @@ impl crate::DavInner {
 
         let create = oo.create;
         let create_new = oo.create_new;
-        let mut file = match self.fs.open(&path, oo).await {
+        let mut file = match self.fs.open(&path, oo, &self.credentials).await {
             Ok(f) => f,
             Err(FsError::NotFound) | Err(FsError::Exists) => {
                 let s = if !create || create_new {

@@ -95,15 +95,16 @@ struct StatusElement {
     element: Element,
 }
 
-struct PropWriter {
+struct PropWriter<C> {
     emitter: Emitter,
     tx: Option<Sender>,
     name: String,
     props: Vec<Element>,
-    fs: Box<dyn DavFileSystem>,
+    fs: Box<dyn GuardedFileSystem<C>>,
     ls: Option<Box<dyn DavLockSystem>>,
     useragent: String,
     q_cache: QuotaCache,
+    credentials: C,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -128,7 +129,7 @@ fn init_staticprop(p: &[&str]) -> Vec<Element> {
     v
 }
 
-impl DavInner {
+impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     pub(crate) async fn handle_propfind(
         self,
         req: &Request<()>,
@@ -159,7 +160,7 @@ impl DavInner {
 
         // path and meta
         let mut path = self.path(req);
-        let meta = self.fs.metadata(&path).await?;
+        let meta = self.fs.metadata(&path, &self.credentials).await?;
         let meta = self.fixpath(&mut res, &mut path, meta);
 
         let mut root = None;
@@ -199,7 +200,15 @@ impl DavInner {
 
         trace!("propfind: type request: {}", name);
 
-        let mut pw = PropWriter::new(req, &mut res, name, props, &self.fs, self.ls.as_ref())?;
+        let mut pw = PropWriter::new(
+            req,
+            &mut res,
+            name,
+            props,
+            self.fs.clone(),
+            self.ls.as_ref(),
+            self.credentials.clone(),
+        )?;
 
         *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
             pw.set_tx(tx);
@@ -222,14 +231,18 @@ impl DavInner {
         &'a self,
         path: &'a DavPath,
         depth: davheaders::Depth,
-        propwriter: &'a mut PropWriter,
+        propwriter: &'a mut PropWriter<C>,
     ) -> BoxFuture<'a, DavResult<()>> {
         async move {
             let readdir_meta = match self.hide_symlinks {
                 Some(true) | None => ReadDirMeta::DataSymlink,
                 Some(false) => ReadDirMeta::Data,
             };
-            let mut entries = match self.fs.read_dir(path, readdir_meta).await {
+            let mut entries = match self
+                .fs
+                .read_dir(path, readdir_meta, &self.credentials)
+                .await
+            {
                 Ok(entries) => entries,
                 Err(e) => {
                     // if we cannot read_dir, just skip it.
@@ -380,11 +393,20 @@ impl DavInner {
 
         // file must exist.
         let mut path = self.path(req);
-        let meta = self.fs.metadata(&path).await?;
+        let meta = self.fs.metadata(&path, &self.credentials).await?;
         let meta = self.fixpath(&mut res, &mut path, meta);
 
         // check the If and If-* headers.
-        let tokens = match if_match_get_tokens(req, Some(&meta), &self.fs, &self.ls, &path).await {
+        let tokens = match if_match_get_tokens(
+            req,
+            Some(&meta),
+            self.fs.as_ref(),
+            &self.ls,
+            &path,
+            &self.credentials,
+        )
+        .await
+        {
             Ok(t) => t,
             Err(s) => return Err(s.into()),
         };
@@ -409,7 +431,7 @@ impl DavInner {
 
         let mut patch = Vec::new();
         let mut ret = Vec::new();
-        let can_deadprop = self.fs.have_props(&path).await;
+        let can_deadprop = self.fs.have_props(&path, &self.credentials).await;
 
         // walk over the element tree and feed "set" and "remove" items to
         // the liveprop_set/liveprop_remove functions. If skipped by those,
@@ -456,7 +478,7 @@ impl DavInner {
             // moment. if it does, we should roll back the earlier
             // made changes to live props, but come on, we're not
             // builing a transaction engine here.
-            let deadret = self.fs.patch_props(&path, patch).await?;
+            let deadret = self.fs.patch_props(&path, patch, &self.credentials).await?;
             ret.extend(deadret.into_iter());
         }
 
@@ -469,7 +491,15 @@ impl DavInner {
         }
 
         // And reply.
-        let mut pw = PropWriter::new(req, &mut res, "propertyupdate", Vec::new(), &self.fs, None)?;
+        let mut pw = PropWriter::new(
+            req,
+            &mut res,
+            "propertyupdate",
+            Vec::new(),
+            self.fs.clone(),
+            None,
+            self.credentials,
+        )?;
         *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
             pw.set_tx(tx);
             pw.write_propresponse(&path, hm)?;
@@ -481,15 +511,16 @@ impl DavInner {
     }
 }
 
-impl PropWriter {
+impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
     pub fn new(
         req: &Request<()>,
         res: &mut Response<Body>,
         name: &str,
         mut props: Vec<Element>,
-        fs: &Box<dyn DavFileSystem>,
+        fs: Box<dyn GuardedFileSystem<C>>,
         ls: Option<&Box<dyn DavLockSystem>>,
-    ) -> DavResult<PropWriter> {
+        credentials: C,
+    ) -> DavResult<Self> {
         let contenttype = "application/xml; charset=utf-8".parse().unwrap();
         res.headers_mut().insert("content-type", contenttype);
         *res.status_mut() = StatusCode::MULTI_STATUS;
@@ -559,15 +590,16 @@ impl PropWriter {
         }
         emitter.write(ev)?;
 
-        Ok(PropWriter {
+        Ok(Self {
             emitter,
             tx: None,
             name: name.to_string(),
             props,
-            fs: fs.clone(),
+            fs,
             ls: ls.cloned(),
             useragent: ua.to_string(),
             q_cache: Default::default(),
+            credentials,
         })
     }
 
@@ -613,7 +645,7 @@ impl PropWriter {
     ) -> FsResult<(u64, Option<u64>)> {
         // do lookup only once.
         match qc.q_state {
-            0 => match self.fs.get_quota().await {
+            0 => match self.fs.get_quota(&self.credentials).await {
                 Err(e) => {
                     qc.q_state = 1;
                     return Err(e);
@@ -815,10 +847,11 @@ impl PropWriter {
             }
         }
 
-        if try_deadprop && self.name == "prop" && self.fs.have_props(path).await {
+        if try_deadprop && self.name == "prop" && self.fs.have_props(path, &self.credentials).await
+        {
             // asking for a specific property.
             let dprop = element_to_davprop(prop);
-            if let Ok(xml) = self.fs.get_prop(path, dprop).await {
+            if let Ok(xml) = self.fs.get_prop(path, dprop, &self.credentials).await {
                 if let Ok(e) = Element::parse(Cursor::new(xml)) {
                     return Ok(StatusElement {
                         status: StatusCode::OK,
@@ -862,8 +895,10 @@ impl PropWriter {
         self.q_cache = qc;
 
         // and list the dead properties as well.
-        if (self.name == "propname" || self.name == "allprop") && self.fs.have_props(path).await {
-            if let Ok(v) = self.fs.get_props(path, do_content).await {
+        if (self.name == "propname" || self.name == "allprop")
+            && self.fs.have_props(path, &self.credentials).await
+        {
+            if let Ok(v) = self.fs.get_props(path, do_content, &self.credentials).await {
                 v.into_iter()
                     .map(davprop_to_element)
                     .for_each(|e| add_sc_elem(&mut props, StatusCode::OK, e));

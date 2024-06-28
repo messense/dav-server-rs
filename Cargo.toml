@@ -35,6 +35,7 @@ required-features = [ "warp-compat" ]
 
 [dependencies]
 bytes = "1.0.1"
+derivative = "2"
 dyn-clone = "1"
 futures-util = "0.3.16"
 futures-channel = "0.3.16"
