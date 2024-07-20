@@ -10,6 +10,8 @@
 use crate::davpath::DavPath;
 use std::fmt::Debug;
 use std::time::{Duration, SystemTime};
+
+use dyn_clone::{clone_trait_object, DynClone};
 use xmltree::Element;
 
 /// Type of the locks returned by DavLockSystem methods.
@@ -34,7 +36,7 @@ pub struct DavLock {
 }
 
 /// The trait that defines a locksystem.
-pub trait DavLockSystem: Debug + Sync + Send + BoxCloneLs {
+pub trait DavLockSystem: Debug + Send + Sync + DynClone {
     /// Lock a node. Returns `Ok(new_lock)` if succeeded,
     /// or `Err(conflicting_lock)` if failed.
     fn lock(
@@ -77,22 +79,4 @@ pub trait DavLockSystem: Debug + Sync + Send + BoxCloneLs {
     fn delete(&self, path: &DavPath) -> Result<(), ()>;
 }
 
-#[doc(hidden)]
-pub trait BoxCloneLs {
-    fn box_clone(&self) -> Box<dyn DavLockSystem>;
-}
-
-// generic Clone, calls implementation-specific box_clone().
-impl Clone for Box<dyn DavLockSystem> {
-    fn clone(&self) -> Box<dyn DavLockSystem> {
-        self.box_clone()
-    }
-}
-
-// implementation-specific clone.
-#[doc(hidden)]
-impl<LS: Clone + DavLockSystem + 'static> BoxCloneLs for LS {
-    fn box_clone(&self) -> Box<dyn DavLockSystem> {
-        Box::new((*self).clone())
-    }
-}
+clone_trait_object! {DavLockSystem}
