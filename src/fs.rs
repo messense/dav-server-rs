@@ -307,8 +307,11 @@ pub trait DavFileSystem {
 /// For file systems without access control, implement simpler [`DavFileSystem`] trait,
 /// for which there's a blanket implementation of `GuardedFileSystem<()>`.
 ///
+/// See also the [auth example].
+///
 /// [HTTP security]: https://datatracker.ietf.org/doc/html/rfc2616#section-15
 /// [WebDAV security]: https://datatracker.ietf.org/doc/html/rfc4918#section-20
+/// [auth example]: https://github.com/messense/dav-server-rs/blob/main/examples/auth.rs
 pub trait GuardedFileSystem<C>: Send + Sync + DynClone
 where
     C: Clone + Send + Sync + 'static,
