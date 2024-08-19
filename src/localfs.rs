@@ -28,6 +28,7 @@ use pin_utils::pin_mut;
 use tokio::task;
 
 use libc;
+use reflink_copy::reflink_or_copy;
 
 use crate::davpath::DavPath;
 use crate::fs::*;
@@ -444,7 +445,7 @@ impl DavFileSystem for LocalFs {
             let path_to = self.fspath(to);
 
             match self
-                .blocking(move || std::fs::copy(path_from, path_to))
+                .blocking(move || reflink_or_copy(path_from, path_to))
                 .await
             {
                 Ok(_) => Ok(()),
