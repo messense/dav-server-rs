@@ -168,9 +168,13 @@ pub(crate) fn systemtime_to_httpdate(t: SystemTime) -> String {
     v[0].to_str().unwrap().to_owned()
 }
 
-pub(crate) fn systemtime_to_rfc3339(t: SystemTime) -> String {
+pub(crate) fn systemtime_to_rfc3339_without_nanosecond(t: SystemTime) -> String {
     // 1996-12-19T16:39:57Z
-    systemtime_to_offsetdatetime(t).format(&Rfc3339).unwrap()
+    systemtime_to_offsetdatetime(t)
+        .replace_nanosecond(0)
+        .ok()
+        .and_then(|x| x.format(&Rfc3339).ok())
+        .unwrap_or("1970-01-01T00:00:00Z".into())
 }
 
 // A buffer that implements "Write".
@@ -205,7 +209,8 @@ mod tests {
     use std::time::UNIX_EPOCH;
 
     #[test]
-    fn test_rfc3339() {
-        assert!(systemtime_to_rfc3339(UNIX_EPOCH) == "1970-01-01T00:00:00Z");
+    fn test_rfc3339_no_nanosecond() {
+        let t = UNIX_EPOCH + std::time::Duration::new(1, 5);
+        assert!(systemtime_to_rfc3339_without_nanosecond(t) == "1970-01-01T00:00:01Z");
     }
 }
