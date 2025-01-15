@@ -14,6 +14,7 @@
 //! `FakeLs` implements such a fake locksystem.
 use std::time::{Duration, SystemTime};
 
+use futures_util::{future, FutureExt};
 use uuid::Uuid;
 use xmltree::Element;
 
@@ -53,7 +54,7 @@ impl DavLockSystem for FakeLs {
         timeout: Option<Duration>,
         shared: bool,
         deep: bool,
-    ) -> Result<DavLock, DavLock> {
+    ) -> LsFuture<Result<DavLock, DavLock>> {
         let timeout = tm_limit(timeout);
         let timeout_at = SystemTime::now() + timeout;
 
@@ -72,11 +73,11 @@ impl DavLockSystem for FakeLs {
             deep,
         };
         debug!("lock {} created", &lock.token);
-        Ok(lock)
+        future::ready(Ok(lock)).boxed()
     }
 
-    fn unlock(&self, _path: &DavPath, _token: &str) -> Result<(), ()> {
-        Ok(())
+    fn unlock(&self, _path: &DavPath, _token: &str) -> LsFuture<Result<(), ()>> {
+        future::ready(Ok(())).boxed()
     }
 
     fn refresh(
@@ -84,7 +85,7 @@ impl DavLockSystem for FakeLs {
         path: &DavPath,
         token: &str,
         timeout: Option<Duration>,
-    ) -> Result<DavLock, ()> {
+    ) -> LsFuture<Result<DavLock, ()>> {
         debug!("refresh lock {}", token);
         let v: Vec<&str> = token.split('/').collect();
         let deep = v.len() > 1 && v[1] == "I";
@@ -103,7 +104,7 @@ impl DavLockSystem for FakeLs {
             shared,
             deep,
         };
-        Ok(lock)
+        future::ready(Ok(lock)).boxed()
     }
 
     fn check(
@@ -113,15 +114,15 @@ impl DavLockSystem for FakeLs {
         _ignore_principal: bool,
         _deep: bool,
         _submitted_tokens: Vec<&str>,
-    ) -> Result<(), DavLock> {
-        Ok(())
+    ) -> LsFuture<Result<(), DavLock>> {
+        future::ready(Ok(())).boxed()
     }
 
-    fn discover(&self, _path: &DavPath) -> Vec<DavLock> {
-        Vec::new()
+    fn discover(&self, _path: &DavPath) -> LsFuture<Vec<DavLock>> {
+        future::ready(Vec::new()).boxed()
     }
 
-    fn delete(&self, _path: &DavPath) -> Result<(), ()> {
-        Ok(())
+    fn delete(&self, _path: &DavPath) -> LsFuture<Result<(), ()>> {
+        future::ready(Ok(())).boxed()
     }
 }

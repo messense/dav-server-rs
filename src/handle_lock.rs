@@ -51,7 +51,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             // try refresh
             // FIXME: you can refresh a lock owned by someone else. is that OK?
             let timeout = get_timeout(req, true, false);
-            let lock = match locksystem.refresh(&path, &tokens[0], timeout) {
+            let lock = match locksystem.refresh(&path, &tokens[0], timeout).await {
                 Ok(lock) => lock,
                 Err(_) => return Err(SC::PRECONDITION_FAILED.into()),
             };
@@ -153,7 +153,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // create lock
         let timeout = get_timeout(req, false, shared);
         let principal = self.principal.as_deref();
-        let lock = match locksystem.lock(&path, principal, owner.as_ref(), timeout, shared, deep) {
+        let lock = match locksystem
+            .lock(&path, principal, owner.as_ref(), timeout, shared, deep)
+            .await
+        {
             Ok(lock) => lock,
             Err(_) => return Err(SC::LOCKED.into()),
         };
@@ -221,7 +224,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             self.fixpath(&mut res, &mut path, meta);
         }
 
-        match locksystem.unlock(&path, token) {
+        match locksystem.unlock(&path, token).await {
             Ok(_) => {
                 *res.status_mut() = SC::NO_CONTENT;
                 Ok(res)
@@ -231,7 +234,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     }
 }
 
-pub(crate) fn list_lockdiscovery(ls: Option<&Box<dyn DavLockSystem>>, path: &DavPath) -> Element {
+pub(crate) async fn list_lockdiscovery(
+    ls: Option<&Box<dyn DavLockSystem>>,
+    path: &DavPath,
+) -> Element {
     let mut elem = Element::new2("D:lockdiscovery");
 
     // must have a locksystem or bail
@@ -241,7 +247,7 @@ pub(crate) fn list_lockdiscovery(ls: Option<&Box<dyn DavLockSystem>>, path: &Dav
     };
 
     // list the locks.
-    let locks = locksystem.discover(path);
+    let locks = locksystem.discover(path).await;
     for lock in &locks {
         elem.push_element(build_lock_prop(lock, false));
     }

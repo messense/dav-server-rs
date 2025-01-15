@@ -156,7 +156,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             let principal = self.principal.as_deref();
-            if let Err(_l) = locksystem.check(&path, principal, false, true, t) {
+            if let Err(_l) = locksystem.check(&path, principal, false, true, t).await {
                 return Err(DavError::Status(StatusCode::LOCKED));
             }
         }
@@ -174,7 +174,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     // Done. Now delete the path in the locksystem as well.
                     // Should really do this per resource, in case the delete partially fails. See TODO.pm
                     if let Some(ref locksystem) = self.ls {
-                        locksystem.delete(&path).ok();
+                        locksystem.delete(&path).await.ok();
                     }
                     let _ = multierror.add_status(&path, StatusCode::NO_CONTENT).await;
                 }

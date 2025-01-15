@@ -417,7 +417,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         if let Some(ref locksystem) = self.ls {
             let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             let principal = self.principal.as_deref();
-            if let Err(_l) = locksystem.check(&path, principal, false, false, t) {
+            if let Err(_l) = locksystem.check(&path, principal, false, false, t).await {
                 return Err(StatusCode::LOCKED.into());
             }
         }
@@ -756,7 +756,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                     "lockdiscovery" => {
                         return Ok(StatusElement {
                             status: StatusCode::OK,
-                            element: list_lockdiscovery(self.ls.as_ref(), path),
+                            element: list_lockdiscovery(self.ls.as_ref(), path).await,
                         });
                     }
                     "quota-available-bytes" => {

@@ -243,12 +243,15 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             let principal = self.principal.as_deref();
             if method == DavMethod::Move {
                 // for MOVE check if source path is locked
-                if let Err(_l) = locksystem.check(&path, principal, false, true, t.clone()) {
+                if let Err(_l) = locksystem
+                    .check(&path, principal, false, true, t.clone())
+                    .await
+                {
                     return Err(StatusCode::LOCKED.into());
                 }
             }
             // for MOVE and COPY check if destination is locked
-            if let Err(_l) = locksystem.check(&dest, principal, false, true, t) {
+            if let Err(_l) = locksystem.check(&dest, principal, false, true, t).await {
                 return Err(StatusCode::LOCKED.into());
             }
         }
@@ -293,7 +296,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     // move and if successful, remove locks at old location.
                     if self.do_move(&path, &dest, &mut multierror).await.is_ok() {
                         if let Some(ref locksystem) = self.ls {
-                            locksystem.delete(&path).ok();
+                            locksystem.delete(&path).await.ok();
                         }
                         let s = if exists {
                             StatusCode::NO_CONTENT
