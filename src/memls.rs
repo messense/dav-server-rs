@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
+use futures_util::{future, FutureExt};
 use uuid::Uuid;
 use xmltree::Element;
 
@@ -51,19 +52,23 @@ impl DavLockSystem for MemLs {
         timeout: Option<Duration>,
         shared: bool,
         deep: bool,
-    ) -> Result<DavLock, DavLock> {
+    ) -> LsFuture<Result<DavLock, DavLock>> {
         let inner = &mut *self.0.lock().unwrap();
 
         // any locks in the path?
         let rc = check_locks_to_path(&inner.tree, path, None, true, &Vec::new(), shared);
         trace!("lock: check_locks_to_path: {:?}", rc);
-        rc?;
+        if let Err(err) = rc {
+            return future::ready(Err(err)).boxed();
+        }
 
         // if it's a deep lock we need to check if there are locks furter along the path.
         if deep {
             let rc = check_locks_from_path(&inner.tree, path, None, true, &Vec::new(), shared);
             trace!("lock: check_locks_from_path: {:?}", rc);
-            rc?;
+            if let Err(err) = rc {
+                return future::ready(Err(err)).boxed();
+            }
         }
 
         // create lock.
@@ -82,15 +87,15 @@ impl DavLockSystem for MemLs {
         trace!("lock {} created", &lock.token);
         let slock = lock.clone();
         node.push(slock);
-        Ok(lock)
+        future::ready(Ok(lock)).boxed()
     }
 
-    fn unlock(&self, path: &DavPath, token: &str) -> Result<(), ()> {
+    fn unlock(&self, path: &DavPath, token: &str) -> LsFuture<Result<(), ()>> {
         let inner = &mut *self.0.lock().unwrap();
         let node_id = match lookup_lock(&inner.tree, path, token) {
             None => {
                 trace!("unlock: {} not found at {}", token, path);
-                return Err(());
+                return future::ready(Err(())).boxed();
             }
             Some(n) => n,
         };
@@ -103,7 +108,7 @@ impl DavLockSystem for MemLs {
         if len == 0 {
             inner.tree.delete_node(node_id).ok();
         }
-        Ok(())
+        future::ready(Ok(())).boxed()
     }
 
     fn refresh(
@@ -111,13 +116,13 @@ impl DavLockSystem for MemLs {
         path: &DavPath,
         token: &str,
         timeout: Option<Duration>,
-    ) -> Result<DavLock, ()> {
+    ) -> LsFuture<Result<DavLock, ()>> {
         trace!("refresh lock {}", token);
         let inner = &mut *self.0.lock().unwrap();
         let node_id = match lookup_lock(&inner.tree, path, token) {
             None => {
                 trace!("lock not found");
-                return Err(());
+                return future::ready(Err(())).boxed();
             }
             Some(n) => n,
         };
@@ -127,7 +132,7 @@ impl DavLockSystem for MemLs {
         let timeout_at = timeout.map(|d| SystemTime::now() + d);
         lock.timeout = timeout;
         lock.timeout_at = timeout_at;
-        Ok(lock.clone())
+        future::ready(Ok(lock.clone())).boxed()
     }
 
     fn check(
@@ -137,7 +142,7 @@ impl DavLockSystem for MemLs {
         ignore_principal: bool,
         deep: bool,
         submitted_tokens: Vec<&str>,
-    ) -> Result<(), DavLock> {
+    ) -> LsFuture<Result<(), DavLock>> {
         let inner = &*self.0.lock().unwrap();
         let _st = submitted_tokens.clone();
         let rc = check_locks_to_path(
@@ -149,7 +154,9 @@ impl DavLockSystem for MemLs {
             false,
         );
         trace!("check: check_lock_to_path: {:?}: {:?}", _st, rc);
-        rc?;
+        if let Err(err) = rc {
+            return future::ready(Err(err)).boxed();
+        }
 
         // if it's a deep lock we need to check if there are locks furter along the path.
         if deep {
@@ -162,22 +169,24 @@ impl DavLockSystem for MemLs {
                 false,
             );
             trace!("check: check_locks_from_path: {:?}", rc);
-            rc?;
+            if let Err(err) = rc {
+                return future::ready(Err(err)).boxed();
+            }
         }
-        Ok(())
+        future::ready(Ok(())).boxed()
     }
 
-    fn discover(&self, path: &DavPath) -> Vec<DavLock> {
+    fn discover(&self, path: &DavPath) -> LsFuture<Vec<DavLock>> {
         let inner = &*self.0.lock().unwrap();
-        list_locks(&inner.tree, path)
+        future::ready(list_locks(&inner.tree, path)).boxed()
     }
 
-    fn delete(&self, path: &DavPath) -> Result<(), ()> {
+    fn delete(&self, path: &DavPath) -> LsFuture<Result<(), ()>> {
         let inner = &mut *self.0.lock().unwrap();
         if let Some(node_id) = lookup_node(&inner.tree, path) {
             (&mut inner.tree).delete_subtree(node_id).ok();
         }
-        Ok(())
+        future::ready(Ok(())).boxed()
     }
 }
 

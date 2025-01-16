@@ -164,7 +164,7 @@ where
                         false
                     } else {
                         match *ls {
-                            Some(ref ls) => ls.check(p, None, true, false, vec![s]).is_ok(),
+                            Some(ref ls) => ls.check(p, None, true, false, vec![s]).await.is_ok(),
                             None => false,
                         }
                     }
