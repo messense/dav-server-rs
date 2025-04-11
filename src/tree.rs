@@ -90,10 +90,10 @@ impl<K: Eq + Hash + Debug + Clone, D: Debug> Tree<K, D> {
     }*/
 
     /// Get a child node by key K.
-    pub fn get_child<Q: ?Sized>(&self, parent: u64, key: &Q) -> FsResult<u64>
+    pub fn get_child<Q>(&self, parent: u64, key: &Q) -> FsResult<u64>
     where
         K: Borrow<Q>,
-        Q: Hash + Eq,
+        Q: Hash + Eq + ?Sized,
     {
         let pnode = self.nodes.get(&parent).ok_or(FsError::NotFound)?;
         let id = pnode.children.get(key).ok_or(FsError::NotFound)?;

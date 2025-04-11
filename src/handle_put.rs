@@ -104,10 +104,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         // SabreDAV style PATCH?
         if req.method() == http::Method::PATCH {
-            if !req
+            if req
                 .headers()
                 .typed_get::<davheaders::ContentType>()
-                .map_or(false, |ct| ct.0 == SABRE)
+                .is_none_or(|ct| ct.0 != SABRE)
             {
                 return Err(DavError::StatusClose(SC::UNSUPPORTED_MEDIA_TYPE));
             }
@@ -172,7 +172,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // check the If and If-* headers.
         let tokens = if_match_get_tokens(
             req,
-            meta.as_ref().ok(),
+            meta.as_ref().map(|v| v.as_ref()).ok(),
             self.fs.as_ref(),
             &self.ls,
             &path,
@@ -196,14 +196,14 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         if req
             .headers()
             .typed_get::<davheaders::IfMatch>()
-            .map_or(false, |h| h.0 == davheaders::ETagList::Star)
+            .is_some_and(|h| h.0 == davheaders::ETagList::Star)
         {
             oo.create = false;
         }
         if req
             .headers()
             .typed_get::<davheaders::IfNoneMatch>()
-            .map_or(false, |h| h.0 == davheaders::ETagList::Star)
+            .is_some_and(|h| h.0 == davheaders::ETagList::Star)
         {
             oo.create_new = true;
         }
@@ -286,11 +286,11 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // no errors, connection may be kept open.
         res.headers_mut().remove(http::header::CONNECTION);
 
-        if let Ok(m) = file.metadata().await {
-            if let Some(etag) = davheaders::ETag::from_meta(&m) {
+        if let Ok(meta) = file.metadata().await {
+            if let Some(etag) = davheaders::ETag::from_meta(meta.as_ref()) {
                 res.headers_mut().typed_insert(etag);
             }
-            if let Ok(modified) = m.modified() {
+            if let Ok(modified) = meta.modified() {
                 res.headers_mut()
                     .typed_insert(headers::LastModified::from(modified));
             }

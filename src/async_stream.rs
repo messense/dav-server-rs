@@ -112,6 +112,7 @@ impl<I, E> Sender<I, E> {
 #[must_use]
 pub struct AsyncStream<Item, Error> {
     item: Sender<Item, Error>,
+    #[allow(clippy::type_complexity)]
     fut: Option<Pin<Box<dyn Future<Output = Result<(), Error>> + 'static + Send>>>,
 }
 

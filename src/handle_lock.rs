@@ -1,10 +1,9 @@
-use std::cmp;
-use std::io::Cursor;
-use std::time::Duration;
-
 use headers::HeaderMapExt;
 use http::StatusCode as SC;
 use http::{Request, Response};
+use std::cmp;
+use std::io::Cursor;
+use std::time::Duration;
 use xmltree::{self, Element};
 
 use crate::body::Body;
@@ -78,7 +77,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // handle the if-headers.
         if let Some(s) = if_match(
             req,
-            meta.as_ref(),
+            meta.as_ref().map(|v| v.as_ref()),
             self.fs.as_ref(),
             &self.ls,
             &path,
@@ -95,14 +94,14 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         if req
             .headers()
             .typed_get::<davheaders::IfMatch>()
-            .map_or(false, |h| h.0 == davheaders::ETagList::Star)
+            .is_some_and(|h| h.0 == davheaders::ETagList::Star)
         {
             oo.create = false;
         }
         if req
             .headers()
             .typed_get::<davheaders::IfNoneMatch>()
-            .map_or(false, |h| h.0 == davheaders::ETagList::Star)
+            .is_some_and(|h| h.0 == davheaders::ETagList::Star)
         {
             oo.create_new = true;
         }
@@ -121,7 +120,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         for elem in tree.child_elems_iter() {
             match elem.name.as_str() {
                 "lockscope" => {
-                    let name = elem.child_elems_iter().find_map(|e| Some(e.name.as_ref()));
+                    let name = elem.child_elems_iter().map(|e| e.name.as_ref()).next();
                     match name {
                         Some("exclusive") => shared = Some(false),
                         Some("shared") => shared = Some(true),
@@ -129,7 +128,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     }
                 }
                 "locktype" => {
-                    let name = elem.child_elems_iter().find_map(|e| Some(e.name.as_ref()));
+                    let name = elem.child_elems_iter().map(|e| e.name.as_ref()).next();
                     match name {
                         Some("write") => locktype = true,
                         _ => return Err(DavError::XmlParseError),
@@ -173,11 +172,11 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     } else {
                         SC::CONFLICT
                     };
-                    let _ = locksystem.unlock(&path, &lock.token);
+                    let _ = locksystem.unlock(&path, &lock.token).await;
                     return Err(s.into());
                 }
                 Err(e) => {
-                    let _ = locksystem.unlock(&path, &lock.token);
+                    let _ = locksystem.unlock(&path, &lock.token).await;
                     return Err(e.into());
                 }
             };
@@ -234,6 +233,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     }
 }
 
+#[allow(clippy::borrowed_box)]
 pub(crate) async fn list_lockdiscovery(
     ls: Option<&Box<dyn DavLockSystem>>,
     path: &DavPath,
@@ -254,6 +254,7 @@ pub(crate) async fn list_lockdiscovery(
     elem
 }
 
+#[allow(clippy::borrowed_box)]
 pub(crate) fn list_supportedlock(ls: Option<&Box<dyn DavLockSystem>>) -> Element {
     let mut elem = Element::new2("D:supportedlock");
 

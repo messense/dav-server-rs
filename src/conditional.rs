@@ -52,10 +52,7 @@ pub(crate) fn etaglist_match(
 }
 
 // Handle the if-headers: RFC 7232, HTTP/1.1 Conditional Requests.
-pub(crate) fn http_if_match(
-    req: &Request,
-    meta: Option<&Box<dyn DavMetaData>>,
-) -> Option<StatusCode> {
+pub(crate) fn http_if_match(req: &Request, meta: Option<&dyn DavMetaData>) -> Option<StatusCode> {
     let file_modified = meta.and_then(|m| m.modified().ok());
 
     if let Some(r) = req.headers().typed_get::<davheaders::IfMatch>() {
@@ -177,7 +174,7 @@ where
                         match fs.metadata(p, credentials).await {
                             Ok(meta) => {
                                 // exists and may have metadata ..
-                                if let Some(mtag) = ETag::from_meta(meta) {
+                                if let Some(mtag) = ETag::from_meta(meta.as_ref()) {
                                     tag == &mtag
                                 } else {
                                     false
@@ -210,7 +207,7 @@ where
 // Handle both the HTTP conditional If: headers, and the webdav If: header.
 pub(crate) async fn if_match<'a, C>(
     req: &'a Request,
-    meta: Option<&'a Box<dyn DavMetaData + 'static>>,
+    meta: Option<&'a (dyn DavMetaData + 'static)>,
     fs: &'a (dyn GuardedFileSystem<C> + 'static),
     ls: &'a Option<Box<dyn DavLockSystem + 'static>>,
     path: &'a DavPath,
@@ -229,7 +226,7 @@ where
 // Like if_match, but also returns all "associated state-tokens"
 pub(crate) async fn if_match_get_tokens<'a, C>(
     req: &'a Request,
-    meta: Option<&'a Box<dyn DavMetaData + 'static>>,
+    meta: Option<&'a (dyn DavMetaData + 'static)>,
     fs: &'a (dyn GuardedFileSystem<C> + 'static),
     ls: &'a Option<Box<dyn DavLockSystem + 'static>>,
     path: &'a DavPath,

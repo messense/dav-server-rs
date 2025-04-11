@@ -15,7 +15,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // check the If and If-* headers.
         let res = if_match_get_tokens(
             req,
-            meta.as_ref().ok(),
+            meta.as_ref().map(|v| v.as_ref()).ok(),
             self.fs.as_ref(),
             &self.ls,
             &path,

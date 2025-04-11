@@ -139,17 +139,21 @@ pub enum ReadDirMeta {
 /// File system without access control.
 pub trait DavFileSystem {
     /// Open a file.
-    fn open<'a>(&'a self, path: &'a DavPath, options: OpenOptions) -> FsFuture<Box<dyn DavFile>>;
+    fn open<'a>(
+        &'a self,
+        path: &'a DavPath,
+        options: OpenOptions,
+    ) -> FsFuture<'a, Box<dyn DavFile>>;
 
     /// Lists entries within a directory.
     fn read_dir<'a>(
         &'a self,
         path: &'a DavPath,
         meta: ReadDirMeta,
-    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>>;
+    ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>>;
 
     /// Return the metadata of a file or directory.
-    fn metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<Box<dyn DavMetaData>>;
+    fn metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>>;
 
     /// Return the metadata of a file, directory or symbolic link.
     ///
@@ -159,7 +163,7 @@ pub trait DavFileSystem {
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn symlink_metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<Box<dyn DavMetaData>> {
+    fn symlink_metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
         self.metadata(path)
     }
 
@@ -167,7 +171,7 @@ pub trait DavFileSystem {
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
+    fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         notimplemented_fut!("create_dir")
     }
 
@@ -175,7 +179,7 @@ pub trait DavFileSystem {
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn remove_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
+    fn remove_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         notimplemented_fut!("remove_dir")
     }
 
@@ -183,7 +187,7 @@ pub trait DavFileSystem {
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
+    fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         notimplemented_fut!("remove_file")
     }
 
@@ -196,7 +200,7 @@ pub trait DavFileSystem {
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
+    fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
         notimplemented_fut!("rename")
     }
 
@@ -207,7 +211,7 @@ pub trait DavFileSystem {
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
+    fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
         notimplemented_fut!("copy")
     }
 
@@ -216,7 +220,7 @@ pub trait DavFileSystem {
     /// The default implementation returns [`FsError::NotImplemented`].
     #[doc(hidden)]
     #[allow(unused_variables)]
-    fn set_accessed<'a>(&'a self, path: &'a DavPath, tm: SystemTime) -> FsFuture<()> {
+    fn set_accessed<'a>(&'a self, path: &'a DavPath, tm: SystemTime) -> FsFuture<'a, ()> {
         notimplemented_fut!("set_accessed")
     }
 
@@ -225,7 +229,7 @@ pub trait DavFileSystem {
     /// The default implementation returns [`FsError::NotImplemented`].
     #[doc(hidden)]
     #[allow(unused_variables)]
-    fn set_modified<'a>(&'a self, path: &'a DavPath, tm: SystemTime) -> FsFuture<()> {
+    fn set_modified<'a>(&'a self, path: &'a DavPath, tm: SystemTime) -> FsFuture<'a, ()> {
         notimplemented_fut!("set_modified")
     }
 
@@ -248,7 +252,7 @@ pub trait DavFileSystem {
         &'a self,
         path: &'a DavPath,
         patch: Vec<(bool, DavProp)>,
-    ) -> FsFuture<Vec<(StatusCode, DavProp)>> {
+    ) -> FsFuture<'a, Vec<(StatusCode, DavProp)>> {
         notimplemented_fut!("patch_props")
     }
 
@@ -256,7 +260,7 @@ pub trait DavFileSystem {
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn get_props<'a>(&'a self, path: &'a DavPath, do_content: bool) -> FsFuture<Vec<DavProp>> {
+    fn get_props<'a>(&'a self, path: &'a DavPath, do_content: bool) -> FsFuture<'a, Vec<DavProp>> {
         notimplemented_fut!("get_props")
     }
 
@@ -264,7 +268,7 @@ pub trait DavFileSystem {
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn get_prop<'a>(&'a self, path: &'a DavPath, prop: DavProp) -> FsFuture<Vec<u8>> {
+    fn get_prop<'a>(&'a self, path: &'a DavPath, prop: DavProp) -> FsFuture<'a, Vec<u8>> {
         notimplemented_fut!("get_prop")
     }
 
@@ -322,7 +326,7 @@ where
         path: &'a DavPath,
         options: OpenOptions,
         credentials: &'a C,
-    ) -> FsFuture<Box<dyn DavFile>>;
+    ) -> FsFuture<'a, Box<dyn DavFile>>;
 
     /// Lists entries within a directory.
     fn read_dir<'a>(
@@ -330,14 +334,14 @@ where
         path: &'a DavPath,
         meta: ReadDirMeta,
         credentials: &'a C,
-    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>>;
+    ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>>;
 
     /// Return the metadata of a file or directory.
     fn metadata<'a>(
         &'a self,
         path: &'a DavPath,
         credentials: &'a C,
-    ) -> FsFuture<Box<dyn DavMetaData>>;
+    ) -> FsFuture<'a, Box<dyn DavMetaData>>;
 
     /// Return the metadata of a file, directory or symbolic link.
     ///
@@ -351,7 +355,7 @@ where
         &'a self,
         path: &'a DavPath,
         credentials: &'a C,
-    ) -> FsFuture<Box<dyn DavMetaData>> {
+    ) -> FsFuture<'a, Box<dyn DavMetaData>> {
         self.metadata(path, credentials)
     }
 
@@ -359,7 +363,7 @@ where
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn create_dir<'a>(&'a self, path: &'a DavPath, credentials: &'a C) -> FsFuture<()> {
+    fn create_dir<'a>(&'a self, path: &'a DavPath, credentials: &'a C) -> FsFuture<'a, ()> {
         notimplemented_fut!("create_dir")
     }
 
@@ -367,7 +371,7 @@ where
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn remove_dir<'a>(&'a self, path: &'a DavPath, credentials: &'a C) -> FsFuture<()> {
+    fn remove_dir<'a>(&'a self, path: &'a DavPath, credentials: &'a C) -> FsFuture<'a, ()> {
         notimplemented_fut!("remove_dir")
     }
 
@@ -375,7 +379,7 @@ where
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn remove_file<'a>(&'a self, path: &'a DavPath, credentials: &'a C) -> FsFuture<()> {
+    fn remove_file<'a>(&'a self, path: &'a DavPath, credentials: &'a C) -> FsFuture<'a, ()> {
         notimplemented_fut!("remove_file")
     }
 
@@ -393,7 +397,7 @@ where
         from: &'a DavPath,
         to: &'a DavPath,
         credentials: &'a C,
-    ) -> FsFuture<()> {
+    ) -> FsFuture<'a, ()> {
         notimplemented_fut!("rename")
     }
 
@@ -404,7 +408,12 @@ where
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath, credentials: &'a C) -> FsFuture<()> {
+    fn copy<'a>(
+        &'a self,
+        from: &'a DavPath,
+        to: &'a DavPath,
+        credentials: &'a C,
+    ) -> FsFuture<'a, ()> {
         notimplemented_fut!("copy")
     }
 
@@ -418,7 +427,7 @@ where
         path: &'a DavPath,
         tm: SystemTime,
         credentials: &C,
-    ) -> FsFuture<()> {
+    ) -> FsFuture<'a, ()> {
         notimplemented_fut!("set_accessed")
     }
 
@@ -432,7 +441,7 @@ where
         path: &'a DavPath,
         tm: SystemTime,
         credentials: &'a C,
-    ) -> FsFuture<()> {
+    ) -> FsFuture<'a, ()> {
         notimplemented_fut!("set_mofified")
     }
 
@@ -457,7 +466,7 @@ where
         path: &'a DavPath,
         patch: Vec<(bool, DavProp)>,
         credentials: &'a C,
-    ) -> FsFuture<Vec<(StatusCode, DavProp)>> {
+    ) -> FsFuture<'a, Vec<(StatusCode, DavProp)>> {
         notimplemented_fut!("patch_props")
     }
 
@@ -470,7 +479,7 @@ where
         path: &'a DavPath,
         do_content: bool,
         credentials: &'a C,
-    ) -> FsFuture<Vec<DavProp>> {
+    ) -> FsFuture<'a, Vec<DavProp>> {
         notimplemented_fut!("get_props")
     }
 
@@ -483,7 +492,7 @@ where
         path: &'a DavPath,
         prop: DavProp,
         credentials: &'a C,
-    ) -> FsFuture<Vec<u8>> {
+    ) -> FsFuture<'a, Vec<u8>> {
         notimplemented_fut!("get_prop")
     }
 
@@ -495,7 +504,7 @@ where
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn get_quota<'a>(&'a self, credentials: &'a C) -> FsFuture<(u64, Option<u64>)> {
+    fn get_quota<'a>(&'a self, credentials: &'a C) -> FsFuture<'a, (u64, Option<u64>)> {
         notimplemented_fut!("get_quota")
     }
 }
@@ -508,7 +517,7 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         path: &'a DavPath,
         options: OpenOptions,
         _credentials: &(),
-    ) -> FsFuture<Box<dyn DavFile>> {
+    ) -> FsFuture<'a, Box<dyn DavFile>> {
         DavFileSystem::open(self, path, options)
     }
 
@@ -517,7 +526,7 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         path: &'a DavPath,
         meta: ReadDirMeta,
         _credentials: &(),
-    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>> {
+    ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
         DavFileSystem::read_dir(self, path, meta)
     }
 
@@ -525,7 +534,7 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         &'a self,
         path: &'a DavPath,
         _credentials: &(),
-    ) -> FsFuture<Box<dyn DavMetaData>> {
+    ) -> FsFuture<'a, Box<dyn DavMetaData>> {
         DavFileSystem::metadata(self, path)
     }
 
@@ -533,27 +542,37 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         &'a self,
         path: &'a DavPath,
         _credentials: &(),
-    ) -> FsFuture<Box<dyn DavMetaData>> {
+    ) -> FsFuture<'a, Box<dyn DavMetaData>> {
         DavFileSystem::symlink_metadata(self, path)
     }
 
-    fn create_dir<'a>(&'a self, path: &'a DavPath, _credentials: &()) -> FsFuture<()> {
+    fn create_dir<'a>(&'a self, path: &'a DavPath, _credentials: &()) -> FsFuture<'a, ()> {
         DavFileSystem::create_dir(self, path)
     }
 
-    fn remove_dir<'a>(&'a self, path: &'a DavPath, _credentials: &()) -> FsFuture<()> {
+    fn remove_dir<'a>(&'a self, path: &'a DavPath, _credentials: &()) -> FsFuture<'a, ()> {
         DavFileSystem::remove_dir(self, path)
     }
 
-    fn remove_file<'a>(&'a self, path: &'a DavPath, _credentials: &()) -> FsFuture<()> {
+    fn remove_file<'a>(&'a self, path: &'a DavPath, _credentials: &()) -> FsFuture<'a, ()> {
         DavFileSystem::remove_file(self, path)
     }
 
-    fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath, _credentials: &()) -> FsFuture<()> {
+    fn rename<'a>(
+        &'a self,
+        from: &'a DavPath,
+        to: &'a DavPath,
+        _credentials: &(),
+    ) -> FsFuture<'a, ()> {
         DavFileSystem::rename(self, from, to)
     }
 
-    fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath, _credentials: &()) -> FsFuture<()> {
+    fn copy<'a>(
+        &'a self,
+        from: &'a DavPath,
+        to: &'a DavPath,
+        _credentials: &(),
+    ) -> FsFuture<'a, ()> {
         DavFileSystem::copy(self, from, to)
     }
 
@@ -562,7 +581,7 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         path: &'a DavPath,
         tm: SystemTime,
         _credentials: &(),
-    ) -> FsFuture<()> {
+    ) -> FsFuture<'a, ()> {
         DavFileSystem::set_accessed(self, path, tm)
     }
 
@@ -571,7 +590,7 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         path: &'a DavPath,
         tm: SystemTime,
         _credentials: &(),
-    ) -> FsFuture<()> {
+    ) -> FsFuture<'a, ()> {
         DavFileSystem::set_modified(self, path, tm)
     }
 
@@ -588,7 +607,7 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         path: &'a DavPath,
         patch: Vec<(bool, DavProp)>,
         _credentials: &(),
-    ) -> FsFuture<Vec<(StatusCode, DavProp)>> {
+    ) -> FsFuture<'a, Vec<(StatusCode, DavProp)>> {
         DavFileSystem::patch_props(self, path, patch)
     }
 
@@ -597,7 +616,7 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         path: &'a DavPath,
         do_content: bool,
         _credentials: &(),
-    ) -> FsFuture<Vec<DavProp>> {
+    ) -> FsFuture<'a, Vec<DavProp>> {
         DavFileSystem::get_props(self, path, do_content)
     }
 
@@ -606,7 +625,7 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         path: &'a DavPath,
         prop: DavProp,
         _credentials: &(),
-    ) -> FsFuture<Vec<u8>> {
+    ) -> FsFuture<'a, Vec<u8>> {
         DavFileSystem::get_prop(self, path, prop)
     }
 

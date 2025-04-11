@@ -75,7 +75,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         let len = meta.len();
         let mut curpos = 0u64;
-        let file_etag = davheaders::ETag::from_meta(&meta);
+        let file_etag = davheaders::ETag::from_meta(meta.as_ref());
 
         let mut ranges = Vec::new();
         let mut do_range = match req.headers().typed_try_get::<davheaders::IfRange>() {
@@ -96,20 +96,14 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             res.headers_mut().typed_insert(etag);
         }
 
-        match self.redirect {
-            Some(redirect) => {
-                if redirect {
-                    match file.redirect_url().await? {
-                        Some(url) => {
-                            res.headers_mut().insert("Location", url.parse().unwrap());
-                            *res.status_mut() = StatusCode::FOUND;
-                            return Ok(res);
-                        }
-                        None => {}
-                    }
+        if let Some(redirect) = self.redirect {
+            if redirect {
+                if let Some(url) = file.redirect_url().await? {
+                    res.headers_mut().insert("Location", url.parse().unwrap());
+                    *res.status_mut() = StatusCode::FOUND;
+                    return Ok(res);
                 }
             }
-            None => {}
         }
 
         // Apache always adds an Accept-Ranges header, even with partial
@@ -121,7 +115,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // handle the if-headers.
         if let Some(s) = conditional::if_match(
             req,
-            Some(&meta),
+            Some(meta.as_ref()),
             self.fs.as_ref(),
             &self.ls,
             &path,

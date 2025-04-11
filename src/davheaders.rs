@@ -156,10 +156,7 @@ impl Header for ContentLanguage {
     where
         I: Iterator<Item = &'i HeaderValue>,
     {
-        let h = match headers::Vary::decode(values) {
-            Err(e) => return Err(e),
-            Ok(h) => h,
-        };
+        let h = headers::Vary::decode(values)?;
         for lang in h.iter_strs() {
             let lang = lang.as_bytes();
             // **VERY** rudimentary check ...
@@ -199,7 +196,7 @@ impl Header for Timeout {
     {
         let value = one(values)?;
         let mut v = Vec::new();
-        let words = value.to_str().map_err(map_invalid)?.split(|c| c == ',');
+        let words = value.to_str().map_err(map_invalid)?.split(',');
         for word in words {
             let w = match word {
                 "Infinite" => DavTimeout::Infinite,
@@ -322,8 +319,8 @@ impl ETag {
         }
     }
 
-    pub fn from_meta(meta: impl AsRef<dyn DavMetaData>) -> Option<ETag> {
-        let tag = meta.as_ref().etag()?;
+    pub fn from_meta(meta: &dyn DavMetaData) -> Option<ETag> {
+        let tag = meta.etag()?;
         Some(ETag {
             tag: format!("\"{}\"", tag),
             weak: false,

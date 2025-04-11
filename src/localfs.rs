@@ -240,7 +240,7 @@ impl LocalFs {
 // This implementation is basically a bunch of boilerplate to
 // wrap the std::fs call in self.blocking() calls.
 impl DavFileSystem for LocalFs {
-    fn metadata<'a>(&'a self, davpath: &'a DavPath) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata<'a>(&'a self, davpath: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
         async move {
             if let Some(meta) = self.is_virtual(davpath) {
                 return Ok(meta);
@@ -258,7 +258,7 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn symlink_metadata<'a>(&'a self, davpath: &'a DavPath) -> FsFuture<Box<dyn DavMetaData>> {
+    fn symlink_metadata<'a>(&'a self, davpath: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
         async move {
             if let Some(meta) = self.is_virtual(davpath) {
                 return Ok(meta);
@@ -282,7 +282,7 @@ impl DavFileSystem for LocalFs {
         &'a self,
         davpath: &'a DavPath,
         meta: ReadDirMeta,
-    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>> {
+    ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
         async move {
             trace!("FS: read_dir {:?}", self.fspath_dbg(davpath));
             let path = self.fspath(davpath);
@@ -306,7 +306,11 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn open<'a>(&'a self, path: &'a DavPath, options: OpenOptions) -> FsFuture<Box<dyn DavFile>> {
+    fn open<'a>(
+        &'a self,
+        path: &'a DavPath,
+        options: OpenOptions,
+    ) -> FsFuture<'a, Box<dyn DavFile>> {
         async move {
             trace!("FS: open {:?}", self.fspath_dbg(path));
             if self.is_forbidden(path) {
@@ -345,7 +349,7 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
+    fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         async move {
             trace!("FS: create_dir {:?}", self.fspath_dbg(path));
             if self.is_forbidden(path) {
@@ -374,7 +378,7 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn remove_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
+    fn remove_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         async move {
             trace!("FS: remove_dir {:?}", self.fspath_dbg(path));
             let path = self.fspath(path);
@@ -384,7 +388,7 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<()> {
+    fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         async move {
             trace!("FS: remove_file {:?}", self.fspath_dbg(path));
             if self.is_forbidden(path) {
@@ -397,7 +401,7 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
+    fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
         async move {
             trace!(
                 "FS: rename {:?} {:?}",
@@ -431,7 +435,7 @@ impl DavFileSystem for LocalFs {
         .boxed()
     }
 
-    fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<()> {
+    fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
         async move {
             trace!(
                 "FS: copy {:?} {:?}",
@@ -532,7 +536,7 @@ impl LocalFsReadDir {
 }
 
 // The stream implementation tries to be smart and batch I/O operations
-impl<'a> Stream for LocalFsReadDir {
+impl Stream for LocalFsReadDir {
     type Item = FsResult<Box<dyn DavDirEntry>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
