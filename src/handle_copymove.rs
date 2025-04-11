@@ -158,7 +158,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         let overwrite = req
             .headers()
             .typed_get::<davheaders::Overwrite>()
-            .map_or(true, |o| o.0);
+            .is_none_or(|o| o.0);
         let depth = match req.headers().typed_get::<Depth>() {
             Some(Depth::Infinity) | None => Depth::Infinity,
             Some(Depth::Zero) if method == DavMethod::Copy => Depth::Zero,
@@ -223,7 +223,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // check If and If-* headers for source URL
         let tokens = match if_match_get_tokens(
             req,
-            Some(&meta),
+            Some(meta.as_ref()),
             self.fs.as_ref(),
             &self.ls,
             &path,
@@ -274,7 +274,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     }
                     // should really do this per item, in case the delete partially fails. See TODO.md
                     if let Some(ref locksystem) = self.ls {
-                        let _ = locksystem.delete(&dest);
+                        let _ = locksystem.delete(&dest).await;
                     }
                 }
 

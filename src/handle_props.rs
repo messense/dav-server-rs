@@ -401,7 +401,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // check the If and If-* headers.
         let tokens = match if_match_get_tokens(
             req,
-            Some(&meta),
+            Some(meta.as_ref()),
             self.fs.as_ref(),
             &self.ls,
             &path,
@@ -459,7 +459,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }
 
         // if any set/remove failed, stop processing here.
-        if ret.iter().any(|&(ref s, _)| s != &StatusCode::OK) {
+        if ret.iter().any(|(s, _)| s != &StatusCode::OK) {
             ret = ret
                 .into_iter()
                 .map(|(s, p)| {
@@ -514,6 +514,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 }
 
 impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
+    #[allow(clippy::borrowed_box)]
     pub fn new(
         req: &Request<()>,
         res: &mut Response<Body>,
@@ -670,9 +671,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         };
 
         // calculate available space.
-        let avail = qc
-            .q_total
-            .map(|total| if total > used { total - used } else { 0 });
+        let avail = qc.q_total.map(|total| total.saturating_sub(used));
         Ok((used, avail))
     }
 
@@ -760,13 +759,11 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         });
                     }
                     "quota-available-bytes" => {
-                        let qc = qc;
                         if let Ok((_, Some(avail))) = self.get_quota(qc, path, meta).await {
                             return self.build_elem(docontent, pfx, prop, avail.to_string());
                         }
                     }
                     "quota-used-bytes" => {
-                        let qc = qc;
                         if let Ok((used, _)) = self.get_quota(qc, path, meta).await {
                             let used = if self.useragent.contains("WebDAVFS") {
                                 // Need this on MacOs, otherwise the value is off
@@ -907,7 +904,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             }
         }
 
-        Ok::<(), DavError>(self.write_propresponse(path, props)?)
+        self.write_propresponse(path, props)
     }
 
     pub fn write_propresponse(
@@ -955,7 +952,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
 }
 
 fn add_sc_elem(hm: &mut HashMap<StatusCode, Vec<Element>>, sc: StatusCode, e: Element) {
-    hm.entry(sc).or_insert_with(Vec::new);
+    hm.entry(sc).or_default();
     hm.get_mut(&sc).unwrap().push(e)
 }
 

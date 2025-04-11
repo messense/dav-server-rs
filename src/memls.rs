@@ -126,7 +126,7 @@ impl DavLockSystem for MemLs {
             }
             Some(n) => n,
         };
-        let node = (&mut inner.tree).get_node_mut(node_id).unwrap();
+        let node = inner.tree.get_node_mut(node_id).unwrap();
         let idx = node.iter().position(|n| n.token.as_str() == token).unwrap();
         let lock = &mut node[idx];
         let timeout_at = timeout.map(|d| SystemTime::now() + d);
@@ -184,7 +184,7 @@ impl DavLockSystem for MemLs {
     fn delete(&self, path: &DavPath) -> LsFuture<Result<(), ()>> {
         let inner = &mut *self.0.lock().unwrap();
         if let Some(node_id) = lookup_node(&inner.tree, path) {
-            (&mut inner.tree).delete_subtree(node_id).ok();
+            inner.tree.delete_subtree(node_id).ok();
         }
         future::ready(Ok(())).boxed()
     }
@@ -297,16 +297,14 @@ fn check_locks_from_node(
     }
     if let Ok(children) = tree.get_children(node_id) {
         for (_, node_id) in children {
-            if let Err(l) = check_locks_from_node(
+            check_locks_from_node(
                 tree,
                 node_id,
                 principal,
                 ignore_principal,
                 submitted_tokens,
                 shared_ok,
-            ) {
-                return Err(l);
-            }
+            )?;
         }
     }
     Ok(())

@@ -88,7 +88,7 @@ impl GuardedFileSystem<Filter> for FilteredFs {
         path: &'a DavPath,
         options: OpenOptions,
         _credentials: &'a Filter,
-    ) -> FsFuture<Box<dyn DavFile>> {
+    ) -> FsFuture<'a, Box<dyn DavFile>> {
         self.inner.open(path, options, &())
     }
 
@@ -97,7 +97,7 @@ impl GuardedFileSystem<Filter> for FilteredFs {
         path: &'a DavPath,
         meta: ReadDirMeta,
         filter: &'a Filter,
-    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>> {
+    ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
         Box::pin(async move {
             let mut stream = self.inner.read_dir(path, meta, &()).await?;
             let mut entries = Vec::default();
@@ -115,7 +115,7 @@ impl GuardedFileSystem<Filter> for FilteredFs {
         &'a self,
         path: &'a DavPath,
         _credentials: &'a Filter,
-    ) -> FsFuture<Box<dyn DavMetaData>> {
+    ) -> FsFuture<'a, Box<dyn DavMetaData>> {
         self.inner.metadata(path, &())
     }
 }

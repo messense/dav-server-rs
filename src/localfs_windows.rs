@@ -32,7 +32,7 @@ pub(crate) fn resolve(base: impl Into<PathBuf>, path: &DavPath) -> PathBuf {
 
     // must be rooted, and valid UTF-8.
     let mut fullpath = base.clone();
-    fullpath.push(&path);
+    fullpath.push(path);
     if !fullpath.has_root() || fullpath.to_str().is_none() {
         return fullpath;
     }
@@ -148,7 +148,7 @@ fn lookup(mut path: PathBuf, seg: &OsStr, no_init_check: bool) -> (PathBuf, bool
             None => continue,
         };
         if name.to_lowercase() == filename {
-            path.push(&name);
+            path.push(name);
             return (path, false);
         }
     }

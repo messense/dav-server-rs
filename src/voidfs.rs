@@ -28,7 +28,7 @@ impl<C: Clone + Send + Sync + 'static> GuardedFileSystem<C> for VoidFs<C> {
         &'a self,
         _path: &'a DavPath,
         _credentials: &C,
-    ) -> FsFuture<Box<dyn DavMetaData>> {
+    ) -> FsFuture<'a, Box<dyn DavMetaData>> {
         Box::pin(async { Err(FsError::NotImplemented) })
     }
 
@@ -37,7 +37,7 @@ impl<C: Clone + Send + Sync + 'static> GuardedFileSystem<C> for VoidFs<C> {
         _path: &'a DavPath,
         _meta: ReadDirMeta,
         _credentials: &C,
-    ) -> FsFuture<FsStream<Box<dyn DavDirEntry>>> {
+    ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
         Box::pin(async { Err(FsError::NotImplemented) })
     }
 
@@ -46,7 +46,7 @@ impl<C: Clone + Send + Sync + 'static> GuardedFileSystem<C> for VoidFs<C> {
         _path: &'a DavPath,
         _options: OpenOptions,
         _credentials: &C,
-    ) -> FsFuture<Box<dyn DavFile>> {
+    ) -> FsFuture<'a, Box<dyn DavFile>> {
         Box::pin(async { Err(FsError::NotImplemented) })
     }
 }
