@@ -53,7 +53,7 @@ fn write_response(w: &mut XmlWriter, path: &DavPath, sc: StatusCode) -> Result<(
     w.write(XmlWEvent::start_element("D:response"))?;
     let p = path.with_prefix().as_url_string();
     write_elem(w, "D:href", &p)?;
-    write_elem(w, "D:status", &format!("HTTP/1.1 {}", sc))?;
+    write_elem(w, "D:status", &format!("HTTP/1.1 {sc}"))?;
     w.write(XmlWEvent::end_element())?;
     Ok(())
 }

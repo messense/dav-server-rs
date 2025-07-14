@@ -226,7 +226,7 @@ impl Header for Timeout {
             }
             first = false;
             match *s {
-                DavTimeout::Seconds(n) => value.push_str(&format!("Second-{}", n)),
+                DavTimeout::Seconds(n) => value.push_str(&format!("Second-{n}")),
                 DavTimeout::Infinite => value.push_str("Infinite"),
             }
         }
@@ -313,7 +313,7 @@ impl ETag {
         } else {
             let w = if weak { "W/" } else { "" };
             Ok(ETag {
-                tag: format!("{}\"{}\"", w, t),
+                tag: format!("{w}\"{t}\""),
                 weak,
             })
         }
@@ -322,7 +322,7 @@ impl ETag {
     pub fn from_meta(meta: &dyn DavMetaData) -> Option<ETag> {
         let tag = meta.etag()?;
         Some(ETag {
-            tag: format!("\"{}\"", tag),
+            tag: format!("\"{tag}\""),
             weak: false,
         })
     }
@@ -587,9 +587,9 @@ impl Header for XUpdateRange {
     {
         let value = match *self {
             XUpdateRange::Append => "append".to_string(),
-            XUpdateRange::FromTo(b, e) => format!("{}-{}", b, e),
-            XUpdateRange::AllFrom(b) => format!("{}-", b),
-            XUpdateRange::Last(e) => format!("-{}", e),
+            XUpdateRange::FromTo(b, e) => format!("{b}-{e}"),
+            XUpdateRange::AllFrom(b) => format!("{b}-"),
+            XUpdateRange::Last(e) => format!("-{e}"),
         };
         values.extend(std::iter::once(HeaderValue::from_str(&value).unwrap()));
     }
@@ -654,10 +654,10 @@ enum IfState {
 
 // helpers.
 fn is_whitespace(c: u8) -> bool {
-    b" \t\r\n".iter().any(|&x| x == c)
+    b" \t\r\n".contains(&c)
 }
 fn is_special(c: u8) -> bool {
-    b"<>()[]".iter().any(|&x| x == c)
+    b"<>()[]".contains(&c)
 }
 
 fn trim_left(mut out: &'_ [u8]) -> &'_ [u8] {

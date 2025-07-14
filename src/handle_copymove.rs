@@ -52,7 +52,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 return match self.fs.copy(source, dest, &self.credentials).await {
                     Ok(_) => Ok(()),
                     Err(e) => {
-                        debug!("do_copy: self.fs.copy error: {:?}", e);
+                        debug!("do_copy: self.fs.copy error: {e:?}");
                         add_status(multierror, source, e).await
                     }
                 };
@@ -63,7 +63,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             // we do not do yet).
             if let Err(e) = self.fs.create_dir(dest, &self.credentials).await {
                 if depth != Depth::Zero || e != FsError::Exists {
-                    debug!("do_copy: self.fs.create_dir({}) error: {:?}", dest, e);
+                    debug!("do_copy: self.fs.create_dir({dest}) error: {e:?}");
                     return add_status(multierror, dest, e).await;
                 }
             }
@@ -80,7 +80,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             {
                 Ok(entries) => entries,
                 Err(e) => {
-                    debug!("do_copy: self.fs.read_dir error: {:?}", e);
+                    debug!("do_copy: self.fs.read_dir error: {e:?}");
                     return add_status(multierror, source, e).await;
                 }
             };
@@ -264,7 +264,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
                 // see if we need to delete the destination first.
                 if overwrite && exists && depth != Depth::Zero && !dest_is_file {
-                    trace!("handle_copymove: deleting destination {}", dest);
+                    trace!("handle_copymove: deleting destination {dest}");
                     if self
                         .delete_items(&mut multierror, Depth::Infinity, dmeta.unwrap(), &dest)
                         .await

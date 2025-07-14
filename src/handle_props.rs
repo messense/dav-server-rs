@@ -202,7 +202,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             }
         };
 
-        trace!("propfind: type request: {}", name);
+        trace!("propfind: type request: {name}");
 
         let mut pw = PropWriter::new(
             req,
@@ -250,7 +250,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 Ok(entries) => entries,
                 Err(e) => {
                     // if we cannot read_dir, just skip it.
-                    error!("read_dir error {:?}", e);
+                    error!("read_dir error {e:?}");
                     return Ok(());
                 }
             };
@@ -259,7 +259,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 let dirent = match dirent {
                     Ok(dirent) => dirent,
                     Err(e) => {
-                        trace!("next dir entry error happened. Skipping {:?}", e);
+                        trace!("next dir entry error happened. Skipping {e:?}");
                         continue;
                     }
                 };
@@ -269,7 +269,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 let meta = match dirent.metadata().await {
                     Ok(meta) => meta,
                     Err(e) => {
-                        trace!("metadata error on {}. Skipping {:?}", npath, e);
+                        trace!("metadata error on {npath}. Skipping {e:?}");
                         continue;
                     }
                 };
@@ -781,7 +781,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             let used = if self.useragent.contains("WebDAVFS") {
                                 // Need this on MacOs, otherwise the value is off
                                 // by a factor of 10 or so .. ?!?!!?
-                                format!("{:014}", used)
+                                format!("{used:014}")
                             } else {
                                 used.to_string()
                             };
@@ -849,7 +849,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             // modification.
                             attr |= 0x0020;
                         }
-                        return self.build_elem(docontent, pfx, prop, format!("{:08x}", attr));
+                        return self.build_elem(docontent, pfx, prop, format!("{attr:08x}"));
                     }
                     _ => {}
                 }
@@ -911,8 +911,8 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             if let Ok(v) = self.fs.get_props(path, true, &self.credentials).await {
                 v.into_iter()
                     .map(|prop| {
-                        let elem = davprop_to_element(prop);
-                        elem
+                        
+                        davprop_to_element(prop)
                     })
                     .for_each(|e| add_sc_elem(&mut props, StatusCode::OK, e));
             }
@@ -998,8 +998,8 @@ fn davprop_to_element(prop: DavProp) -> Element {
                 return result;
             }
             Err(error) => {
-                log::error!("davprop_to_element(): {}. Please check your GuardedFileSystem.get_props() implementation. 
-                    'xml'should include complete xml tag like format!(\"<{{prop_prefix}}:{{prop_name}} xmlns:{{prop_prefix}}=\"{{namespace}}\">{{value}}</{{prop_prefix}}:{{prop_name}}>\").into_bytes()", error);
+                log::error!("davprop_to_element(): {error}. Please check your GuardedFileSystem.get_props() implementation. 
+                    'xml'should include complete xml tag like format!(\"<{{prop_prefix}}:{{prop_name}} xmlns:{{prop_prefix}}=\"{{namespace}}\">{{value}}</{{prop_prefix}}:{{prop_name}}>\").into_bytes()");
             }
         }
     }

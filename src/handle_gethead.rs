@@ -131,7 +131,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // see if we want to get one or more ranges.
         if do_range {
             if let Some(r) = req.headers().typed_get::<headers::Range>() {
-                trace!("handle_gethead: range header {:?}", r);
+                trace!("handle_gethead: range header {r:?}");
                 use std::ops::Bound::*;
                 for range in r.satisfiable_ranges(len) {
                     let (start, mut count, valid) = match range {
@@ -141,7 +141,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         _ => (0, 0, false),
                     };
                     if !valid || start >= len {
-                        let r = format!("bytes */{}", len);
+                        let r = format!("bytes */{len}");
                         res.headers_mut()
                             .insert("Content-Range", r.parse().unwrap());
                         *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
@@ -164,7 +164,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 .await
                 .is_err()
             {
-                let r = format!("bytes */{}", len);
+                let r = format!("bytes */{len}");
                 res.headers_mut()
                     .insert("Content-Range", r.parse().unwrap());
                 *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
@@ -189,7 +189,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     .insert("Content-Range", r.parse().unwrap());
             } else {
                 // add content-type header.
-                let r = format!("multipart/byteranges; boundary={}", BOUNDARY);
+                let r = format!("multipart/byteranges; boundary={BOUNDARY}");
                 res.headers_mut().insert("Content-Type", r.parse().unwrap());
             }
         } else {
@@ -243,7 +243,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
                     if multipart {
                         let mut hdrs = Vec::new();
-                        let _ = write!(hdrs, "{}", BOUNDARY_START);
+                        let _ = write!(hdrs, "{BOUNDARY_START}");
                         let _ = writeln!(
                             hdrs,
                             "Content-Range: bytes {}-{}/{}",
@@ -251,7 +251,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                             range.start + range.count - 1,
                             len
                         );
-                        let _ = writeln!(hdrs, "Content-Type: {}", content_type);
+                        let _ = writeln!(hdrs, "Content-Type: {content_type}");
                         let _ = writeln!(hdrs);
                         tx.send(Bytes::from(hdrs)).await;
                     }
@@ -269,7 +269,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         let len = buf.len() as u64;
                         count = count.saturating_sub(len);
                         curpos += len;
-                        trace!("sending {} bytes", len);
+                        trace!("sending {len} bytes");
                         tx.send(buf).await;
                     }
                 }
@@ -337,7 +337,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     let dirent = match dirent {
                         Ok(dirent) => dirent,
                         Err(e) => {
-                            trace!("next dir entry error happened. Skipping {:?}", e);
+                            trace!("next dir entry error happened. Skipping {e:?}");
                             continue;
                         }
                     };
@@ -506,7 +506,7 @@ fn display_path(path: &DavPath) -> String {
         if idx == dpath_segs.len() - 1 {
             dpath.push_str(&dseg);
         } else {
-            dpath.push_str(&format!("<a href = \"{}\">{}</a>/", upath, dseg));
+            dpath.push_str(&format!("<a href = \"{upath}\">{dseg}</a>/"));
         }
     }
 

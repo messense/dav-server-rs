@@ -698,7 +698,7 @@ pub trait DavMetaData: Debug + Send + Sync + DynClone {
                 let tag = if self.is_file() && self.len() > 0 {
                     format!("{:x}-{:x}", self.len(), t)
                 } else {
-                    format!("{:x}", t)
+                    format!("{t:x}")
                 };
                 return Some(tag);
             }
@@ -818,6 +818,6 @@ impl std::error::Error for FsError {
 
 impl std::fmt::Display for FsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }

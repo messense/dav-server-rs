@@ -86,7 +86,7 @@ impl DavLockSystem for FakeLs {
         token: &str,
         timeout: Option<Duration>,
     ) -> LsFuture<Result<DavLock, ()>> {
-        debug!("refresh lock {}", token);
+        debug!("refresh lock {token}");
         let v: Vec<&str> = token.split('/').collect();
         let deep = v.len() > 1 && v[1] == "I";
         let shared = v.len() > 2 && v[2] == "S";

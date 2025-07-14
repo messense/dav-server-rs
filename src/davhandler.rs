@@ -416,7 +416,7 @@ where
                 resp
             }
             Err(err) => {
-                debug!("== END REQUEST result {:?}", err);
+                debug!("== END REQUEST result {err:?}");
                 let mut resp = Response::builder();
                 if is_ms && err.statuscode() == StatusCode::NOT_FOUND {
                     // This is an attempt to convince Windows to not
@@ -461,7 +461,7 @@ where
         // debug when running the webdav litmus tests.
         if log_enabled!(log::Level::Debug) {
             if let Some(t) = req.headers().typed_get::<davheaders::XLitmus>() {
-                debug!("X-Litmus: {:?}", t);
+                debug!("X-Litmus: {t:?}");
             }
         }
 
@@ -532,7 +532,7 @@ where
             }
         }
 
-        debug!("== START REQUEST {:?} {}", method, path);
+        debug!("== START REQUEST {method:?} {path}");
 
         match method {
             DavMethod::Options => self.handle_options(&req).await,

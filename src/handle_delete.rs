@@ -44,14 +44,14 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     ) -> BoxFuture<'a, DavResult<()>> {
         async move {
             if !meta.is_dir() {
-                trace!("delete_items (file) {} {:?}", path, depth);
+                trace!("delete_items (file) {path} {depth:?}");
                 return match self.fs.remove_file(path, &self.credentials).await {
                     Ok(x) => Ok(x),
                     Err(e) => Err(add_status(res, path, e).await),
                 };
             }
             if depth == Depth::Zero {
-                trace!("delete_items (dir) {} {:?}", path, depth);
+                trace!("delete_items (dir) {path} {depth:?}");
                 return match self.fs.remove_dir(path, &self.credentials).await {
                     Ok(x) => Ok(x),
                     Err(e) => Err(add_status(res, path, e).await),
