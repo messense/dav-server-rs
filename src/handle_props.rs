@@ -579,15 +579,15 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         if name != "propertyupdate" {
             let mut a = false;
             let mut m = false;
-            let mut nc = false;  // Nextcloud
-            let mut oc = false;  // OwnCloud
+            let mut nc = false; // Nextcloud
+            let mut oc = false; // OwnCloud
 
             for prop in &props {
                 match prop.namespace.as_deref() {
                     Some(NS_APACHE_URI) => a = true,
                     Some(NS_MS_URI) => m = true,
-                    Some(NS_NEXTCLOUD_URI) => nc = true,  // Detect Nextcloud namespace
-                    Some(NS_OWNCLOUD_URI) => oc = true,   // Detect OwnCloud namespace
+                    Some(NS_NEXTCLOUD_URI) => nc = true, // Detect Nextcloud namespace
+                    Some(NS_OWNCLOUD_URI) => oc = true,  // Detect OwnCloud namespace
                     _ => {}
                 }
             }
@@ -598,10 +598,10 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                 ev = ev.ns("Z", NS_MS_URI);
             }
             if nc {
-                ev = ev.ns("nc", NS_NEXTCLOUD_URI);  // Declare Nextcloud namespace
+                ev = ev.ns("nc", NS_NEXTCLOUD_URI); // Declare Nextcloud namespace
             }
             if oc {
-                ev = ev.ns("oc", NS_OWNCLOUD_URI);   // Declare OwnCloud namespace
+                ev = ev.ns("oc", NS_OWNCLOUD_URI); // Declare OwnCloud namespace
             }
         }
         emitter.write(ev)?;
@@ -907,8 +907,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         self.q_cache = qc;
 
         // and list props of the filesystem driver if it supports DAV properties
-        if self.fs.have_props(path, &self.credentials).await
-        {
+        if self.fs.have_props(path, &self.credentials).await {
             if let Ok(v) = self.fs.get_props(path, true, &self.credentials).await {
                 v.into_iter()
                     .map(|prop| {
@@ -997,7 +996,8 @@ fn davprop_to_element(prop: DavProp) -> Element {
         match Element::parse2(Cursor::new(xml)) {
             Ok(result) => {
                 return result;
-            }, Err(error) => {
+            }
+            Err(error) => {
                 log::error!("davprop_to_element(): {}. Please check your GuardedFileSystem.get_props() implementation. 
                     'xml'should include complete xml tag like format!(\"<{{prop_prefix}}:{{prop_name}} xmlns:{{prop_prefix}}=\"{{namespace}}\">{{value}}</{{prop_prefix}}:{{prop_name}}>\").into_bytes()", error);
             }
