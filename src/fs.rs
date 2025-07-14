@@ -109,7 +109,7 @@ pub struct DavProp {
     pub prefix: Option<String>,
     /// XML namespace.
     pub namespace: Option<String>,
-    /// Value of the property as raw XML.
+    /// Value of the property as raw XML. Like format!("<{prop_prefix}:{prop_name} xmlns:{prop_prefix}="{namespace}">{value}</{prop_prefix}:{prop_name}>").into_bytes()
     pub xml: Option<Vec<u8>>,
 }
 
