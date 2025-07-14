@@ -910,10 +910,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         if self.fs.have_props(path, &self.credentials).await {
             if let Ok(v) = self.fs.get_props(path, true, &self.credentials).await {
                 v.into_iter()
-                    .map(|prop| {
-                        
-                        davprop_to_element(prop)
-                    })
+                    .map(|prop| davprop_to_element(prop))
                     .for_each(|e| add_sc_elem(&mut props, StatusCode::OK, e));
             }
         }
