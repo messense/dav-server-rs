@@ -8,12 +8,12 @@
 use std::{convert::Infallible, error::Error, net::SocketAddr};
 
 use clap::Parser;
-use headers::{authorization::Basic, Authorization, HeaderMapExt};
+use headers::{Authorization, HeaderMapExt, authorization::Basic};
 use hyper::{server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
-use dav_server::{body::Body, fakels, localfs, memfs, memls, DavConfig, DavHandler};
+use dav_server::{DavConfig, DavHandler, body::Body, fakels, localfs, memfs, memls};
 
 #[derive(Clone)]
 struct Server {

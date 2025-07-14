@@ -49,7 +49,7 @@ where
             },
         }
     } else {
-        io::Error::new(io::ErrorKind::Other, err)
+        io::Error::other(err)
     }
 }
 

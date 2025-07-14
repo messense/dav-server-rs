@@ -2,7 +2,7 @@ use headers::HeaderMapExt;
 use http::{Request, Response};
 
 use crate::body::Body;
-use crate::util::{dav_method, DavMethod};
+use crate::util::{DavMethod, dav_method};
 use crate::{DavInner, DavResult};
 
 impl<C: Clone + Send + Sync + 'static> DavInner<C> {

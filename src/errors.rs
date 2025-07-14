@@ -47,7 +47,7 @@ impl std::fmt::Display for DavError {
             DavError::XmlReaderError(_) => write!(f, "XML parse error"),
             DavError::XmlWriterError(_) => write!(f, "XML generate error"),
             DavError::IoError(_) => write!(f, "I/O error"),
-            _ => write!(f, "{:?}", self),
+            _ => write!(f, "{self:?}"),
         }
     }
 }
@@ -63,7 +63,7 @@ impl From<DavError> for io::Error {
         match e {
             DavError::IoError(e) => e,
             DavError::FsError(e) => e.into(),
-            _ => io::Error::new(io::ErrorKind::Other, e),
+            _ => io::Error::other(e),
         }
     }
 }
@@ -118,16 +118,16 @@ impl From<futures_channel::mpsc::SendError> for DavError {
 
 fn fserror_to_ioerror(e: FsError) -> io::Error {
     match e {
-        FsError::NotImplemented => io::Error::new(io::ErrorKind::Other, "NotImplemented"),
-        FsError::GeneralFailure => io::Error::new(io::ErrorKind::Other, "GeneralFailure"),
+        FsError::NotImplemented => io::Error::other("NotImplemented"),
+        FsError::GeneralFailure => io::Error::other("GeneralFailure"),
         FsError::Exists => io::Error::new(io::ErrorKind::AlreadyExists, "Exists"),
         FsError::NotFound => io::Error::new(io::ErrorKind::NotFound, "Notfound"),
         FsError::Forbidden => io::Error::new(io::ErrorKind::PermissionDenied, "Forbidden"),
-        FsError::InsufficientStorage => io::Error::new(io::ErrorKind::Other, "InsufficientStorage"),
-        FsError::LoopDetected => io::Error::new(io::ErrorKind::Other, "LoopDetected"),
-        FsError::PathTooLong => io::Error::new(io::ErrorKind::Other, "PathTooLong"),
-        FsError::TooLarge => io::Error::new(io::ErrorKind::Other, "TooLarge"),
-        FsError::IsRemote => io::Error::new(io::ErrorKind::Other, "IsRemote"),
+        FsError::InsufficientStorage => io::Error::other("InsufficientStorage"),
+        FsError::LoopDetected => io::Error::other("LoopDetected"),
+        FsError::PathTooLong => io::Error::other("PathTooLong"),
+        FsError::TooLarge => io::Error::other("TooLarge"),
+        FsError::IsRemote => io::Error::other("IsRemote"),
     }
 }
 

@@ -13,9 +13,8 @@ use std::time::SystemTime;
 
 use bytes::{Buf, Bytes};
 use futures_util::{
-    future,
+    StreamExt, future,
     future::{BoxFuture, FutureExt},
-    StreamExt,
 };
 use http::StatusCode;
 
@@ -173,7 +172,7 @@ impl DavFileSystem for MemFs {
 
     fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         async move {
-            trace!("FS: create_dir {:?}", path);
+            trace!("FS: create_dir {path:?}");
             let tree = &mut *self.tree.lock().unwrap();
             let path = path.as_bytes();
             let parent_id = tree.lookup_parent(path)?;
@@ -336,7 +335,7 @@ fn cloneprop(p: &DavProp) -> DavProp {
 }
 
 impl DavDirEntry for MemFsDirEntry {
-    fn metadata(&self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata(&'_ self) -> FsFuture<'_, Box<dyn DavMetaData>> {
         let meta = (*self).clone();
         Box::pin(future::ok(Box::new(meta) as Box<dyn DavMetaData>))
     }
@@ -347,7 +346,7 @@ impl DavDirEntry for MemFsDirEntry {
 }
 
 impl DavFile for MemFsFile {
-    fn metadata(&mut self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata(&'_ mut self) -> FsFuture<'_, Box<dyn DavMetaData>> {
         async move {
             let tree = &*self.tree.lock().unwrap();
             let node = tree.get_node(self.node_id)?;
@@ -357,7 +356,7 @@ impl DavFile for MemFsFile {
         .boxed()
     }
 
-    fn read_bytes(&mut self, count: usize) -> FsFuture<Bytes> {
+    fn read_bytes(&'_ mut self, count: usize) -> FsFuture<'_, Bytes> {
         async move {
             let tree = &*self.tree.lock().unwrap();
             let node = tree.get_node(self.node_id)?;
@@ -378,7 +377,7 @@ impl DavFile for MemFsFile {
         .boxed()
     }
 
-    fn write_bytes(&mut self, buf: Bytes) -> FsFuture<()> {
+    fn write_bytes(&'_ mut self, buf: Bytes) -> FsFuture<'_, ()> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             let node = tree.get_node_mut(self.node_id)?;
@@ -397,7 +396,7 @@ impl DavFile for MemFsFile {
         .boxed()
     }
 
-    fn write_buf(&mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<()> {
+    fn write_buf(&'_ mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<'_, ()> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             let node = tree.get_node_mut(self.node_id)?;
@@ -421,11 +420,11 @@ impl DavFile for MemFsFile {
         .boxed()
     }
 
-    fn flush(&mut self) -> FsFuture<()> {
+    fn flush(&'_ mut self) -> FsFuture<'_, ()> {
         future::ok(()).boxed()
     }
 
-    fn seek(&mut self, pos: SeekFrom) -> FsFuture<u64> {
+    fn seek(&'_ mut self, pos: SeekFrom) -> FsFuture<'_, u64> {
         async move {
             let (start, offset): (u64, i64) = match pos {
                 SeekFrom::Start(npos) => {

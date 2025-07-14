@@ -12,7 +12,7 @@ use std::fmt::Debug;
 use std::pin::Pin;
 use std::time::{Duration, SystemTime};
 
-use dyn_clone::{clone_trait_object, DynClone};
+use dyn_clone::{DynClone, clone_trait_object};
 use futures_util::Future;
 use xmltree::Element;
 
@@ -22,11 +22,11 @@ pub struct DavLock {
     /// Token.
     pub token: String,
     /// Path/
-    pub path: DavPath,
+    pub path: Box<DavPath>,
     /// Principal.
     pub principal: Option<String>,
     /// Owner.
-    pub owner: Option<Element>,
+    pub owner: Option<Box<Element>>,
     /// When the lock turns stale (absolute).
     pub timeout_at: Option<SystemTime>,
     /// When the lock turns stale (relative).
@@ -44,43 +44,43 @@ pub trait DavLockSystem: Debug + Send + Sync + DynClone {
     /// Lock a node. Returns `Ok(new_lock)` if succeeded,
     /// or `Err(conflicting_lock)` if failed.
     fn lock(
-        &self,
+        &'_ self,
         path: &DavPath,
         principal: Option<&str>,
         owner: Option<&Element>,
         timeout: Option<Duration>,
         shared: bool,
         deep: bool,
-    ) -> LsFuture<Result<DavLock, DavLock>>;
+    ) -> LsFuture<'_, Result<DavLock, DavLock>>;
 
     /// Unlock a node. Returns `Ok(())` if succeeded, `Err (())` if failed
     /// (because lock doesn't exist)
-    fn unlock(&self, path: &DavPath, token: &str) -> LsFuture<Result<(), ()>>;
+    fn unlock(&'_ self, path: &DavPath, token: &str) -> LsFuture<'_, Result<(), ()>>;
 
     /// Refresh lock. Returns updated lock if succeeded.
     fn refresh(
-        &self,
+        &'_ self,
         path: &DavPath,
         token: &str,
         timeout: Option<Duration>,
-    ) -> LsFuture<Result<DavLock, ()>>;
+    ) -> LsFuture<'_, Result<DavLock, ()>>;
 
     /// Check if node is locked and if so, if we own all the locks.
     /// If not, returns as Err one conflicting lock.
     fn check(
-        &self,
+        &'_ self,
         path: &DavPath,
         principal: Option<&str>,
         ignore_principal: bool,
         deep: bool,
         submitted_tokens: Vec<&str>,
-    ) -> LsFuture<Result<(), DavLock>>;
+    ) -> LsFuture<'_, Result<(), DavLock>>;
 
     /// Find and return all locks that cover a given path.
-    fn discover(&self, path: &DavPath) -> LsFuture<Vec<DavLock>>;
+    fn discover(&'_ self, path: &DavPath) -> LsFuture<'_, Vec<DavLock>>;
 
     /// Delete all locks at this path and below (after MOVE or DELETE)
-    fn delete(&self, path: &DavPath) -> LsFuture<Result<(), ()>>;
+    fn delete(&'_ self, path: &DavPath) -> LsFuture<'_, Result<(), ()>>;
 }
 
 clone_trait_object! {DavLockSystem}
