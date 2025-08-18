@@ -14,7 +14,7 @@
 //! `FakeLs` implements such a fake locksystem.
 use std::time::{Duration, SystemTime};
 
-use futures_util::{future, FutureExt};
+use futures_util::{FutureExt, future};
 use uuid::Uuid;
 use xmltree::Element;
 

@@ -21,9 +21,9 @@ use std::{
 
 use actix_web::body::BoxBody;
 use actix_web::error::PayloadError;
-use actix_web::{dev, Error, FromRequest, HttpRequest, HttpResponse};
+use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, dev};
 use bytes::Bytes;
-use futures_util::{future, Stream};
+use futures_util::{Stream, future};
 use pin_project::pin_project;
 
 /// http::Request compatibility.

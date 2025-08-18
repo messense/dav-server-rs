@@ -8,8 +8,8 @@ use std::io::SeekFrom;
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use dyn_clone::{clone_trait_object, DynClone};
-use futures_util::{future, Future, FutureExt, Stream, TryFutureExt};
+use dyn_clone::{DynClone, clone_trait_object};
+use futures_util::{Future, FutureExt, Stream, TryFutureExt, future};
 use http::StatusCode;
 
 use crate::davpath::DavPath;
@@ -692,16 +692,16 @@ pub trait DavMetaData: Debug + Send + Sync + DynClone {
     /// Returns a simple etag that basically is `\<length\>-\<timestamp_in_ms\>`
     /// with the numbers in hex. Enough for most implementations.
     fn etag(&self) -> Option<String> {
-        if let Ok(t) = self.modified() {
-            if let Ok(t) = t.duration_since(UNIX_EPOCH) {
-                let t = t.as_secs() * 1000000 + t.subsec_nanos() as u64 / 1000;
-                let tag = if self.is_file() && self.len() > 0 {
-                    format!("{:x}-{:x}", self.len(), t)
-                } else {
-                    format!("{t:x}")
-                };
-                return Some(tag);
-            }
+        if let Ok(t) = self.modified()
+            && let Ok(t) = t.duration_since(UNIX_EPOCH)
+        {
+            let t = t.as_secs() * 1000000 + t.subsec_nanos() as u64 / 1000;
+            let tag = if self.is_file() && self.len() > 0 {
+                format!("{:x}-{:x}", self.len(), t)
+            } else {
+                format!("{t:x}")
+            };
+            return Some(tag);
         }
         None
     }

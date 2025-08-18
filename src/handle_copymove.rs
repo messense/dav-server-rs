@@ -1,4 +1,4 @@
-use futures_util::{future::BoxFuture, FutureExt, StreamExt};
+use futures_util::{FutureExt, StreamExt, future::BoxFuture};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
@@ -9,8 +9,8 @@ use crate::davheaders::{self, Depth};
 use crate::davpath::DavPath;
 use crate::errors::*;
 use crate::fs::*;
-use crate::multierror::{multi_error, MultiError};
-use crate::{util::DavMethod, DavInner, DavResult};
+use crate::multierror::{MultiError, multi_error};
+use crate::{DavInner, DavResult, util::DavMethod};
 
 // map_err helper.
 async fn add_status<'a>(
@@ -61,11 +61,11 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             // Copying a directory onto an existing directory with Depth 0
             // is not an error. It means "only copy properties" (which
             // we do not do yet).
-            if let Err(e) = self.fs.create_dir(dest, &self.credentials).await {
-                if depth != Depth::Zero || e != FsError::Exists {
-                    debug!("do_copy: self.fs.create_dir({dest}) error: {e:?}");
-                    return add_status(multierror, dest, e).await;
-                }
+            if let Err(e) = self.fs.create_dir(dest, &self.credentials).await
+                && (depth != Depth::Zero || e != FsError::Exists)
+            {
+                debug!("do_copy: self.fs.create_dir({dest}) error: {e:?}");
+                return add_status(multierror, dest, e).await;
             }
 
             // only recurse when Depth > 0.
@@ -196,10 +196,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         let (dest_is_file, dmeta) = match self.fs.symlink_metadata(&dest, &self.credentials).await {
             Ok(meta) => {
                 let mut is_file = false;
-                if meta.is_symlink() {
-                    if let Ok(m) = self.fs.metadata(&dest, &self.credentials).await {
-                        is_file = m.is_file();
-                    }
+                if meta.is_symlink()
+                    && let Ok(m) = self.fs.metadata(&dest, &self.credentials).await
+                {
+                    is_file = m.is_file();
                 }
                 if meta.is_file() {
                     is_file = true;

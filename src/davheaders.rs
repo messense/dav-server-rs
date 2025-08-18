@@ -256,10 +256,10 @@ impl Header for Destination {
         if s.starts_with('/') {
             return Ok(Destination(s.to_string()));
         }
-        if let Some(caps) = RE_URL.captures(s) {
-            if let Some(path) = caps.get(1) {
-                return Ok(Destination(path.as_str().to_string()));
-            }
+        if let Some(caps) = RE_URL.captures(s)
+            && let Some(path) = caps.get(1)
+        {
+            return Ok(Destination(path.as_str().to_string()));
         }
         Err(invalid())
     }

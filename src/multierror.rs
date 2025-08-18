@@ -3,16 +3,16 @@ use std::io;
 use futures_util::{Stream, StreamExt};
 
 use http::{Response, StatusCode};
+use xml::EmitterConfig;
 use xml::common::XmlVersion;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
-use xml::EmitterConfig;
 
+use crate::DavError;
 use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::davpath::DavPath;
 use crate::util::MemBuffer;
-use crate::DavError;
 
 type Sender = crate::async_stream::Sender<(DavPath, StatusCode), DavError>;
 

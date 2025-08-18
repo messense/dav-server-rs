@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 use std::io::{Read, Write};
 
+use xml::EmitterConfig;
 use xml::common::XmlVersion;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
-use xml::EmitterConfig;
 
 use xmltree::{self, Element, XMLNode};
 

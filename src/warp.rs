@@ -10,12 +10,12 @@ use std::convert::Infallible;
 use std::path::Path;
 
 use warp::{
+    Filter, Reply,
     filters::BoxedFilter,
     http::{HeaderMap, Method},
-    Filter, Reply,
 };
 
-use crate::{body::Body, DavHandler};
+use crate::{DavHandler, body::Body};
 #[cfg(any(docsrs, feature = "localfs"))]
 use crate::{fakels::FakeLs, localfs::LocalFs};
 

@@ -1,4 +1,4 @@
-use futures_util::{future::BoxFuture, FutureExt, StreamExt};
+use futures_util::{FutureExt, StreamExt, future::BoxFuture};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
@@ -9,7 +9,7 @@ use crate::davheaders::Depth;
 use crate::davpath::DavPath;
 use crate::errors::*;
 use crate::fs::*;
-use crate::multierror::{multi_error, MultiError};
+use crate::multierror::{MultiError, multi_error};
 use crate::{DavInner, DavResult};
 
 // map_err helper.
@@ -128,10 +128,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         let mut path = self.path(req);
         let meta = self.fs.symlink_metadata(&path, &self.credentials).await?;
-        if meta.is_symlink() {
-            if let Ok(m2) = self.fs.metadata(&path, &self.credentials).await {
-                path.add_slash_if(m2.is_dir());
-            }
+        if meta.is_symlink()
+            && let Ok(m2) = self.fs.metadata(&path, &self.credentials).await
+        {
+            path.add_slash_if(m2.is_dir());
         }
         path.add_slash_if(meta.is_dir());
 

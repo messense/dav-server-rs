@@ -1,6 +1,6 @@
 #[cfg(feature = "caldav")]
 mod caldav_tests {
-    use dav_server::{body::Body, caldav::*, fakels::FakeLs, memfs::MemFs, DavHandler};
+    use dav_server::{DavHandler, body::Body, caldav::*, fakels::FakeLs, memfs::MemFs};
     use http::{Method, Request, StatusCode};
 
     fn setup_caldav_server() -> DavHandler {
@@ -302,12 +302,16 @@ END:VCALENDAR"#;
     #[test]
     fn test_calendar_properties_default() {
         let props = CalendarProperties::default();
-        assert!(props
-            .supported_components
-            .contains(&CalendarComponentType::VEvent));
-        assert!(props
-            .supported_components
-            .contains(&CalendarComponentType::VTodo));
+        assert!(
+            props
+                .supported_components
+                .contains(&CalendarComponentType::VEvent)
+        );
+        assert!(
+            props
+                .supported_components
+                .contains(&CalendarComponentType::VTodo)
+        );
         assert_eq!(props.max_resource_size, Some(1024 * 1024));
     }
 
@@ -331,7 +335,7 @@ END:VCALENDAR"#;
 
 #[cfg(not(feature = "caldav"))]
 mod caldav_disabled_tests {
-    use dav_server::{body::Body, fakels::FakeLs, memfs::MemFs, DavHandler};
+    use dav_server::{DavHandler, body::Body, fakels::FakeLs, memfs::MemFs};
     use http::Request;
 
     #[tokio::test]

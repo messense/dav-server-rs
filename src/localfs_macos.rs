@@ -13,8 +13,8 @@ use std::num::NonZeroUsize;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -156,10 +156,10 @@ impl DUCacheBuilder {
     // add a filename to the list we have
     #[cfg(unix)]
     pub fn add(&mut self, filename: OsString) {
-        if let Some(f) = Path::new(&filename).file_name() {
-            if f.as_bytes().starts_with(b"._") {
-                self.entries.push(filename);
-            }
+        if let Some(f) = Path::new(&filename).file_name()
+            && f.as_bytes().starts_with(b"._")
+        {
+            self.entries.push(filename);
         }
     }
 

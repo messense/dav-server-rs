@@ -3,15 +3,15 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::{self, Cursor};
 
-use futures_util::{future::BoxFuture, FutureExt, StreamExt};
+use futures_util::{FutureExt, StreamExt, future::BoxFuture};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
 use crate::xmltree_ext::*;
+use xml::EmitterConfig;
 use xml::common::XmlVersion;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
-use xml::EmitterConfig;
 use xmltree::{Element, XMLNode};
 
 use crate::async_stream::AsyncStream;
@@ -358,10 +358,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                             return StatusCode::CONFLICT;
                         }
                         // FIXME only here to make "litmus" happy, really...
-                        if let Some(s) = prop.get_text() {
-                            if davheaders::ContentLanguage::try_from(s.as_ref()).is_err() {
-                                return StatusCode::CONFLICT;
-                            }
+                        if let Some(s) = prop.get_text()
+                            && davheaders::ContentLanguage::try_from(s.as_ref()).is_err()
+                        {
+                            return StatusCode::CONFLICT;
                         }
                         if can_deadprop {
                             StatusCode::CONTINUE
@@ -768,10 +768,10 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         // use ctime instead - apache seems to do this.
                         if let Ok(ctime) = meta.status_changed() {
                             let mut time = ctime;
-                            if let Ok(mtime) = meta.modified() {
-                                if mtime < ctime {
-                                    time = mtime;
-                                }
+                            if let Ok(mtime) = meta.modified()
+                                && mtime < ctime
+                            {
+                                time = mtime;
                             }
                             let tm = systemtime_to_rfc3339_without_nanosecond(time);
                             return self.build_elem(docontent, pfx, prop, tm);
@@ -866,11 +866,11 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             }
             Some(NS_APACHE_URI) => {
                 pfx = "A";
-                if prop.name.as_str() == "executable" {
-                    if let Ok(x) = meta.executable() {
-                        let b = if x { "T" } else { "F" };
-                        return self.build_elem(docontent, pfx, prop, b);
-                    }
+                if prop.name.as_str() == "executable"
+                    && let Ok(x) = meta.executable()
+                {
+                    let b = if x { "T" } else { "F" };
+                    return self.build_elem(docontent, pfx, prop, b);
                 }
             }
             #[cfg(feature = "caldav")]
@@ -951,10 +951,10 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         // use ctime instead - apache seems to do this.
                         if let Ok(ctime) = meta.status_changed() {
                             let mut time = ctime;
-                            if let Ok(mtime) = meta.modified() {
-                                if mtime < ctime {
-                                    time = mtime;
-                                }
+                            if let Ok(mtime) = meta.modified()
+                                && mtime < ctime
+                            {
+                                time = mtime;
                             }
                             let tm = systemtime_to_httpdate(time);
                             return self.build_elem(docontent, pfx, prop, tm);
@@ -1003,13 +1003,13 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         {
             // asking for a specific property.
             let dprop = element_to_davprop(prop);
-            if let Ok(xml) = self.fs.get_prop(path, dprop, &self.credentials).await {
-                if let Ok(e) = Element::parse(Cursor::new(xml)) {
-                    return Ok(StatusElement {
-                        status: StatusCode::OK,
-                        element: e,
-                    });
-                }
+            if let Ok(xml) = self.fs.get_prop(path, dprop, &self.credentials).await
+                && let Ok(e) = Element::parse(Cursor::new(xml))
+            {
+                return Ok(StatusElement {
+                    status: StatusCode::OK,
+                    element: e,
+                });
             }
         }
         let prop = if !pfx.is_empty() {
@@ -1047,12 +1047,12 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         self.q_cache = qc;
 
         // and list props of the filesystem driver if it supports DAV properties
-        if self.fs.have_props(path, &self.credentials).await {
-            if let Ok(v) = self.fs.get_props(path, true, &self.credentials).await {
-                v.into_iter()
-                    .map(davprop_to_element)
-                    .for_each(|e| add_sc_elem(&mut props, StatusCode::OK, e));
-            }
+        if self.fs.have_props(path, &self.credentials).await
+            && let Ok(v) = self.fs.get_props(path, true, &self.credentials).await
+        {
+            v.into_iter()
+                .map(davprop_to_element)
+                .for_each(|e| add_sc_elem(&mut props, StatusCode::OK, e));
         }
 
         self.write_propresponse(path, props)

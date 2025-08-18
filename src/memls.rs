@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-use futures_util::{future, FutureExt};
+use futures_util::{FutureExt, future};
 use uuid::Uuid;
 use xmltree::Element;
 
@@ -242,10 +242,8 @@ fn check_locks_to_path(
     }
 
     // return conflicting lock on error.
-    if !holds_lock {
-        if let Some(first_lock_seen) = first_lock_seen {
-            return Err(first_lock_seen.to_owned());
-        }
+    if !holds_lock && let Some(first_lock_seen) = first_lock_seen {
+        return Err(first_lock_seen.to_owned());
     }
 
     Ok(())

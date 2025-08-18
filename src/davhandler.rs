@@ -17,13 +17,13 @@ use http_body_util::BodyExt;
 use crate::body::{Body, StreamBody};
 use crate::davheaders;
 use crate::davpath::DavPath;
-use crate::util::{dav_method, DavMethod, DavMethodSet};
+use crate::util::{DavMethod, DavMethodSet, dav_method};
 
+use crate::DavResult;
 use crate::errors::DavError;
 use crate::fs::*;
 use crate::ls::*;
-use crate::voidfs::{is_voidfs, VoidFs};
-use crate::DavResult;
+use crate::voidfs::{VoidFs, is_voidfs};
 
 /// WebDAV request handler.
 ///
@@ -459,10 +459,10 @@ where
         };
 
         // debug when running the webdav litmus tests.
-        if log_enabled!(log::Level::Debug) {
-            if let Some(t) = req.headers().typed_get::<davheaders::XLitmus>() {
-                debug!("X-Litmus: {t:?}");
-            }
+        if log_enabled!(log::Level::Debug)
+            && let Some(t) = req.headers().typed_get::<davheaders::XLitmus>()
+        {
+            debug!("X-Litmus: {t:?}");
         }
 
         // translate HTTP method to Webdav method.
@@ -497,15 +497,15 @@ where
         }
 
         // see if method is allowed.
-        if let Some(ref a) = self.allow {
-            if !a.contains(method) {
-                debug!(
-                    "method {} not allowed on request {}",
-                    req.method(),
-                    req.uri()
-                );
-                return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
-            }
+        if let Some(ref a) = self.allow
+            && !a.contains(method)
+        {
+            debug!(
+                "method {} not allowed on request {}",
+                req.method(),
+                req.uri()
+            );
+            return Err(DavError::StatusClose(StatusCode::METHOD_NOT_ALLOWED));
         }
 
         // make sure the request path is valid.

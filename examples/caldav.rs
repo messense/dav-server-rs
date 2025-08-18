@@ -9,7 +9,7 @@
 //! The server will be available at http://localhost:8080
 //! You can connect to it using CalDAV clients like Thunderbird, Apple Calendar, etc.
 
-use dav_server::{fakels::FakeLs, memfs::MemFs, DavHandler, DavMethodSet};
+use dav_server::{DavHandler, DavMethodSet, fakels::FakeLs, memfs::MemFs};
 use hyper::{server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
 use std::{convert::Infallible, net::SocketAddr};

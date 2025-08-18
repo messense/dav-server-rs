@@ -83,15 +83,13 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&dyn DavMetaData>) -> Op
                 return Some(StatusCode::PRECONDITION_FAILED);
             }
         }
-    } else if let Some(r) = req.headers().typed_get::<headers::IfModifiedSince>() {
-        if req.method() == Method::GET || req.method() == Method::HEAD {
-            if let Some(file_modified) = file_modified {
-                if round_time(file_modified) <= round_time(r) {
-                    trace!("not-modified If-Modified-Since {r:?}");
-                    return Some(StatusCode::NOT_MODIFIED);
-                }
-            }
-        }
+    } else if let Some(r) = req.headers().typed_get::<headers::IfModifiedSince>()
+        && (req.method() == Method::GET || req.method() == Method::HEAD)
+        && let Some(file_modified) = file_modified
+        && round_time(file_modified) <= round_time(r)
+    {
+        trace!("not-modified If-Modified-Since {r:?}");
+        return Some(StatusCode::NOT_MODIFIED);
     }
     None
 }

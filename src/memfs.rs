@@ -13,9 +13,8 @@ use std::time::SystemTime;
 
 use bytes::{Buf, Bytes};
 use futures_util::{
-    future,
+    StreamExt, future,
     future::{BoxFuture, FutureExt},
-    StreamExt,
 };
 use http::StatusCode;
 

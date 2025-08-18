@@ -7,9 +7,9 @@ use http::method::InvalidMethod;
 use time::format_description::well_known::Rfc3339;
 use time::macros::offset;
 
+use crate::DavResult;
 use crate::body::Body;
 use crate::errors::DavError;
-use crate::DavResult;
 
 /// HTTP Methods supported by DavHandler.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]

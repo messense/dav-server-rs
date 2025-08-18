@@ -17,13 +17,13 @@ use std::os::unix::{
 use std::os::windows::prelude::*;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bytes::{Buf, Bytes, BytesMut};
-use futures_util::{future, future::BoxFuture, FutureExt, Stream};
+use futures_util::{FutureExt, Stream, future, future::BoxFuture};
 use pin_utils::pin_mut;
 use tokio::task;
 
@@ -488,7 +488,7 @@ fn read_batch(
             return ReadDirBatch {
                 buffer,
                 iterator: None,
-            }
+            };
         }
     };
     let _guard = match do_meta {
