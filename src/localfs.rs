@@ -560,7 +560,7 @@ impl Stream for LocalFsReadDir {
                     this.fut.take();
                     if let Some(ref mut nb) = this.dir_cache {
                         batch.buffer.iter().for_each(|e| {
-                            if let Ok(ref e) = e {
+                            if let Ok(e) = e {
                                 nb.add(e.entry.file_name());
                             }
                         });
@@ -631,7 +631,7 @@ impl LocalFsDirEntry {
 }
 
 impl DavDirEntry for LocalFsDirEntry {
-    fn metadata(&self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata(&self) -> FsFuture<'_, Box<dyn DavMetaData>> {
         match self.meta {
             Meta::Data(ref meta) => {
                 let m = match meta {
@@ -661,21 +661,21 @@ impl DavDirEntry for LocalFsDirEntry {
         self.entry.file_name().to_str().unwrap().as_bytes().to_vec()
     }
 
-    fn is_dir(&self) -> FsFuture<bool> {
+    fn is_dir(&self) -> FsFuture<'_, bool> {
         Box::pin(self.is_a(Is::Dir))
     }
 
-    fn is_file(&self) -> FsFuture<bool> {
+    fn is_file(&self) -> FsFuture<'_, bool> {
         Box::pin(self.is_a(Is::File))
     }
 
-    fn is_symlink(&self) -> FsFuture<bool> {
+    fn is_symlink(&self) -> FsFuture<'_, bool> {
         Box::pin(self.is_a(Is::Symlink))
     }
 }
 
 impl DavFile for LocalFsFile {
-    fn metadata(&mut self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata(&mut self) -> FsFuture<'_, Box<dyn DavMetaData>> {
         async move {
             let file = self.0.take().unwrap();
             let (meta, file) = blocking(move || (file.metadata(), file)).await;
@@ -685,7 +685,7 @@ impl DavFile for LocalFsFile {
         .boxed()
     }
 
-    fn write_bytes(&mut self, buf: Bytes) -> FsFuture<()> {
+    fn write_bytes(&mut self, buf: Bytes) -> FsFuture<'_, ()> {
         async move {
             let mut file = self.0.take().unwrap();
             let (res, file) = blocking(move || (file.write_all(&buf), file)).await;
@@ -695,7 +695,7 @@ impl DavFile for LocalFsFile {
         .boxed()
     }
 
-    fn write_buf(&mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<()> {
+    fn write_buf(&mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<'_, ()> {
         async move {
             let mut file = self.0.take().unwrap();
             let (res, file) = blocking(move || {
@@ -715,7 +715,7 @@ impl DavFile for LocalFsFile {
         .boxed()
     }
 
-    fn read_bytes(&mut self, count: usize) -> FsFuture<Bytes> {
+    fn read_bytes(&mut self, count: usize) -> FsFuture<'_, Bytes> {
         async move {
             let mut file = self.0.take().unwrap();
             let (res, file) = blocking(move || {
@@ -736,7 +736,7 @@ impl DavFile for LocalFsFile {
         .boxed()
     }
 
-    fn seek(&mut self, pos: SeekFrom) -> FsFuture<u64> {
+    fn seek(&mut self, pos: SeekFrom) -> FsFuture<'_, u64> {
         async move {
             let mut file = self.0.take().unwrap();
             let (res, file) = blocking(move || (file.seek(pos), file)).await;
@@ -746,7 +746,7 @@ impl DavFile for LocalFsFile {
         .boxed()
     }
 
-    fn flush(&mut self) -> FsFuture<()> {
+    fn flush(&mut self) -> FsFuture<'_, ()> {
         async move {
             let mut file = self.0.take().unwrap();
             let (res, file) = blocking(move || (file.flush(), file)).await;

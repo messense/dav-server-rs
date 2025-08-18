@@ -336,7 +336,7 @@ fn cloneprop(p: &DavProp) -> DavProp {
 }
 
 impl DavDirEntry for MemFsDirEntry {
-    fn metadata(&self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata(&self) -> FsFuture<'_, Box<dyn DavMetaData>> {
         let meta = (*self).clone();
         Box::pin(future::ok(Box::new(meta) as Box<dyn DavMetaData>))
     }
@@ -347,7 +347,7 @@ impl DavDirEntry for MemFsDirEntry {
 }
 
 impl DavFile for MemFsFile {
-    fn metadata(&mut self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata(&mut self) -> FsFuture<'_, Box<dyn DavMetaData>> {
         async move {
             let tree = &*self.tree.lock().unwrap();
             let node = tree.get_node(self.node_id)?;
@@ -357,7 +357,7 @@ impl DavFile for MemFsFile {
         .boxed()
     }
 
-    fn read_bytes(&mut self, count: usize) -> FsFuture<Bytes> {
+    fn read_bytes(&mut self, count: usize) -> FsFuture<'_, Bytes> {
         async move {
             let tree = &*self.tree.lock().unwrap();
             let node = tree.get_node(self.node_id)?;
@@ -378,7 +378,7 @@ impl DavFile for MemFsFile {
         .boxed()
     }
 
-    fn write_bytes(&mut self, buf: Bytes) -> FsFuture<()> {
+    fn write_bytes(&mut self, buf: Bytes) -> FsFuture<'_, ()> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             let node = tree.get_node_mut(self.node_id)?;
@@ -397,7 +397,7 @@ impl DavFile for MemFsFile {
         .boxed()
     }
 
-    fn write_buf(&mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<()> {
+    fn write_buf(&mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<'_, ()> {
         async move {
             let tree = &mut *self.tree.lock().unwrap();
             let node = tree.get_node_mut(self.node_id)?;
@@ -421,11 +421,11 @@ impl DavFile for MemFsFile {
         .boxed()
     }
 
-    fn flush(&mut self) -> FsFuture<()> {
+    fn flush(&mut self) -> FsFuture<'_, ()> {
         future::ok(()).boxed()
     }
 
-    fn seek(&mut self, pos: SeekFrom) -> FsFuture<u64> {
+    fn seek(&mut self, pos: SeekFrom) -> FsFuture<'_, u64> {
         async move {
             let (start, offset): (u64, i64) = match pos {
                 SeekFrom::Start(npos) => {

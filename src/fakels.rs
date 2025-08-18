@@ -54,7 +54,7 @@ impl DavLockSystem for FakeLs {
         timeout: Option<Duration>,
         shared: bool,
         deep: bool,
-    ) -> LsFuture<Result<DavLock, DavLock>> {
+    ) -> LsFuture<'_, Result<DavLock, DavLock>> {
         let timeout = tm_limit(timeout);
         let timeout_at = SystemTime::now() + timeout;
 
@@ -76,7 +76,7 @@ impl DavLockSystem for FakeLs {
         future::ready(Ok(lock)).boxed()
     }
 
-    fn unlock(&self, _path: &DavPath, _token: &str) -> LsFuture<Result<(), ()>> {
+    fn unlock(&self, _path: &DavPath, _token: &str) -> LsFuture<'_, Result<(), ()>> {
         future::ready(Ok(())).boxed()
     }
 
@@ -85,7 +85,7 @@ impl DavLockSystem for FakeLs {
         path: &DavPath,
         token: &str,
         timeout: Option<Duration>,
-    ) -> LsFuture<Result<DavLock, ()>> {
+    ) -> LsFuture<'_, Result<DavLock, ()>> {
         debug!("refresh lock {token}");
         let v: Vec<&str> = token.split('/').collect();
         let deep = v.len() > 1 && v[1] == "I";
@@ -114,15 +114,15 @@ impl DavLockSystem for FakeLs {
         _ignore_principal: bool,
         _deep: bool,
         _submitted_tokens: Vec<&str>,
-    ) -> LsFuture<Result<(), DavLock>> {
+    ) -> LsFuture<'_, Result<(), DavLock>> {
         future::ready(Ok(())).boxed()
     }
 
-    fn discover(&self, _path: &DavPath) -> LsFuture<Vec<DavLock>> {
+    fn discover(&self, _path: &DavPath) -> LsFuture<'_, Vec<DavLock>> {
         future::ready(Vec::new()).boxed()
     }
 
-    fn delete(&self, _path: &DavPath) -> LsFuture<Result<(), ()>> {
+    fn delete(&self, _path: &DavPath) -> LsFuture<'_, Result<(), ()>> {
         future::ready(Ok(())).boxed()
     }
 }

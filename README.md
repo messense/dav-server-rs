@@ -173,6 +173,10 @@ RUST_LOG=dav_server=debug cargo run --example sample-litmus-server
 This will start a server on port 4918, serving an in-memory filesystem.
 For other options, run `cargo run --example sample-litmus-server -- --help`
 
+### Before creating a commit..
+- cargo clippy --all-targets -- -D warnings
+- cargo fmt
+
 ### Copyright and License.
 
  * © 2018, 2019, 2020 XS4ALL Internet bv

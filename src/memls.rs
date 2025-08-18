@@ -52,7 +52,7 @@ impl DavLockSystem for MemLs {
         timeout: Option<Duration>,
         shared: bool,
         deep: bool,
-    ) -> LsFuture<Result<DavLock, DavLock>> {
+    ) -> LsFuture<'_, Result<DavLock, DavLock>> {
         let inner = &mut *self.0.lock().unwrap();
 
         // any locks in the path?
@@ -90,7 +90,7 @@ impl DavLockSystem for MemLs {
         future::ready(Ok(lock)).boxed()
     }
 
-    fn unlock(&self, path: &DavPath, token: &str) -> LsFuture<Result<(), ()>> {
+    fn unlock(&self, path: &DavPath, token: &str) -> LsFuture<'_, Result<(), ()>> {
         let inner = &mut *self.0.lock().unwrap();
         let node_id = match lookup_lock(&inner.tree, path, token) {
             None => {
@@ -116,7 +116,7 @@ impl DavLockSystem for MemLs {
         path: &DavPath,
         token: &str,
         timeout: Option<Duration>,
-    ) -> LsFuture<Result<DavLock, ()>> {
+    ) -> LsFuture<'_, Result<DavLock, ()>> {
         trace!("refresh lock {token}");
         let inner = &mut *self.0.lock().unwrap();
         let node_id = match lookup_lock(&inner.tree, path, token) {
@@ -142,7 +142,7 @@ impl DavLockSystem for MemLs {
         ignore_principal: bool,
         deep: bool,
         submitted_tokens: Vec<&str>,
-    ) -> LsFuture<Result<(), DavLock>> {
+    ) -> LsFuture<'_, Result<(), DavLock>> {
         let inner = &*self.0.lock().unwrap();
         let _st = submitted_tokens.clone();
         let rc = check_locks_to_path(
@@ -176,12 +176,12 @@ impl DavLockSystem for MemLs {
         future::ready(Ok(())).boxed()
     }
 
-    fn discover(&self, path: &DavPath) -> LsFuture<Vec<DavLock>> {
+    fn discover(&self, path: &DavPath) -> LsFuture<'_, Vec<DavLock>> {
         let inner = &*self.0.lock().unwrap();
         future::ready(list_locks(&inner.tree, path)).boxed()
     }
 
-    fn delete(&self, path: &DavPath) -> LsFuture<Result<(), ()>> {
+    fn delete(&self, path: &DavPath) -> LsFuture<'_, Result<(), ()>> {
         let inner = &mut *self.0.lock().unwrap();
         if let Some(node_id) = lookup_node(&inner.tree, path) {
             inner.tree.delete_subtree(node_id).ok();

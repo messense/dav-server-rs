@@ -51,11 +51,11 @@ pub trait DavLockSystem: Debug + Send + Sync + DynClone {
         timeout: Option<Duration>,
         shared: bool,
         deep: bool,
-    ) -> LsFuture<Result<DavLock, DavLock>>;
+    ) -> LsFuture<'_, Result<DavLock, DavLock>>;
 
     /// Unlock a node. Returns `Ok(())` if succeeded, `Err (())` if failed
     /// (because lock doesn't exist)
-    fn unlock(&self, path: &DavPath, token: &str) -> LsFuture<Result<(), ()>>;
+    fn unlock(&self, path: &DavPath, token: &str) -> LsFuture<'_, Result<(), ()>>;
 
     /// Refresh lock. Returns updated lock if succeeded.
     fn refresh(
@@ -63,7 +63,7 @@ pub trait DavLockSystem: Debug + Send + Sync + DynClone {
         path: &DavPath,
         token: &str,
         timeout: Option<Duration>,
-    ) -> LsFuture<Result<DavLock, ()>>;
+    ) -> LsFuture<'_, Result<DavLock, ()>>;
 
     /// Check if node is locked and if so, if we own all the locks.
     /// If not, returns as Err one conflicting lock.
@@ -74,13 +74,13 @@ pub trait DavLockSystem: Debug + Send + Sync + DynClone {
         ignore_principal: bool,
         deep: bool,
         submitted_tokens: Vec<&str>,
-    ) -> LsFuture<Result<(), DavLock>>;
+    ) -> LsFuture<'_, Result<(), DavLock>>;
 
     /// Find and return all locks that cover a given path.
-    fn discover(&self, path: &DavPath) -> LsFuture<Vec<DavLock>>;
+    fn discover(&self, path: &DavPath) -> LsFuture<'_, Vec<DavLock>>;
 
     /// Delete all locks at this path and below (after MOVE or DELETE)
-    fn delete(&self, path: &DavPath) -> LsFuture<Result<(), ()>>;
+    fn delete(&self, path: &DavPath) -> LsFuture<'_, Result<(), ()>>;
 }
 
 clone_trait_object! {DavLockSystem}

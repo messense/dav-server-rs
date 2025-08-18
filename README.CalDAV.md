@@ -1,4 +1,3 @@
-#TODO: !IMPORTANT check information in this README, before committing
 # CalDAV Support in dav-server
 
 This document describes the CalDAV (Calendaring Extensions to WebDAV) support in the dav-server library.

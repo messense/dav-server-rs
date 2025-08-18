@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let addr: SocketAddr = ([0, 0, 0, 0], port).into();
     let listener = TcpListener::bind(addr).await?;
 
-    println!("Serving {} on {}", name, port);
+    println!("Serving {name} on {port}");
 
     // We start a loop to continuously accept incoming connections
     loop {
@@ -143,7 +143,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )
                 .await
             {
-                eprintln!("Error serving connection: {:?}", err);
+                eprintln!("Error serving connection: {err:?}",);
             }
         });
     }
