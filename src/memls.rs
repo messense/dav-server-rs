@@ -76,9 +76,9 @@ impl DavLockSystem for MemLs {
         let timeout_at = timeout.map(|d| SystemTime::now() + d);
         let lock = DavLock {
             token: Uuid::new_v4().urn().to_string(),
-            path: path.clone(),
+            path: Box::new(path.clone()),
             principal: principal.map(|s| s.to_string()),
-            owner: owner.cloned(),
+            owner: owner.map(|o| Box::new(o.clone())),
             timeout_at,
             timeout,
             shared,

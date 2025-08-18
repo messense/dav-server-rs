@@ -64,9 +64,9 @@ impl DavLockSystem for FakeLs {
 
         let lock = DavLock {
             token,
-            path: path.clone(),
+            path: Box::new(path.clone()),
             principal: principal.map(|s| s.to_string()),
-            owner: owner.cloned(),
+            owner: owner.map(|o| Box::new(o.clone())),
             timeout_at: Some(timeout_at),
             timeout: Some(timeout),
             shared,
@@ -96,7 +96,7 @@ impl DavLockSystem for FakeLs {
 
         let lock = DavLock {
             token: token.to_string(),
-            path: path.clone(),
+            path: Box::new(path.clone()),
             principal: None,
             owner: None,
             timeout_at: Some(timeout_at),

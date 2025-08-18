@@ -22,11 +22,11 @@ pub struct DavLock {
     /// Token.
     pub token: String,
     /// Path/
-    pub path: DavPath,
+    pub path: Box<DavPath>,
     /// Principal.
     pub principal: Option<String>,
     /// Owner.
-    pub owner: Option<Element>,
+    pub owner: Option<Box<Element>>,
     /// When the lock turns stale (absolute).
     pub timeout_at: Option<SystemTime>,
     /// When the lock turns stale (relative).

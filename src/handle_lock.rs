@@ -339,11 +339,13 @@ fn build_lock_prop(lock: &DavLock, full: bool) -> Element {
     actlock.push_element(locktokenelem);
 
     let mut lockroot = Element::new2("D:lockroot");
-    lockroot.push_element(Element::new2("D:href").text(lock.path.with_prefix().as_url_string()));
+    lockroot.push_element(
+        Element::new2("D:href").text(lock.path.as_ref().with_prefix().as_url_string()),
+    );
     actlock.push_element(lockroot);
 
     if let Some(ref o) = lock.owner {
-        actlock.push_element(o.clone());
+        actlock.push_element((**o).clone());
     }
 
     if !full {
