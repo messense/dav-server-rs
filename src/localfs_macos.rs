@@ -166,10 +166,10 @@ impl DUCacheBuilder {
     // add a filename to the list we have
     #[cfg(windows)]
     pub fn add(&mut self, filename: OsString) {
-        if let Some(f) = Path::new(&filename).file_name() {
-            if f.to_str().unwrap().as_bytes().starts_with(b"._") {
-                self.entries.push(filename);
-            }
+        if let Some(f) = Path::new(&filename).file_name()
+            && f.to_str().unwrap().as_bytes().starts_with(b"._")
+        {
+            self.entries.push(filename);
         }
     }
 
