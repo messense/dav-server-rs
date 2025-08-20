@@ -1,12 +1,13 @@
 use std::{convert::Infallible, fmt::Display, net::SocketAddr, path::Path};
 
-use futures_util::{stream, StreamExt};
+use futures_util::{StreamExt, stream};
 use http::{Request, Response, StatusCode};
 use hyper::{body::Incoming, server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
 use tokio::{net::TcpListener, task::spawn};
 
 use dav_server::{
+    DavHandler,
     body::Body,
     davpath::DavPath,
     fakels::FakeLs,
@@ -15,7 +16,6 @@ use dav_server::{
         OpenOptions, ReadDirMeta,
     },
     localfs::LocalFs,
-    DavHandler,
 };
 
 /// The server example demonstrates a limited scope policy for access to the file system.
@@ -129,7 +129,7 @@ enum Filter {
 
 impl Filter {
     fn from_request(request: &Request<Incoming>) -> Result<Self, Box<dyn Display>> {
-        use headers::{authorization::Basic, Authorization, HeaderMapExt};
+        use headers::{Authorization, HeaderMapExt, authorization::Basic};
 
         let auth = request
             .headers()

@@ -13,8 +13,8 @@ use std::num::NonZeroUsize;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -63,7 +63,7 @@ impl DUCache {
                     let now = SystemTime::now();
                     while let Some((_k, e)) = cache.peek_lru() {
                         if let Ok(age) = now.duration_since(e.time) {
-                            trace!(target: "webdav_cache", "DUCache: purge check {:?}", _k);
+                            trace!(target: "webdav_cache", "DUCache: purge check {_k:?}");
                             if age.as_secs() <= DU_CACHE_MAX_AGE {
                                 break;
                             }
@@ -100,7 +100,7 @@ impl DUCache {
             match cache.peek(&dir) {
                 Some(t) => (t.dir_id, t.dir_modtime),
                 None => {
-                    trace!(target: "webdav_cache", "DUCache::negative({:?}): parent not in cache", path);
+                    trace!(target: "webdav_cache", "DUCache::negative({path:?}): parent not in cache");
                     return false;
                 }
             }
@@ -114,7 +114,7 @@ impl DUCache {
         };
         let mut cache = self.cache.lock();
         if !valid {
-            trace!(target: "webdav_cache", "DUCache::negative({:?}): parent in cache but stale", path);
+            trace!(target: "webdav_cache", "DUCache::negative({path:?}): parent in cache but stale");
             cache.pop(&dir);
             return false;
         }
@@ -128,7 +128,7 @@ impl DUCache {
                 t.dir_id != dir_id
             }
             None => {
-                trace!(target: "webdav_cache", "DUCache::negative({:?}): not in cache", path);
+                trace!(target: "webdav_cache", "DUCache::negative({path:?}): not in cache");
                 true
             }
         }
@@ -156,20 +156,20 @@ impl DUCacheBuilder {
     // add a filename to the list we have
     #[cfg(unix)]
     pub fn add(&mut self, filename: OsString) {
-        if let Some(f) = Path::new(&filename).file_name() {
-            if f.as_bytes().starts_with(b"._") {
-                self.entries.push(filename);
-            }
+        if let Some(f) = Path::new(&filename).file_name()
+            && f.as_bytes().starts_with(b"._")
+        {
+            self.entries.push(filename);
         }
     }
 
     // add a filename to the list we have
     #[cfg(windows)]
     pub fn add(&mut self, filename: OsString) {
-        if let Some(f) = Path::new(&filename).file_name() {
-            if f.to_str().unwrap().as_bytes().starts_with(b"._") {
-                self.entries.push(filename);
-            }
+        if let Some(f) = Path::new(&filename).file_name()
+            && f.to_str().unwrap().as_bytes().starts_with(b"._")
+        {
+            self.entries.push(filename);
         }
     }
 

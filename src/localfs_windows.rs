@@ -188,13 +188,13 @@ impl Cache {
                     let now = d.as_secs();
                     let mut cache = CACHE.cache.lock();
                     while let Some((_k, e)) = cache.peek_lru() {
-                        trace!(target: "webdav_cache", "Cache: purge check: {:?}", _k);
+                        trace!(target: "webdav_cache", "Cache: purge check: {_k:?}");
                         if e.time + CACHE_MAX_AGE > now {
                             break;
                         }
                         let _age = now - e.time;
                         if let Some((_k, _)) = cache.pop_lru() {
-                            trace!(target: "webdav_cache", "Cache: purging {:?} (age {})", _k, _age);
+                            trace!(target: "webdav_cache", "Cache: purging {_k:?} (age {_age})");
                         } else {
                             break;
                         }

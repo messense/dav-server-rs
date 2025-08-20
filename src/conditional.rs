@@ -58,7 +58,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&dyn DavMetaData>) -> Op
     if let Some(r) = req.headers().typed_get::<davheaders::IfMatch>() {
         let etag = meta.and_then(ETag::from_meta);
         if !etaglist_match(&r.0, meta.is_some(), etag.as_ref()) {
-            trace!("precondition fail: If-Match {:?}", r);
+            trace!("precondition fail: If-Match {r:?}");
             return Some(StatusCode::PRECONDITION_FAILED);
         }
     } else if let Some(r) = req.headers().typed_get::<headers::IfUnmodifiedSince>() {
@@ -66,7 +66,7 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&dyn DavMetaData>) -> Op
             None => return Some(StatusCode::PRECONDITION_FAILED),
             Some(file_modified) => {
                 if round_time(file_modified) > round_time(r) {
-                    trace!("precondition fail: If-Unmodified-Since {:?}", r);
+                    trace!("precondition fail: If-Unmodified-Since {r:?}");
                     return Some(StatusCode::PRECONDITION_FAILED);
                 }
             }
@@ -76,22 +76,20 @@ pub(crate) fn http_if_match(req: &Request, meta: Option<&dyn DavMetaData>) -> Op
     if let Some(r) = req.headers().typed_get::<davheaders::IfNoneMatch>() {
         let etag = meta.and_then(ETag::from_meta);
         if etaglist_match(&r.0, meta.is_some(), etag.as_ref()) {
-            trace!("precondition fail: If-None-Match {:?}", r);
+            trace!("precondition fail: If-None-Match {r:?}");
             if req.method() == Method::GET || req.method() == Method::HEAD {
                 return Some(StatusCode::NOT_MODIFIED);
             } else {
                 return Some(StatusCode::PRECONDITION_FAILED);
             }
         }
-    } else if let Some(r) = req.headers().typed_get::<headers::IfModifiedSince>() {
-        if req.method() == Method::GET || req.method() == Method::HEAD {
-            if let Some(file_modified) = file_modified {
-                if round_time(file_modified) <= round_time(r) {
-                    trace!("not-modified If-Modified-Since {:?}", r);
-                    return Some(StatusCode::NOT_MODIFIED);
-                }
-            }
-        }
+    } else if let Some(r) = req.headers().typed_get::<headers::IfModifiedSince>()
+        && (req.method() == Method::GET || req.method() == Method::HEAD)
+        && let Some(file_modified) = file_modified
+        && round_time(file_modified) <= round_time(r)
+    {
+        trace!("not-modified If-Modified-Since {r:?}");
+        return Some(StatusCode::NOT_MODIFIED);
     }
     None
 }

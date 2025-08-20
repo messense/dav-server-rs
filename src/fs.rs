@@ -8,20 +8,20 @@ use std::io::SeekFrom;
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use dyn_clone::{clone_trait_object, DynClone};
-use futures_util::{future, Future, FutureExt, Stream, TryFutureExt};
+use dyn_clone::{DynClone, clone_trait_object};
+use futures_util::{Future, FutureExt, Stream, TryFutureExt, future};
 use http::StatusCode;
 
 use crate::davpath::DavPath;
 
 macro_rules! notimplemented {
-    ($method:expr) => {
+    ($method:expr_2021) => {
         Err(FsError::NotImplemented)
     };
 }
 
 macro_rules! notimplemented_fut {
-    ($method:expr) => {
+    ($method:expr_2021) => {
         Box::pin(future::ready(Err(FsError::NotImplemented)))
     };
 }
@@ -280,7 +280,7 @@ pub trait DavFileSystem {
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
     #[allow(unused_variables)]
-    fn get_quota(&self) -> FsFuture<(u64, Option<u64>)> {
+    fn get_quota(&'_ self) -> FsFuture<'_, (u64, Option<u64>)> {
         notimplemented_fut!("get_quota")
     }
 }
@@ -629,7 +629,7 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         DavFileSystem::get_prop(self, path, prop)
     }
 
-    fn get_quota(&self, _credentials: &()) -> FsFuture<(u64, Option<u64>)> {
+    fn get_quota(&'_ self, _credentials: &()) -> FsFuture<'_, (u64, Option<u64>)> {
         DavFileSystem::get_quota(self)
     }
 }
@@ -640,23 +640,23 @@ pub trait DavDirEntry: Send + Sync {
     fn name(&self) -> Vec<u8>;
 
     /// Metadata of the entry.
-    fn metadata(&self) -> FsFuture<Box<dyn DavMetaData>>;
+    fn metadata(&'_ self) -> FsFuture<'_, Box<dyn DavMetaData>>;
 
     /// Default implementation of `is_dir` just returns `metadata()?.is_dir()`.
     /// Implementations can override this if their `metadata()` method is
     /// expensive and there is a cheaper way to provide the same info
     /// (e.g. dirent.d_type in unix filesystems).
-    fn is_dir(&self) -> FsFuture<bool> {
+    fn is_dir(&'_ self) -> FsFuture<'_, bool> {
         Box::pin(self.metadata().and_then(|meta| future::ok(meta.is_dir())))
     }
 
     /// Likewise. Default: `!is_dir()`.
-    fn is_file(&self) -> FsFuture<bool> {
+    fn is_file(&'_ self) -> FsFuture<'_, bool> {
         Box::pin(self.metadata().and_then(|meta| future::ok(meta.is_file())))
     }
 
     /// Likewise. Default: `false`.
-    fn is_symlink(&self) -> FsFuture<bool> {
+    fn is_symlink(&'_ self) -> FsFuture<'_, bool> {
         Box::pin(
             self.metadata()
                 .and_then(|meta| future::ok(meta.is_symlink())),
@@ -667,13 +667,13 @@ pub trait DavDirEntry: Send + Sync {
 /// A `DavFile` is the equivalent of `std::fs::File`, should be
 /// readable/writeable/seekable, and be able to return its metadata.
 pub trait DavFile: Debug + Send + Sync {
-    fn metadata(&mut self) -> FsFuture<Box<dyn DavMetaData>>;
-    fn write_buf(&mut self, buf: Box<dyn bytes::Buf + Send>) -> FsFuture<()>;
-    fn write_bytes(&mut self, buf: bytes::Bytes) -> FsFuture<()>;
-    fn read_bytes(&mut self, count: usize) -> FsFuture<bytes::Bytes>;
-    fn seek(&mut self, pos: SeekFrom) -> FsFuture<u64>;
-    fn flush(&mut self) -> FsFuture<()>;
-    fn redirect_url(&mut self) -> FsFuture<Option<String>> {
+    fn metadata(&'_ mut self) -> FsFuture<'_, Box<dyn DavMetaData>>;
+    fn write_buf(&'_ mut self, buf: Box<dyn bytes::Buf + Send>) -> FsFuture<'_, ()>;
+    fn write_bytes(&'_ mut self, buf: bytes::Bytes) -> FsFuture<'_, ()>;
+    fn read_bytes(&'_ mut self, count: usize) -> FsFuture<'_, bytes::Bytes>;
+    fn seek(&'_ mut self, pos: SeekFrom) -> FsFuture<'_, u64>;
+    fn flush(&'_ mut self) -> FsFuture<'_, ()>;
+    fn redirect_url(&'_ mut self) -> FsFuture<'_, Option<String>> {
         future::ready(Ok(None)).boxed()
     }
 }
@@ -692,16 +692,16 @@ pub trait DavMetaData: Debug + Send + Sync + DynClone {
     /// Returns a simple etag that basically is `\<length\>-\<timestamp_in_ms\>`
     /// with the numbers in hex. Enough for most implementations.
     fn etag(&self) -> Option<String> {
-        if let Ok(t) = self.modified() {
-            if let Ok(t) = t.duration_since(UNIX_EPOCH) {
-                let t = t.as_secs() * 1000000 + t.subsec_nanos() as u64 / 1000;
-                let tag = if self.is_file() && self.len() > 0 {
-                    format!("{:x}-{:x}", self.len(), t)
-                } else {
-                    format!("{:x}", t)
-                };
-                return Some(tag);
-            }
+        if let Ok(t) = self.modified()
+            && let Ok(t) = t.duration_since(UNIX_EPOCH)
+        {
+            let t = t.as_secs() * 1000000 + t.subsec_nanos() as u64 / 1000;
+            let tag = if self.is_file() && self.len() > 0 {
+                format!("{:x}-{:x}", self.len(), t)
+            } else {
+                format!("{t:x}")
+            };
+            return Some(tag);
         }
         None
     }
@@ -818,6 +818,6 @@ impl std::error::Error for FsError {
 
 impl std::fmt::Display for FsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }

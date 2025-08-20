@@ -3,15 +3,15 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::{self, Cursor};
 
-use futures_util::{future::BoxFuture, FutureExt, StreamExt};
+use futures_util::{FutureExt, StreamExt, future::BoxFuture};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
 use crate::xmltree_ext::*;
+use xml::EmitterConfig;
 use xml::common::XmlVersion;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
-use xml::EmitterConfig;
 use xmltree::{Element, XMLNode};
 
 use crate::async_stream::AsyncStream;
@@ -200,7 +200,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             }
         };
 
-        trace!("propfind: type request: {}", name);
+        trace!("propfind: type request: {name}");
 
         let mut pw = PropWriter::new(
             req,
@@ -248,7 +248,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 Ok(entries) => entries,
                 Err(e) => {
                     // if we cannot read_dir, just skip it.
-                    error!("read_dir error {:?}", e);
+                    error!("read_dir error {e:?}");
                     return Ok(());
                 }
             };
@@ -257,7 +257,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 let dirent = match dirent {
                     Ok(dirent) => dirent,
                     Err(e) => {
-                        trace!("next dir entry error happened. Skipping {:?}", e);
+                        trace!("next dir entry error happened. Skipping {e:?}");
                         continue;
                     }
                 };
@@ -267,7 +267,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 let meta = match dirent.metadata().await {
                     Ok(meta) => meta,
                     Err(e) => {
-                        trace!("metadata error on {}. Skipping {:?}", npath, e);
+                        trace!("metadata error on {npath}. Skipping {e:?}");
                         continue;
                     }
                 };
@@ -301,10 +301,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                             return StatusCode::CONFLICT;
                         }
                         // FIXME only here to make "litmus" happy, really...
-                        if let Some(s) = prop.get_text() {
-                            if davheaders::ContentLanguage::try_from(s.as_ref()).is_err() {
-                                return StatusCode::CONFLICT;
-                            }
+                        if let Some(s) = prop.get_text()
+                            && davheaders::ContentLanguage::try_from(s.as_ref()).is_err()
+                        {
+                            return StatusCode::CONFLICT;
                         }
                         if can_deadprop {
                             StatusCode::CONTINUE
@@ -700,10 +700,10 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         // use ctime instead - apache seems to do this.
                         if let Ok(ctime) = meta.status_changed() {
                             let mut time = ctime;
-                            if let Ok(mtime) = meta.modified() {
-                                if mtime < ctime {
-                                    time = mtime;
-                                }
+                            if let Ok(mtime) = meta.modified()
+                                && mtime < ctime
+                            {
+                                time = mtime;
                             }
                             let tm = systemtime_to_rfc3339_without_nanosecond(time);
                             return self.build_elem(docontent, pfx, prop, tm);
@@ -768,7 +768,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             let used = if self.useragent.contains("WebDAVFS") {
                                 // Need this on MacOs, otherwise the value is off
                                 // by a factor of 10 or so .. ?!?!!?
-                                format!("{:014}", used)
+                                format!("{used:014}")
                             } else {
                                 used.to_string()
                             };
@@ -780,11 +780,11 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             }
             Some(NS_APACHE_URI) => {
                 pfx = "A";
-                if prop.name.as_str() == "executable" {
-                    if let Ok(x) = meta.executable() {
-                        let b = if x { "T" } else { "F" };
-                        return self.build_elem(docontent, pfx, prop, b);
-                    }
+                if prop.name.as_str() == "executable"
+                    && let Ok(x) = meta.executable()
+                {
+                    let b = if x { "T" } else { "F" };
+                    return self.build_elem(docontent, pfx, prop, b);
                 }
             }
             Some(NS_MS_URI) => {
@@ -798,10 +798,10 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         // use ctime instead - apache seems to do this.
                         if let Ok(ctime) = meta.status_changed() {
                             let mut time = ctime;
-                            if let Ok(mtime) = meta.modified() {
-                                if mtime < ctime {
-                                    time = mtime;
-                                }
+                            if let Ok(mtime) = meta.modified()
+                                && mtime < ctime
+                            {
+                                time = mtime;
                             }
                             let tm = systemtime_to_httpdate(time);
                             return self.build_elem(docontent, pfx, prop, tm);
@@ -836,7 +836,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             // modification.
                             attr |= 0x0020;
                         }
-                        return self.build_elem(docontent, pfx, prop, format!("{:08x}", attr));
+                        return self.build_elem(docontent, pfx, prop, format!("{attr:08x}"));
                     }
                     _ => {}
                 }
@@ -850,13 +850,13 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         {
             // asking for a specific property.
             let dprop = element_to_davprop(prop);
-            if let Ok(xml) = self.fs.get_prop(path, dprop, &self.credentials).await {
-                if let Ok(e) = Element::parse(Cursor::new(xml)) {
-                    return Ok(StatusElement {
-                        status: StatusCode::OK,
-                        element: e,
-                    });
-                }
+            if let Ok(xml) = self.fs.get_prop(path, dprop, &self.credentials).await
+                && let Ok(e) = Element::parse(Cursor::new(xml))
+            {
+                return Ok(StatusElement {
+                    status: StatusCode::OK,
+                    element: e,
+                });
             }
         }
         let prop = if !pfx.is_empty() {
@@ -896,12 +896,11 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         // and list the dead properties as well.
         if (self.name == "propname" || self.name == "allprop")
             && self.fs.have_props(path, &self.credentials).await
+            && let Ok(v) = self.fs.get_props(path, do_content, &self.credentials).await
         {
-            if let Ok(v) = self.fs.get_props(path, do_content, &self.credentials).await {
-                v.into_iter()
-                    .map(davprop_to_element)
-                    .for_each(|e| add_sc_elem(&mut props, StatusCode::OK, e));
-            }
+            v.into_iter()
+                .map(davprop_to_element)
+                .for_each(|e| add_sc_elem(&mut props, StatusCode::OK, e));
         }
 
         self.write_propresponse(path, props)

@@ -3,16 +3,16 @@ use std::io;
 use futures_util::{Stream, StreamExt};
 
 use http::{Response, StatusCode};
+use xml::EmitterConfig;
 use xml::common::XmlVersion;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
-use xml::EmitterConfig;
 
+use crate::DavError;
 use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::davpath::DavPath;
 use crate::util::MemBuffer;
-use crate::DavError;
 
 type Sender = crate::async_stream::Sender<(DavPath, StatusCode), DavError>;
 
@@ -53,7 +53,7 @@ fn write_response(w: &mut XmlWriter, path: &DavPath, sc: StatusCode) -> Result<(
     w.write(XmlWEvent::start_element("D:response"))?;
     let p = path.with_prefix().as_url_string();
     write_elem(w, "D:href", &p)?;
-    write_elem(w, "D:status", &format!("HTTP/1.1 {}", sc))?;
+    write_elem(w, "D:status", &format!("HTTP/1.1 {sc}"))?;
     w.write(XmlWEvent::end_element())?;
     Ok(())
 }

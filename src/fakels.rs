@@ -14,7 +14,7 @@
 //! `FakeLs` implements such a fake locksystem.
 use std::time::{Duration, SystemTime};
 
-use futures_util::{future, FutureExt};
+use futures_util::{FutureExt, future};
 use uuid::Uuid;
 use xmltree::Element;
 
@@ -47,14 +47,14 @@ fn tm_limit(d: Option<Duration>) -> Duration {
 
 impl DavLockSystem for FakeLs {
     fn lock(
-        &self,
+        &'_ self,
         path: &DavPath,
         principal: Option<&str>,
         owner: Option<&Element>,
         timeout: Option<Duration>,
         shared: bool,
         deep: bool,
-    ) -> LsFuture<Result<DavLock, DavLock>> {
+    ) -> LsFuture<'_, Result<DavLock, DavLock>> {
         let timeout = tm_limit(timeout);
         let timeout_at = SystemTime::now() + timeout;
 
@@ -64,9 +64,9 @@ impl DavLockSystem for FakeLs {
 
         let lock = DavLock {
             token,
-            path: path.clone(),
+            path: Box::new(path.clone()),
             principal: principal.map(|s| s.to_string()),
-            owner: owner.cloned(),
+            owner: owner.map(|o| Box::new(o.clone())),
             timeout_at: Some(timeout_at),
             timeout: Some(timeout),
             shared,
@@ -76,17 +76,17 @@ impl DavLockSystem for FakeLs {
         future::ready(Ok(lock)).boxed()
     }
 
-    fn unlock(&self, _path: &DavPath, _token: &str) -> LsFuture<Result<(), ()>> {
+    fn unlock(&'_ self, _path: &DavPath, _token: &str) -> LsFuture<'_, Result<(), ()>> {
         future::ready(Ok(())).boxed()
     }
 
     fn refresh(
-        &self,
+        &'_ self,
         path: &DavPath,
         token: &str,
         timeout: Option<Duration>,
-    ) -> LsFuture<Result<DavLock, ()>> {
-        debug!("refresh lock {}", token);
+    ) -> LsFuture<'_, Result<DavLock, ()>> {
+        debug!("refresh lock {token}");
         let v: Vec<&str> = token.split('/').collect();
         let deep = v.len() > 1 && v[1] == "I";
         let shared = v.len() > 2 && v[2] == "S";
@@ -96,7 +96,7 @@ impl DavLockSystem for FakeLs {
 
         let lock = DavLock {
             token: token.to_string(),
-            path: path.clone(),
+            path: Box::new(path.clone()),
             principal: None,
             owner: None,
             timeout_at: Some(timeout_at),
@@ -108,21 +108,21 @@ impl DavLockSystem for FakeLs {
     }
 
     fn check(
-        &self,
+        &'_ self,
         _path: &DavPath,
         _principal: Option<&str>,
         _ignore_principal: bool,
         _deep: bool,
         _submitted_tokens: Vec<&str>,
-    ) -> LsFuture<Result<(), DavLock>> {
+    ) -> LsFuture<'_, Result<(), DavLock>> {
         future::ready(Ok(())).boxed()
     }
 
-    fn discover(&self, _path: &DavPath) -> LsFuture<Vec<DavLock>> {
+    fn discover(&'_ self, _path: &DavPath) -> LsFuture<'_, Vec<DavLock>> {
         future::ready(Vec::new()).boxed()
     }
 
-    fn delete(&self, _path: &DavPath) -> LsFuture<Result<(), ()>> {
+    fn delete(&'_ self, _path: &DavPath) -> LsFuture<'_, Result<(), ()>> {
         future::ready(Ok(())).boxed()
     }
 }

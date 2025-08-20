@@ -4,7 +4,7 @@ use hyper::{server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
-use dav_server::{fakels::FakeLs, localfs::LocalFs, DavHandler};
+use dav_server::{DavHandler, fakels::FakeLs, localfs::LocalFs};
 
 #[tokio::main]
 async fn main() {

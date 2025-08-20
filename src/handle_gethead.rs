@@ -3,7 +3,7 @@ use std::io::Write;
 
 use futures_util::StreamExt;
 use headers::HeaderMapExt;
-use http::{status::StatusCode, Request, Response};
+use http::{Request, Response, status::StatusCode};
 
 use bytes::Bytes;
 
@@ -96,14 +96,13 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             res.headers_mut().typed_insert(etag);
         }
 
-        if let Some(redirect) = self.redirect {
-            if redirect {
-                if let Some(url) = file.redirect_url().await? {
-                    res.headers_mut().insert("Location", url.parse().unwrap());
-                    *res.status_mut() = StatusCode::FOUND;
-                    return Ok(res);
-                }
-            }
+        if let Some(redirect) = self.redirect
+            && redirect
+            && let Some(url) = file.redirect_url().await?
+        {
+            res.headers_mut().insert("Location", url.parse().unwrap());
+            *res.status_mut() = StatusCode::FOUND;
+            return Ok(res);
         }
 
         // Apache always adds an Accept-Ranges header, even with partial
@@ -129,31 +128,29 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }
 
         // see if we want to get one or more ranges.
-        if do_range {
-            if let Some(r) = req.headers().typed_get::<headers::Range>() {
-                trace!("handle_gethead: range header {:?}", r);
-                use std::ops::Bound::*;
-                for range in r.satisfiable_ranges(len) {
-                    let (start, mut count, valid) = match range {
-                        (Included(s), Included(e)) if e >= s => (s, e - s + 1, true),
-                        (Included(s), Unbounded) if s <= len => (s, len - s, true),
-                        (Unbounded, Included(n)) if n <= len => (len - n, n, true),
-                        _ => (0, 0, false),
-                    };
-                    if !valid || start >= len {
-                        let r = format!("bytes */{}", len);
-                        res.headers_mut()
-                            .insert("Content-Range", r.parse().unwrap());
-                        *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
-                        ranges.clear();
-                        no_body = true;
-                        break;
-                    }
-                    if start + count > len {
-                        count = len - start;
-                    }
-                    ranges.push(Range { start, count });
+        if do_range && let Some(r) = req.headers().typed_get::<headers::Range>() {
+            trace!("handle_gethead: range header {r:?}");
+            use std::ops::Bound::*;
+            for range in r.satisfiable_ranges(len) {
+                let (start, mut count, valid) = match range {
+                    (Included(s), Included(e)) if e >= s => (s, e - s + 1, true),
+                    (Included(s), Unbounded) if s <= len => (s, len - s, true),
+                    (Unbounded, Included(n)) if n <= len => (len - n, n, true),
+                    _ => (0, 0, false),
+                };
+                if !valid || start >= len {
+                    let r = format!("bytes */{len}");
+                    res.headers_mut()
+                        .insert("Content-Range", r.parse().unwrap());
+                    *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
+                    ranges.clear();
+                    no_body = true;
+                    break;
                 }
+                if start + count > len {
+                    count = len - start;
+                }
+                ranges.push(Range { start, count });
             }
         }
 
@@ -164,7 +161,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 .await
                 .is_err()
             {
-                let r = format!("bytes */{}", len);
+                let r = format!("bytes */{len}");
                 res.headers_mut()
                     .insert("Content-Range", r.parse().unwrap());
                 *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
@@ -189,7 +186,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     .insert("Content-Range", r.parse().unwrap());
             } else {
                 // add content-type header.
-                let r = format!("multipart/byteranges; boundary={}", BOUNDARY);
+                let r = format!("multipart/byteranges; boundary={BOUNDARY}");
                 res.headers_mut().insert("Content-Type", r.parse().unwrap());
             }
         } else {
@@ -228,8 +225,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 for range in ranges {
                     trace!(
                         "handle_get: start = {}, count = {}",
-                        range.start,
-                        range.count
+                        range.start, range.count
                     );
                     if curpos != range.start {
                         // this should never fail, but if it does, just skip this range
@@ -243,7 +239,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
                     if multipart {
                         let mut hdrs = Vec::new();
-                        let _ = write!(hdrs, "{}", BOUNDARY_START);
+                        let _ = write!(hdrs, "{BOUNDARY_START}");
                         let _ = writeln!(
                             hdrs,
                             "Content-Range: bytes {}-{}/{}",
@@ -251,7 +247,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                             range.start + range.count - 1,
                             len
                         );
-                        let _ = writeln!(hdrs, "Content-Type: {}", content_type);
+                        let _ = writeln!(hdrs, "Content-Type: {content_type}");
                         let _ = writeln!(hdrs);
                         tx.send(Bytes::from(hdrs)).await;
                     }
@@ -269,7 +265,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         let len = buf.len() as u64;
                         count = count.saturating_sub(len);
                         curpos += len;
-                        trace!("sending {} bytes", len);
+                        trace!("sending {len} bytes");
                         tx.send(buf).await;
                     }
                 }
@@ -337,7 +333,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     let dirent = match dirent {
                         Ok(dirent) => dirent,
                         Err(e) => {
-                            trace!("next dir entry error happened. Skipping {:?}", e);
+                            trace!("next dir entry error happened. Skipping {e:?}");
                             continue;
                         }
                     };
@@ -451,8 +447,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         false => "[DIR]    ".to_string(),
                     };
                     let name = htmlescape::encode_minimal(&dirent.name);
-                    let s = format!("<tr><td><a href=\"{}\">{}</a></td><td class=\"mono\">{}</td><td class=\"mono\" align=\"right\">{}</td></tr>",
-                         dirent.path, name, modified, size);
+                    let s = format!(
+                        "<tr><td><a href=\"{}\">{}</a></td><td class=\"mono\">{}</td><td class=\"mono\" align=\"right\">{}</td></tr>",
+                        dirent.path, name, modified, size
+                    );
                     tx.send(Bytes::from(s)).await;
                 }
 
@@ -506,7 +504,7 @@ fn display_path(path: &DavPath) -> String {
         if idx == dpath_segs.len() - 1 {
             dpath.push_str(&dseg);
         } else {
-            dpath.push_str(&format!("<a href = \"{}\">{}</a>/", upath, dseg));
+            dpath.push_str(&format!("<a href = \"{upath}\">{dseg}</a>/"));
         }
     }
 
