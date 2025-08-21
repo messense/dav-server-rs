@@ -109,8 +109,25 @@ pub struct DavProp {
     pub prefix: Option<String>,
     /// XML namespace.
     pub namespace: Option<String>,
-    /// Value of the property as raw XML.
+    /// Value of the property as raw XML. Use DavProp::new() to create your custom props
     pub xml: Option<Vec<u8>>,
+}
+
+impl DavProp {
+    /// Create XML property with name, prefix, namespace and value
+    pub fn new(name: String, prefix: String, namespace: String, value: String) -> DavProp {
+        DavProp {
+            name: name.clone(),
+            prefix: Some(prefix.clone()),
+            namespace: Some(namespace.clone()),
+            xml: Some(
+                format!(
+                    "<{prefix}:{name} xmlns:{prefix}=\"{namespace}\">{value}</{prefix}:{name}>"
+                )
+                .into_bytes(),
+            ),
+        }
+    }
 }
 
 /// Future returned by almost all of the DavFileSystem methods.
