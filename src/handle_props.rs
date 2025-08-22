@@ -32,6 +32,8 @@ use crate::{DavInner, DavResult};
 const NS_APACHE_URI: &str = "http://apache.org/dav/props/";
 const NS_DAV_URI: &str = "DAV:";
 const NS_MS_URI: &str = "urn:schemas-microsoft-com:";
+const NS_NEXTCLOUD_URI: &str = "http://nextcloud.org/ns";
+const NS_OWNCLOUD_URI: &str = "http://owncloud.org/ns";
 
 // list returned by PROPFIND <propname/>.
 const PROPNAME_STR: &[&str] = &[
@@ -577,10 +579,15 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         if name != "propertyupdate" {
             let mut a = false;
             let mut m = false;
+            let mut nc = false; // Nextcloud
+            let mut oc = false; // OwnCloud
+
             for prop in &props {
                 match prop.namespace.as_deref() {
                     Some(NS_APACHE_URI) => a = true,
                     Some(NS_MS_URI) => m = true,
+                    Some(NS_NEXTCLOUD_URI) => nc = true,
+                    Some(NS_OWNCLOUD_URI) => oc = true,
                     _ => {}
                 }
             }
@@ -589,6 +596,12 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             }
             if m {
                 ev = ev.ns("Z", NS_MS_URI);
+            }
+            if nc {
+                ev = ev.ns("nc", NS_NEXTCLOUD_URI);
+            }
+            if oc {
+                ev = ev.ns("oc", NS_OWNCLOUD_URI);
             }
         }
         emitter.write(ev)?;
@@ -887,16 +900,15 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             let res = self
                 .build_prop(p, path, &*meta, &mut qc, do_content)
                 .await?;
-            if res.status == StatusCode::OK || (self.name != "propname" && self.name != "allprop") {
+            if res.status == StatusCode::OK {
                 add_sc_elem(&mut props, res.status, res.element);
             }
         }
         self.q_cache = qc;
 
-        // and list the dead properties as well.
-        if (self.name == "propname" || self.name == "allprop")
-            && self.fs.have_props(path, &self.credentials).await
-            && let Ok(v) = self.fs.get_props(path, do_content, &self.credentials).await
+        // and list props of the filesystem driver if it supports DAV properties
+        if self.fs.have_props(path, &self.credentials).await
+            && let Ok(v) = self.fs.get_props(path, true, &self.credentials).await
         {
             v.into_iter()
                 .map(davprop_to_element)
@@ -978,7 +990,15 @@ fn element_to_davprop(elem: &Element) -> DavProp {
 
 fn davprop_to_element(prop: DavProp) -> Element {
     if let Some(xml) = prop.xml {
-        return Element::parse2(Cursor::new(xml)).unwrap();
+        match Element::parse2(Cursor::new(xml)) {
+            Ok(result) => {
+                return result;
+            }
+            Err(error) => {
+                log::error!("davprop_to_element(): {}. Please check your GuardedFileSystem.get_props() implementation. 
+                    'xml'should include complete xml tag. Use DavProp::new() to easy create a DavProp with valid xml syntax.", error);
+            }
+        }
     }
     let mut elem = Element::new(&prop.name);
     if let Some(ref ns) = prop.namespace {
@@ -986,6 +1006,6 @@ fn davprop_to_element(prop: DavProp) -> Element {
         elem = elem.ns(pfx, ns.as_str());
     }
     elem.prefix = prop.prefix;
-    elem.namespace = prop.namespace.clone();
+    elem.namespace = prop.namespace;
     elem
 }
