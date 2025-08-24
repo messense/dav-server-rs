@@ -33,6 +33,15 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         let head = req.method() == http::Method::HEAD;
         let mut path = self.path(req);
 
+        // GNOME Online Accounts handler for Nextcloud sends GET /remote.php/webdav/ request only to test its connection and expects 200 OK with empty body
+        if !self.autoindex.unwrap_or(false) && !head && path.as_bytes() == b"/remote.php/webdav/" {
+            let mut response = Response::new(Body::empty());
+            let headers = response.headers_mut();
+            headers.insert("Content-Length", "0".parse().unwrap());
+            headers.insert("Accept-Ranges", "bytes".parse().unwrap());
+            return Ok(response);
+        }
+
         // check if it's a directory.
         let meta = self.fs.metadata(&path, &self.credentials).await?;
         if meta.is_dir() {
@@ -375,6 +384,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 let mut w = String::new();
                 w.push_str(
                     "\
+                    <!DOCTYPE html>\n\
                     <html><head>\n\
                     <meta name=\"referrer\" content=\"no-referrer\" />\n\
                     <title>Index of ",

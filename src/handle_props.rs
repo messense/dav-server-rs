@@ -29,6 +29,9 @@ use crate::util::{
 };
 use crate::{DavInner, DavResult};
 
+#[cfg(feature = "caldav")]
+use crate::caldav::*;
+
 const NS_APACHE_URI: &str = "http://apache.org/dav/props/";
 const NS_DAV_URI: &str = "DAV:";
 const NS_MS_URI: &str = "urn:schemas-microsoft-com:";
@@ -36,6 +39,30 @@ const NS_NEXTCLOUD_URI: &str = "http://nextcloud.org/ns";
 const NS_OWNCLOUD_URI: &str = "http://owncloud.org/ns";
 
 // list returned by PROPFIND <propname/>.
+#[cfg(feature = "caldav")]
+const PROPNAME_STR: &[&str] = &[
+    "D:creationdate",
+    "D:displayname",
+    "D:getcontentlanguage",
+    "D:getcontentlength",
+    "D:getcontenttype",
+    "D:getetag",
+    "D:getlastmodified",
+    "D:lockdiscovery",
+    "D:resourcetype",
+    "D:supportedlock",
+    "D:quota-available-bytes",
+    "D:quota-used-bytes",
+    "A:executable",
+    "Z:Win32LastAccessTime",
+    "C:calendar-description",
+    "C:calendar-timezone",
+    "C:supported-calendar-component-set",
+    "C:supported-calendar-data",
+    "C:calendar-home-set",
+];
+
+#[cfg(not(feature = "caldav"))]
 const PROPNAME_STR: &[&str] = &[
     "D:creationdate",
     "D:displayname",
@@ -54,6 +81,23 @@ const PROPNAME_STR: &[&str] = &[
 ];
 
 // properties returned by PROPFIND <allprop/> or empty body.
+#[cfg(feature = "caldav")]
+const ALLPROP_STR: &[&str] = &[
+    "D:creationdate",
+    "D:displayname",
+    "D:getcontentlanguage",
+    "D:getcontentlength",
+    "D:getcontenttype",
+    "D:getetag",
+    "D:getlastmodified",
+    "D:lockdiscovery",
+    "D:resourcetype",
+    "D:supportedlock",
+    "C:supported-calendar-component-set",
+    "C:supported-calendar-data",
+];
+
+#[cfg(not(feature = "caldav"))]
 const ALLPROP_STR: &[&str] = &[
     "D:creationdate",
     "D:displayname",
@@ -149,17 +193,18 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         res.headers_mut().typed_insert(headers::Pragma::no_cache());
 
         let depth = match req.headers().typed_get::<davheaders::Depth>() {
-            Some(davheaders::Depth::Infinity) | None => {
+            Some(davheaders::Depth::Infinity) => {
                 if req.headers().typed_get::<davheaders::XLitmus>().is_none() {
                     let ct = "application/xml; charset=utf-8".to_owned();
                     res.headers_mut().typed_insert(davheaders::ContentType(ct));
-                    *res.status_mut() = StatusCode::FORBIDDEN;
+                    *res.status_mut() = StatusCode::NOT_IMPLEMENTED;
                     *res.body_mut() = dav_xml_error("<D:propfind-finite-depth/>");
                     return Ok(res);
                 }
                 davheaders::Depth::Infinity
             }
             Some(d) => d,
+            None => davheaders::Depth::Default,
         };
 
         // path and meta
@@ -217,11 +262,19 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
             pw.set_tx(tx);
             let is_dir = meta.is_dir();
-            pw.write_props(&path, meta).await?;
-            pw.flush().await?;
 
-            if is_dir && depth != davheaders::Depth::Zero {
-                let _ = self.propfind_directory(&path, depth, &mut pw).await;
+            // Handle Depth::Default case: no target resource, only Depth 1 children
+            if depth != davheaders::Depth::Default {
+                pw.write_props(&path, meta).await?;
+                pw.flush().await?;
+            }
+
+            if is_dir
+                && (depth == davheaders::Depth::One
+                    || depth == davheaders::Depth::Default
+                    || depth == davheaders::Depth::Infinity)
+            {
+                self.propfind_directory(&path, depth, &mut pw).await?;
             }
             pw.close().await?;
 
@@ -282,6 +335,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 let is_dir = meta.is_dir();
                 propwriter.write_props(&npath, meta).await?;
                 propwriter.flush().await?;
+                // For Depth::Default, treat it like Depth::One (no recursion)
+                // Only recurse for Depth::Infinity
                 if depth == davheaders::Depth::Infinity && is_dir {
                     self.propfind_directory(&npath, depth, propwriter).await?;
                 }
@@ -753,6 +808,24 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         if meta.is_dir() && docontent {
                             let dir = Element::new2("D:collection");
                             elem.children.push(XMLNode::Element(dir));
+
+                            #[cfg(feature = "caldav")]
+                            {
+                                // Check if this is a calendar collection by looking for calendar properties
+                                if let Ok(props) =
+                                    self.fs.get_props(path, docontent, &self.credentials).await
+                                {
+                                    let has_calendar_props = props.iter().any(|p| {
+                                        p.name.contains("calendar-description")
+                                            || p.name.contains("supported-calendar-component-set")
+                                    });
+
+                                    if has_calendar_props {
+                                        let calendar = Element::new2("C:calendar");
+                                        elem.children.push(XMLNode::Element(calendar));
+                                    }
+                                }
+                            }
                         }
                         return Ok(StatusElement {
                             status: StatusCode::OK,
@@ -798,6 +871,73 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                 {
                     let b = if x { "T" } else { "F" };
                     return self.build_elem(docontent, pfx, prop, b);
+                }
+            }
+            #[cfg(feature = "caldav")]
+            Some(NS_CALDAV_URI) => {
+                pfx = "C";
+                match prop.name.as_str() {
+                    "supported-calendar-component-set" => {
+                        let components = vec![
+                            CalendarComponentType::VEvent,
+                            CalendarComponentType::VTodo,
+                            CalendarComponentType::VJournal,
+                            CalendarComponentType::VFreeBusy,
+                        ];
+                        let elem = create_supported_calendar_component_set(&components);
+                        return Ok(StatusElement {
+                            status: StatusCode::OK,
+                            element: elem,
+                        });
+                    }
+                    "supported-calendar-data" => {
+                        let elem = create_supported_calendar_data();
+                        return Ok(StatusElement {
+                            status: StatusCode::OK,
+                            element: elem,
+                        });
+                    }
+                    "calendar-home-set" => {
+                        let home_path = "/calendars/";
+                        let elem = create_calendar_home_set(home_path);
+                        return Ok(StatusElement {
+                            status: StatusCode::OK,
+                            element: elem,
+                        });
+                    }
+                    "calendar-description" => {
+                        // Try to get from properties first
+                        if let Ok(props) =
+                            self.fs.get_props(path, docontent, &self.credentials).await
+                        {
+                            for prop_item in props {
+                                if prop_item.name.contains("calendar-description") {
+                                    if let Some(value) = prop_item.xml {
+                                        let desc = String::from_utf8_lossy(&value);
+                                        return self.build_elem(docontent, pfx, prop, desc);
+                                    }
+                                }
+                            }
+                        }
+                        // Default description
+                        return self.build_elem(docontent, pfx, prop, "Calendar Collection");
+                    }
+                    "calendar-timezone" => {
+                        // Default to UTC if not set
+                        let timezone = "BEGIN:VTIMEZONE\r\nTZID:UTC\r\nEND:VTIMEZONE\r\n";
+                        return self.build_elem(docontent, pfx, prop, timezone);
+                    }
+                    "max-resource-size" => {
+                        return self.build_elem(docontent, pfx, prop, "1048576");
+                        // 1MB
+                    }
+                    "min-date-time" => {
+                        return self.build_elem(docontent, pfx, prop, "19000101T000000Z");
+                    }
+                    "max-date-time" => {
+                        return self.build_elem(docontent, pfx, prop, "20991231T235959Z");
+                    }
+                    _ => {}
                 }
             }
             Some(NS_MS_URI) => {
@@ -995,7 +1135,7 @@ fn davprop_to_element(prop: DavProp) -> Element {
                 return result;
             }
             Err(error) => {
-                log::error!("davprop_to_element(): {}. Please check your GuardedFileSystem.get_props() implementation. 
+                log::error!("davprop_to_element(): {}. Please check your GuardedFileSystem.get_props() implementation.
                     'xml'should include complete xml tag. Use DavProp::new() to easy create a DavProp with valid xml syntax.", error);
             }
         }

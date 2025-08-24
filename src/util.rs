@@ -28,6 +28,8 @@ pub enum DavMethod {
     Delete = 0x0400,
     Lock = 0x0800,
     Unlock = 0x1000,
+    Report = 0x2000,
+    MkCalendar = 0x4000,
 }
 
 // translate method into our own enum that has webdav methods as well.
@@ -47,6 +49,8 @@ pub(crate) fn dav_method(m: &http::Method) -> DavResult<DavMethod> {
             "MOVE" => DavMethod::Move,
             "LOCK" => DavMethod::Lock,
             "UNLOCK" => DavMethod::Unlock,
+            "REPORT" => DavMethod::Report,
+            "MKCALENDAR" => DavMethod::MkCalendar,
             _ => {
                 return Err(DavError::UnknownDavMethod);
             }
@@ -125,6 +129,8 @@ impl DavMethodSet {
                 "move" => DavMethod::Move as u32,
                 "lock" => DavMethod::Lock as u32,
                 "unlock" => DavMethod::Unlock as u32,
+                "report" => DavMethod::Report as u32,
+                "mkcalendar" => DavMethod::MkCalendar as u32,
                 "http-ro" => Self::HTTP_RO.0,
                 "http-rw" => Self::HTTP_RW.0,
                 "webdav-ro" => Self::WEBDAV_RO.0,

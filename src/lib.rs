@@ -1,10 +1,15 @@
-//! ## Generic async HTTP/Webdav handler
+//! ## Generic async HTTP/Webdav handler with CalDAV support
 //!
 //! [`Webdav`] (RFC4918) is defined as
 //! HTTP (GET/HEAD/PUT/DELETE) plus a bunch of extension methods (PROPFIND, etc).
 //! These extension methods are used to manage collections (like unix directories),
 //! get information on collections (like unix `ls` or `readdir`), rename and
 //! copy items, lock/unlock items, etc.
+//!
+//! [`CalDAV`] (RFC4791) extends WebDAV to provide calendar functionality,
+//! including calendar collections, calendar resources (iCalendar data),
+//! and calendar-specific queries. CalDAV support is available with the
+//! `caldav` feature.
 //!
 //! A `handler` is a piece of code that takes a `http::Request`, processes it in some
 //! way, and then generates a `http::Response`. This library is a `handler` that maps
@@ -16,6 +21,9 @@
 //! [warp], [actix-web], etc. Either as a correct and complete HTTP handler for
 //! files (GET/HEAD) or as a handler for the entire Webdav protocol. In the latter case, you can
 //! mount it as a remote filesystem: Linux, Windows, macOS can all mount Webdav filesystems.
+//!
+//! With CalDAV support enabled, it can also serve as a calendar server compatible
+//! with CalDAV clients like Thunderbird, Apple Calendar, and other calendar applications.
 //!
 //! ## Backend interfaces.
 //!
@@ -38,6 +46,13 @@
 //! Currently [passes the "basic", "copymove", "props", "locks" and "http"
 //! checks][README_litmus] of the Webdav Litmus Test testsuite. That's all of the base
 //! [RFC4918] webdav specification.
+//!
+//! CalDAV support implements the core CalDAV specification from [RFC4791], including:
+//! - Calendar collections (MKCALENDAR method)
+//! - Calendar queries (REPORT method with calendar-query)
+//! - Calendar multiget (REPORT method with calendar-multiget)
+//! - CalDAV properties (supported-calendar-component-set, etc.)
+//! - iCalendar data validation and processing
 //!
 //! The litmus test suite also has tests for RFC3744 "acl" and "principal",
 //! RFC5842 "bind", and RFC3253 "versioning". Those we do not support right now.
@@ -72,6 +87,22 @@
 //!
 //! - [`OpendalFs`](https://github.com/apache/opendal/tree/main/integrations/dav-server):
 //!   connects various storage protocols via [OpenDAL](https://github.com/apache/opendal).
+//!
+//! ## CalDAV Support
+//!
+//! CalDAV functionality is available when the `caldav` feature is enabled:
+//!
+//! ```toml
+//! [dependencies]
+//! dav-server = { version = "0.9", features = ["caldav"] }
+//! ```
+//!
+//! This adds support for:
+//! - `MKCALENDAR` method for creating calendar collections
+//! - `REPORT` method for calendar queries
+//! - CalDAV-specific properties and resource types
+//! - iCalendar data validation
+//! - Calendar-specific WebDAV extensions
 //!
 //! ## Example.
 //!
@@ -137,6 +168,8 @@
 //! [DavProp]: fs/struct.DavProp.html
 //! [`WebDav`]: https://tools.ietf.org/html/rfc4918
 //! [RFC4918]: https://tools.ietf.org/html/rfc4918
+//! [`CalDAV`]: https://tools.ietf.org/html/rfc4791
+//! [RFC4791]: https://tools.ietf.org/html/rfc4791
 //! [`MemLs`]: memls/index.html
 //! [`MemFs`]: memfs/index.html
 //! [`LocalFs`]: localfs/index.html
@@ -163,6 +196,9 @@ mod conditional;
 mod davhandler;
 mod davheaders;
 mod errors;
+#[cfg(any(docsrs, feature = "caldav"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "caldav")))]
+mod handle_caldav;
 mod handle_copymove;
 mod handle_delete;
 mod handle_gethead;
@@ -184,6 +220,9 @@ mod voidfs;
 mod xmltree_ext;
 
 pub mod body;
+#[cfg(any(docsrs, feature = "caldav"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "caldav")))]
+pub mod caldav;
 pub mod davpath;
 pub mod fakels;
 pub mod fs;
