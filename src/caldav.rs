@@ -223,8 +223,8 @@ pub fn validate_calendar_data(_content: &str) -> Result<(), String> {
 pub fn extract_calendar_uid(content: &str) -> Option<String> {
     for line in content.lines() {
         let line = line.trim();
-        if line.starts_with("UID:") {
-            return Some(line[4..].to_string());
+        if let Some(uid) = line.strip_prefix("UID:") {
+            return Some(uid.to_string());
         }
     }
     None

@@ -90,10 +90,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     namespace,
                 }) => {
                     let mut elem = Element::new(&name.local_name);
-                    if let Some(prefix) = name.prefix {
-                        if let Some(uri) = namespace.get(&prefix) {
+                    if let Some(prefix) = name.prefix 
+                        && let Some(uri) = namespace.get(&prefix) {
                             elem.namespace = Some(uri.to_string());
-                        }
                     }
 
                     for attr in attributes {
@@ -160,11 +159,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     "filter" => {
                         // Parse comp-filter elements
                         for filter_child in &elem.children {
-                            if let XMLNode::Element(filter_elem) = filter_child {
-                                if filter_elem.name == "comp-filter" {
+                            if let XMLNode::Element(filter_elem) = filter_child
+                                && filter_elem.name == "comp-filter" {
                                     query.comp_filter =
                                         Some(self.parse_component_filter(filter_elem)?);
-                                }
                             }
                         }
                     }
@@ -301,12 +299,11 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         let mut hrefs = Vec::new();
 
         for child in &root.children {
-            if let XMLNode::Element(elem) = child {
-                if elem.name == "href" {
-                    for href_child in &elem.children {
-                        if let XMLNode::Text(href) = href_child {
-                            hrefs.push(href.clone());
-                        }
+            if let XMLNode::Element(elem) = child
+                && elem.name == "href" {
+                for href_child in &elem.children {
+                    if let XMLNode::Text(href) = href_child {
+                        hrefs.push(href.clone());
                     }
                 }
             }
@@ -318,10 +315,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     #[cfg(feature = "caldav")]
     fn parse_freebusy_query(&self, root: &Element) -> DavResult<TimeRange> {
         for child in &root.children {
-            if let XMLNode::Element(elem) = child {
-                if elem.name == "time-range" {
+            if let XMLNode::Element(elem) = child
+                && elem.name == "time-range" {
                     return self.parse_time_range(elem);
-                }
             }
         }
 
@@ -357,14 +353,13 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     {
                         let metadata = file.metadata().await?;
 
-                        if let Ok(data) = file.read_bytes(metadata.len() as usize).await {
-                            if is_calendar_data(&data) {
+                        if let Ok(data) = file.read_bytes(metadata.len() as usize).await
+                            && is_calendar_data(&data) {
                                 let content = String::from_utf8_lossy(&data);
 
                                 if self.matches_query(&content, &query) {
                                     results.push((item_path.clone(), content.to_string()));
                                 }
-                            }
                         }
                     }
                 }
@@ -385,21 +380,19 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         let mut results = Vec::new();
 
         for href in hrefs {
-            if let Ok(item_path) = DavPath::from_str_and_prefix(&href, &self.prefix) {
-                if let Ok(mut file) = self
+            if let Ok(item_path) = DavPath::from_str_and_prefix(&href, &self.prefix)
+                && let Ok(mut file) = self
                     .fs
                     .open(&item_path, OpenOptions::read(), &self.credentials)
                     .await
-                {
+            {
                     let metadata = file.metadata().await?;
 
-                    if let Ok(data) = &file.read_bytes(metadata.len() as usize).await {
-                        if is_calendar_data(&data) {
+                    if let Ok(data) = &file.read_bytes(metadata.len() as usize).await
+                        && is_calendar_data(data) {
                             let content = String::from_utf8_lossy(data);
                             results.push((item_path, content.to_string()));
-                        }
                     }
-                }
             }
         }
 
@@ -440,13 +433,12 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // Simple implementation - a full implementation would parse the iCalendar
         // and apply all the filters properly
 
-        if let Some(ref comp_filter) = query.comp_filter {
-            if !content.contains(&format!("BEGIN:{}", comp_filter.name)) {
-                return false;
-            }
+        if let Some(ref comp_filter) = query.comp_filter
+            && !content.contains(&format!("BEGIN:{}", comp_filter.name)) {
+                false
+        } else {
+            true
         }
-
-        true
     }
 
     #[cfg(feature = "caldav")]

@@ -911,11 +911,10 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             self.fs.get_props(path, docontent, &self.credentials).await
                         {
                             for prop_item in props {
-                                if prop_item.name.contains("calendar-description") {
-                                    if let Some(value) = prop_item.xml {
-                                        let desc = String::from_utf8_lossy(&value);
-                                        return self.build_elem(docontent, pfx, prop, desc);
-                                    }
+                                if prop_item.name.contains("calendar-description") 
+                                    && let Some(value) = prop_item.xml {
+                                    let desc = String::from_utf8_lossy(&value);
+                                    return self.build_elem(docontent, pfx, prop, desc);
                                 }
                             }
                         }
