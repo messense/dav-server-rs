@@ -96,7 +96,7 @@ pub enum Depth {
     Zero,
     /// Depth 1: target resource, Depth 1 children
     One,
-    /// Depth infinity OR Depth 1 > are not to be supported and return "Not Implemented" for performance
+    /// Infinite depth or `Depth` > 1 are not to be supported and return `NotImplemented` for performance reasons
     Infinity,
 }
 
