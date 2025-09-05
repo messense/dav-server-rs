@@ -90,9 +90,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     namespace,
                 }) => {
                     let mut elem = Element::new(&name.local_name);
-                    if let Some(prefix) = name.prefix 
-                        && let Some(uri) = namespace.get(&prefix) {
-                            elem.namespace = Some(uri.to_string());
+                    if let Some(prefix) = name.prefix
+                        && let Some(uri) = namespace.get(&prefix)
+                    {
+                        elem.namespace = Some(uri.to_string());
                     }
 
                     for attr in attributes {
@@ -160,9 +161,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         // Parse comp-filter elements
                         for filter_child in &elem.children {
                             if let XMLNode::Element(filter_elem) = filter_child
-                                && filter_elem.name == "comp-filter" {
-                                    query.comp_filter =
-                                        Some(self.parse_component_filter(filter_elem)?);
+                                && filter_elem.name == "comp-filter"
+                            {
+                                query.comp_filter = Some(self.parse_component_filter(filter_elem)?);
                             }
                         }
                     }
@@ -300,7 +301,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         for child in &root.children {
             if let XMLNode::Element(elem) = child
-                && elem.name == "href" {
+                && elem.name == "href"
+            {
                 for href_child in &elem.children {
                     if let XMLNode::Text(href) = href_child {
                         hrefs.push(href.clone());
@@ -316,8 +318,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     fn parse_freebusy_query(&self, root: &Element) -> DavResult<TimeRange> {
         for child in &root.children {
             if let XMLNode::Element(elem) = child
-                && elem.name == "time-range" {
-                    return self.parse_time_range(elem);
+                && elem.name == "time-range"
+            {
+                return self.parse_time_range(elem);
             }
         }
 
@@ -354,12 +357,13 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         let metadata = file.metadata().await?;
 
                         if let Ok(data) = file.read_bytes(metadata.len() as usize).await
-                            && is_calendar_data(&data) {
-                                let content = String::from_utf8_lossy(&data);
+                            && is_calendar_data(&data)
+                        {
+                            let content = String::from_utf8_lossy(&data);
 
-                                if self.matches_query(&content, &query) {
-                                    results.push((item_path.clone(), content.to_string()));
-                                }
+                            if self.matches_query(&content, &query) {
+                                results.push((item_path.clone(), content.to_string()));
+                            }
                         }
                     }
                 }
@@ -386,13 +390,14 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     .open(&item_path, OpenOptions::read(), &self.credentials)
                     .await
             {
-                    let metadata = file.metadata().await?;
+                let metadata = file.metadata().await?;
 
-                    if let Ok(data) = &file.read_bytes(metadata.len() as usize).await
-                        && is_calendar_data(data) {
-                            let content = String::from_utf8_lossy(data);
-                            results.push((item_path, content.to_string()));
-                    }
+                if let Ok(data) = &file.read_bytes(metadata.len() as usize).await
+                    && is_calendar_data(data)
+                {
+                    let content = String::from_utf8_lossy(data);
+                    results.push((item_path, content.to_string()));
+                }
             }
         }
 
@@ -434,8 +439,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // and apply all the filters properly
 
         if let Some(ref comp_filter) = query.comp_filter
-            && !content.contains(&format!("BEGIN:{}", comp_filter.name)) {
-                false
+            && !content.contains(&format!("BEGIN:{}", comp_filter.name))
+        {
+            false
         } else {
             true
         }
