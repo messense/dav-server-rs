@@ -7,7 +7,7 @@ use std::io;
 use std::sync::Arc;
 
 use bytes::{self, buf::Buf};
-use derivative::Derivative;
+use derive_where::derive_where;
 use futures_util::stream::Stream;
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
@@ -32,15 +32,15 @@ use crate::voidfs::{VoidFs, is_voidfs};
 /// The [`handle`](Self::handle) and [`handle_with`](Self::handle_with) methods do the actual work.
 ///
 /// Type parameter `C` represents credentials for file systems with access control.
-#[derive(Clone, Derivative)]
-#[derivative(Default(bound = ""))]
+#[derive(Clone)]
+#[derive_where(Default)]
 pub struct DavHandler<C = ()> {
     pub(crate) config: Arc<DavConfig<C>>,
 }
 
 /// Configuration of the handler.
-#[derive(Clone, Derivative)]
-#[derivative(Default(bound = ""))]
+#[derive(Clone)]
+#[derive_where(Default)]
 pub struct DavConfig<C = ()> {
     // Prefix to be stripped off when handling request.
     pub(crate) prefix: Option<String>,
