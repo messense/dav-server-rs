@@ -37,7 +37,7 @@ pub struct DavRequest {
 impl DavRequest {
     /// Returns the request path minus the tail.
     pub fn prefix(&self) -> Option<&str> {
-        self.prefix.as_ref().map(|s| s.as_str())
+        self.prefix.as_deref()
     }
 }
 
@@ -96,7 +96,7 @@ impl http_body::Body for DavBody {
                 PayloadError::Incomplete(Some(err)) => err,
                 PayloadError::Incomplete(None) => io::ErrorKind::BrokenPipe.into(),
                 PayloadError::Io(err) => err,
-                err => io::Error::new(io::ErrorKind::Other, format!("{err:?}")),
+                err => io::Error::other(format!("{err:?}")),
             })
     }
 }
@@ -128,13 +128,12 @@ impl actix_web::Responder for DavResponse {
         // a 204 statuscode. It's probably because of
         // builder.streaming(). So only use builder.streaming()
         // on actual streaming replies.
-        let resp = match body.inner {
+        match body.inner {
             BodyType::Bytes(None) => builder.body(""),
             BodyType::Bytes(Some(b)) => builder.body(b),
             BodyType::Empty => builder.body(""),
             b @ BodyType::AsyncStream(..) => builder.streaming(Body { inner: b }),
-        };
-        resp
+        }
     }
 }
 
