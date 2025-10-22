@@ -51,6 +51,11 @@ jobs:
         with:
           command: build
           args: --features actix-compat
+      - name: Check build with caldav
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --features caldav
       - name: Test
         uses: actions-rs/cargo@v1
         with:
