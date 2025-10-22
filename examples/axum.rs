@@ -1,9 +1,4 @@
-use axum::{
-    Extension, Router,
-    extract::Request,
-    response::IntoResponse,
-    routing::any,
-};
+use axum::{Extension, Router, extract::Request, response::IntoResponse, routing::any};
 use dav_server::{DavHandler, fakels::FakeLs, localfs::LocalFs};
 use tokio::net::TcpListener;
 
