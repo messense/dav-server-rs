@@ -263,7 +263,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 let mut multierror = MultiError::new(tx);
 
                 // see if we need to delete the destination first.
-                if overwrite && exists && depth != Depth::Zero && !dest_is_file {
+                if overwrite && exists && (dest_is_file || (depth != Depth::Zero && !dest_is_file))
+                {
                     trace!("handle_copymove: deleting destination {dest}");
                     if self
                         .delete_items(&mut multierror, Depth::Infinity, dmeta.unwrap(), &dest)
