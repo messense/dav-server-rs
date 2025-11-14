@@ -1,15 +1,13 @@
+use std::convert::TryFrom;
 use std::fmt::Display;
 use std::str::FromStr;
-use std::{convert::TryFrom, sync::LazyLock};
 
 use headers::Header;
 use http::header::{HeaderName, HeaderValue};
-use regex::Regex;
+use url::Url;
 
 use crate::fs::DavMetaData;
 
-static RE_URL: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"https?://[^/]*([^#?]+).*$").unwrap());
 pub static DEPTH: HeaderName = HeaderName::from_static("depth");
 pub static TIMEOUT: HeaderName = HeaderName::from_static("timeout");
 pub static OVERWRITE: HeaderName = HeaderName::from_static("overwrite");
@@ -252,10 +250,8 @@ impl Header for Destination {
         if s.starts_with('/') {
             return Ok(Destination(s.to_string()));
         }
-        if let Some(caps) = RE_URL.captures(s)
-            && let Some(path) = caps.get(1)
-        {
-            return Ok(Destination(path.as_str().to_string()));
+        if let Ok(url) = s.parse::<Url>() {
+            return Ok(Destination(url.path().to_string()));
         }
         Err(invalid())
     }
