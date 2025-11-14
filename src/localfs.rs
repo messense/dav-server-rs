@@ -38,6 +38,7 @@ use crate::localfs_macos::DUCacheBuilder;
 //
 // There's also a method on LocalFs for this, use the freestanding
 // function if you do not want the fs_access_guard() closure to be used.
+#[cfg(feature = "localfs")]
 #[inline]
 async fn blocking<F, R>(func: F) -> R
 where

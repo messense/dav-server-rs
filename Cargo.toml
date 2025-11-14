@@ -23,7 +23,7 @@ actix-compat = [ "actix-web" ]
 warp-compat = [ "warp", "hyper" ]
 caldav = [ "icalendar" ]
 all = [ "actix-compat", "warp-compat", "caldav" ]
-localfs = ["libc", "lru", "parking_lot", "reflink-copy"]
+localfs = ["libc", "lru", "tokio/rt-multi-thread", "parking_lot", "reflink-copy"]
 memfs = ["libc"]
 
 [[example]]
@@ -55,7 +55,7 @@ mime_guess = "2.0.0"
 parking_lot = { version = "0.12.0", optional = true }
 percent-encoding = "2.1.0"
 pin-project-lite = "0.2.16"
-tokio = { version = "1.22.0", features = [ "rt-multi-thread", "io-util", "net", "time", "sync" ] }
+tokio = { version = "1.22.0", features = [ "rt" ] }
 chrono = { version = "0.4", default-features = false, features = [ "clock" ] }
 url = "2.2.0"
 uuid = { version = "1.1.2", features = ["v4"] }
