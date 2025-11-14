@@ -1,6 +1,7 @@
 use std::cmp;
 use std::io::Write;
 
+use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use headers::HeaderMapExt;
 use http::{Request, Response, status::StatusCode};
@@ -14,7 +15,6 @@ use crate::davheaders;
 use crate::davpath::DavPath;
 use crate::errors::*;
 use crate::fs::*;
-use crate::util::systemtime_to_offsetdatetime;
 use crate::{DavInner, DavMethod};
 
 struct Range {
@@ -439,17 +439,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
                 for dirent in &dirents {
                     let modified = match dirent.meta.modified() {
-                        Ok(t) => {
-                            let tm = systemtime_to_offsetdatetime(t);
-                            format!(
-                                "{:04}-{:02}-{:02} {:02}:{:02}",
-                                tm.year(),
-                                tm.month(),
-                                tm.day(),
-                                tm.hour(),
-                                tm.minute(),
-                            )
-                        }
+                        Ok(t) => DateTime::<Utc>::from(t)
+                            .format("%Y-%m-%d %H:%M")
+                            .to_string(),
                         Err(_) => "".to_string(),
                     };
                     let size = match dirent.meta.is_file() {
