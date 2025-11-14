@@ -41,7 +41,7 @@ required-features = [ "caldav" ]
 [dependencies]
 bytes = "1.0.1"
 dyn-clone = "1"
-futures-util = "0.3.16"
+futures-util = { version = "0.3.16", default-features = false, features = ["alloc"] }
 futures-channel = "0.3.16"
 headers = "0.4.0"
 htmlescape = "0.3.1"
