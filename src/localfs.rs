@@ -6,7 +6,7 @@
 
 use std::any::Any;
 use std::collections::VecDeque;
-use std::future::Future;
+use std::future::{self, Future};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
 use std::os::unix::{
@@ -24,7 +24,7 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bytes::{Buf, Bytes, BytesMut};
-use futures_util::{FutureExt, Stream, future, future::BoxFuture};
+use futures_util::{FutureExt, Stream, future::BoxFuture};
 use tokio::task;
 
 use libc;

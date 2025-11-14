@@ -14,7 +14,7 @@
 //!
 use std::{
     convert::TryInto,
-    io,
+    future, io,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -23,7 +23,7 @@ use actix_web::body::BoxBody;
 use actix_web::error::PayloadError;
 use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, dev};
 use bytes::Bytes;
-use futures_util::{Stream, future};
+use futures_util::Stream;
 use pin_project_lite::pin_project;
 
 /// http::Request compatibility.
