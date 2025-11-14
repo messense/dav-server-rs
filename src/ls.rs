@@ -9,11 +9,11 @@
 //!
 use crate::davpath::DavPath;
 use std::fmt::Debug;
+use std::future::Future;
 use std::pin::Pin;
 use std::time::{Duration, SystemTime};
 
 use dyn_clone::{DynClone, clone_trait_object};
-use futures_util::Future;
 use xmltree::Element;
 
 /// Type of the locks returned by DavLockSystem methods.

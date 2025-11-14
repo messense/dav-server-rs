@@ -6,7 +6,7 @@
 
 use std::any::Any;
 use std::collections::VecDeque;
-use std::future::Future;
+use std::future::{self, Future};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
 use std::os::unix::{
@@ -17,14 +17,14 @@ use std::os::unix::{
 use std::os::windows::prelude::*;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::pin::pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bytes::{Buf, Bytes, BytesMut};
-use futures_util::{FutureExt, Stream, future, future::BoxFuture};
-use pin_utils::pin_mut;
+use futures_util::{FutureExt, Stream, future::BoxFuture};
 use tokio::task;
 
 use libc;
@@ -553,8 +553,7 @@ impl Stream for LocalFsReadDir {
             }
 
             // Poll the future.
-            let fut = this.fut.as_mut().unwrap();
-            pin_mut!(fut);
+            let mut fut = pin!(this.fut.as_mut().unwrap());
             match Pin::new(&mut fut).poll(cx) {
                 Poll::Ready(batch) => {
                     this.fut.take();

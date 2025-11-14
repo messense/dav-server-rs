@@ -4,6 +4,7 @@
 //
 use std::error::Error as StdError;
 use std::io;
+use std::pin::pin;
 use std::sync::Arc;
 
 use bytes::{self, buf::Buf};
@@ -368,7 +369,7 @@ where
         ReqError: StdError + Send + Sync + 'static,
     {
         let mut data = Vec::new();
-        pin_utils::pin_mut!(body);
+        let mut body = pin!(body);
 
         while let Some(res) = body.frame().await {
             let mut data_frame = res.map_err(|_| {

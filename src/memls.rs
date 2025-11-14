@@ -7,10 +7,11 @@
 //! it in your handler struct, and clone() it every time you pass
 //! it to the DavHandler. As a MemLs struct is just a handle, cloning is cheap.
 use std::collections::HashMap;
+use std::future;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-use futures_util::{FutureExt, future};
+use futures_util::FutureExt;
 use uuid::Uuid;
 use xmltree::Element;
 

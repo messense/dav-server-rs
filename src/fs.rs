@@ -4,12 +4,13 @@
 //! filesystem backend. Otherwise, just use 'LocalFs' or 'MemFs'.
 //!
 use std::fmt::Debug;
+use std::future::{self, Future};
 use std::io::SeekFrom;
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use dyn_clone::{DynClone, clone_trait_object};
-use futures_util::{Future, FutureExt, Stream, TryFutureExt, future};
+use futures_util::{FutureExt, Stream, TryFutureExt};
 use http::StatusCode;
 
 use crate::davpath::DavPath;
@@ -664,19 +665,25 @@ pub trait DavDirEntry: Send + Sync {
     /// expensive and there is a cheaper way to provide the same info
     /// (e.g. dirent.d_type in unix filesystems).
     fn is_dir(&'_ self) -> FsFuture<'_, bool> {
-        Box::pin(self.metadata().and_then(|meta| future::ok(meta.is_dir())))
+        Box::pin(
+            self.metadata()
+                .and_then(|meta| future::ready(Ok(meta.is_dir()))),
+        )
     }
 
     /// Likewise. Default: `!is_dir()`.
     fn is_file(&'_ self) -> FsFuture<'_, bool> {
-        Box::pin(self.metadata().and_then(|meta| future::ok(meta.is_file())))
+        Box::pin(
+            self.metadata()
+                .and_then(|meta| future::ready(Ok(meta.is_file()))),
+        )
     }
 
     /// Likewise. Default: `false`.
     fn is_symlink(&'_ self) -> FsFuture<'_, bool> {
         Box::pin(
             self.metadata()
-                .and_then(|meta| future::ok(meta.is_symlink())),
+                .and_then(|meta| future::ready(Ok(meta.is_symlink()))),
         )
     }
 }

@@ -4,25 +4,21 @@ use std::str::FromStr;
 
 use headers::Header;
 use http::header::{HeaderName, HeaderValue};
-use lazy_static::lazy_static;
-use regex::Regex;
+use url::Url;
 
 use crate::fs::DavMetaData;
 
-lazy_static! {
-    static ref RE_URL: Regex = Regex::new(r"https?://[^/]*([^#?]+).*$").unwrap();
-    pub static ref DEPTH: HeaderName = HeaderName::from_static("depth");
-    pub static ref TIMEOUT: HeaderName = HeaderName::from_static("timeout");
-    pub static ref OVERWRITE: HeaderName = HeaderName::from_static("overwrite");
-    pub static ref DESTINATION: HeaderName = HeaderName::from_static("destination");
-    pub static ref ETAG: HeaderName = HeaderName::from_static("etag");
-    pub static ref IF_RANGE: HeaderName = HeaderName::from_static("if-range");
-    pub static ref IF_MATCH: HeaderName = HeaderName::from_static("if-match");
-    pub static ref IF_NONE_MATCH: HeaderName = HeaderName::from_static("if-none-match");
-    pub static ref X_UPDATE_RANGE: HeaderName = HeaderName::from_static("x-update-range");
-    pub static ref IF: HeaderName = HeaderName::from_static("if");
-    pub static ref CONTENT_LANGUAGE: HeaderName = HeaderName::from_static("content-language");
-}
+pub static DEPTH: HeaderName = HeaderName::from_static("depth");
+pub static TIMEOUT: HeaderName = HeaderName::from_static("timeout");
+pub static OVERWRITE: HeaderName = HeaderName::from_static("overwrite");
+pub static DESTINATION: HeaderName = HeaderName::from_static("destination");
+pub static ETAG: HeaderName = HeaderName::from_static("etag");
+pub static IF_RANGE: HeaderName = HeaderName::from_static("if-range");
+pub static IF_MATCH: HeaderName = HeaderName::from_static("if-match");
+pub static IF_NONE_MATCH: HeaderName = HeaderName::from_static("if-none-match");
+pub static X_UPDATE_RANGE: HeaderName = HeaderName::from_static("x-update-range");
+pub static IF: HeaderName = HeaderName::from_static("if");
+pub static CONTENT_LANGUAGE: HeaderName = HeaderName::from_static("content-language");
 
 // helper.
 fn one<'i, I>(values: &mut I) -> Result<&'i HeaderValue, headers::Error>
@@ -49,9 +45,7 @@ fn map_invalid(_e: impl std::error::Error) -> headers::Error {
 
 macro_rules! header {
     ($tname:ident, $hname:ident, $sname:expr_2021) => {
-        lazy_static! {
-            pub static ref $hname: HeaderName = HeaderName::from_static($sname);
-        }
+        pub static $hname: HeaderName = HeaderName::from_static($sname);
 
         #[derive(Debug, Clone, PartialEq)]
         pub struct $tname(pub String);
@@ -256,10 +250,8 @@ impl Header for Destination {
         if s.starts_with('/') {
             return Ok(Destination(s.to_string()));
         }
-        if let Some(caps) = RE_URL.captures(s)
-            && let Some(path) = caps.get(1)
-        {
-            return Ok(Destination(path.as_str().to_string()));
+        if let Ok(url) = s.parse::<Url>() {
+            return Ok(Destination(url.path().to_string()));
         }
         Err(invalid())
     }
