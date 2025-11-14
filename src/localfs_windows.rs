@@ -8,7 +8,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::LazyLock;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -21,9 +21,7 @@ const CACHE_ENTRIES: usize = 4096;
 const CACHE_MAX_AGE: u64 = 15 * 60;
 const CACHE_SLEEP_MS: u64 = 30059;
 
-lazy_static! {
-    static ref CACHE: Arc<Cache> = Arc::new(Cache::new(CACHE_ENTRIES));
-}
+static CACHE: LazyLock<Cache> = LazyLock::new(|| Cache::new(CACHE_ENTRIES));
 
 // Do a case-insensitive path lookup.
 pub(crate) fn resolve(base: impl Into<PathBuf>, path: &DavPath) -> PathBuf {
@@ -43,7 +41,7 @@ pub(crate) fn resolve(base: impl Into<PathBuf>, path: &DavPath) -> PathBuf {
         None => return fullpath,
     };
 
-    // deref in advance: first lazy_static, then Arc.
+    // deref in advance: first LazyLock, then Arc.
     let cache = &*CACHE;
 
     // In the cache?

@@ -48,7 +48,6 @@ htmlescape = "0.3.1"
 http = "1.0.0"
 http-body = "1.0.0"
 http-body-util = "0.1.0"
-lazy_static = "1.4.0"
 libc = { version = "0.2.0", optional = true }
 log = "0.4.0"
 lru = { version = "0.14.0", optional = true }
