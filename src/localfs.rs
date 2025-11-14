@@ -20,7 +20,6 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::pin::pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -35,37 +34,6 @@ use crate::davpath::DavPath;
 use crate::fs::*;
 use crate::localfs_macos::DUCacheBuilder;
 
-const RUNTIME_TYPE_BASIC: u32 = 1;
-const RUNTIME_TYPE_THREADPOOL: u32 = 2;
-static RUNTIME_TYPE: AtomicU32 = AtomicU32::new(0);
-
-#[derive(Clone, Copy)]
-#[repr(u32)]
-enum RuntimeType {
-    Basic = RUNTIME_TYPE_BASIC,
-    ThreadPool = RUNTIME_TYPE_THREADPOOL,
-}
-
-impl RuntimeType {
-    #[inline]
-    fn get() -> RuntimeType {
-        match RUNTIME_TYPE.load(Ordering::Relaxed) {
-            RUNTIME_TYPE_BASIC => RuntimeType::Basic,
-            RUNTIME_TYPE_THREADPOOL => RuntimeType::ThreadPool,
-            _ => {
-                let dbg = format!("{:?}", tokio::runtime::Handle::current());
-                let rt = if dbg.contains("ThreadPool") {
-                    RuntimeType::ThreadPool
-                } else {
-                    RuntimeType::Basic
-                };
-                RUNTIME_TYPE.store(rt as u32, Ordering::SeqCst);
-                rt
-            }
-        }
-    }
-}
-
 // Run some code via block_in_place() or spawn_blocking().
 //
 // There's also a method on LocalFs for this, use the freestanding
@@ -77,9 +45,9 @@ where
     F: Send + 'static,
     R: Send + 'static,
 {
-    match RuntimeType::get() {
-        RuntimeType::Basic => task::spawn_blocking(func).await.unwrap(),
-        RuntimeType::ThreadPool => task::block_in_place(func),
+    match tokio::runtime::Handle::current().runtime_flavor() {
+        tokio::runtime::RuntimeFlavor::MultiThread => task::block_in_place(func),
+        _ => task::spawn_blocking(func).await.unwrap(),
     }
 }
 
