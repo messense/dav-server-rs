@@ -1,11 +1,10 @@
 use std::io::{Cursor, Write};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 use bytes::Bytes;
+use chrono::{DateTime, SecondsFormat, Utc};
 use headers::Header;
 use http::method::InvalidMethod;
-use time::format_description::well_known::Rfc3339;
-use time::macros::offset;
 
 use crate::DavResult;
 use crate::body::Body;
@@ -157,16 +156,6 @@ pub(crate) fn dav_xml_error(body: &str) -> Body {
     Body::from(xml)
 }
 
-pub(crate) fn systemtime_to_offsetdatetime(t: SystemTime) -> time::OffsetDateTime {
-    match t.duration_since(UNIX_EPOCH) {
-        Ok(t) => {
-            let tm = time::OffsetDateTime::from_unix_timestamp(t.as_secs() as i64).unwrap();
-            tm.to_offset(offset!(UTC))
-        }
-        Err(_) => time::OffsetDateTime::UNIX_EPOCH.to_offset(offset!(UTC)),
-    }
-}
-
 pub(crate) fn systemtime_to_httpdate(t: SystemTime) -> String {
     let d = headers::Date::from(t);
     let mut v = Vec::new();
@@ -176,11 +165,7 @@ pub(crate) fn systemtime_to_httpdate(t: SystemTime) -> String {
 
 pub(crate) fn systemtime_to_rfc3339_without_nanosecond(t: SystemTime) -> String {
     // 1996-12-19T16:39:57Z
-    systemtime_to_offsetdatetime(t)
-        .replace_nanosecond(0)
-        .ok()
-        .and_then(|x| x.format(&Rfc3339).ok())
-        .unwrap_or("1970-01-01T00:00:00Z".into())
+    DateTime::<Utc>::from(t).to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
 // A buffer that implements "Write".

@@ -8,6 +8,7 @@ use std::any::Any;
 use std::collections::VecDeque;
 use std::future::{self, Future};
 use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::mem;
 #[cfg(unix)]
 use std::os::unix::{
     ffi::OsStrExt,
@@ -19,7 +20,6 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::pin::pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -34,41 +34,11 @@ use crate::davpath::DavPath;
 use crate::fs::*;
 use crate::localfs_macos::DUCacheBuilder;
 
-const RUNTIME_TYPE_BASIC: u32 = 1;
-const RUNTIME_TYPE_THREADPOOL: u32 = 2;
-static RUNTIME_TYPE: AtomicU32 = AtomicU32::new(0);
-
-#[derive(Clone, Copy)]
-#[repr(u32)]
-enum RuntimeType {
-    Basic = RUNTIME_TYPE_BASIC,
-    ThreadPool = RUNTIME_TYPE_THREADPOOL,
-}
-
-impl RuntimeType {
-    #[inline]
-    fn get() -> RuntimeType {
-        match RUNTIME_TYPE.load(Ordering::Relaxed) {
-            RUNTIME_TYPE_BASIC => RuntimeType::Basic,
-            RUNTIME_TYPE_THREADPOOL => RuntimeType::ThreadPool,
-            _ => {
-                let dbg = format!("{:?}", tokio::runtime::Handle::current());
-                let rt = if dbg.contains("ThreadPool") {
-                    RuntimeType::ThreadPool
-                } else {
-                    RuntimeType::Basic
-                };
-                RUNTIME_TYPE.store(rt as u32, Ordering::SeqCst);
-                rt
-            }
-        }
-    }
-}
-
 // Run some code via block_in_place() or spawn_blocking().
 //
 // There's also a method on LocalFs for this, use the freestanding
 // function if you do not want the fs_access_guard() closure to be used.
+#[cfg(feature = "localfs")]
 #[inline]
 async fn blocking<F, R>(func: F) -> R
 where
@@ -76,9 +46,9 @@ where
     F: Send + 'static,
     R: Send + 'static,
 {
-    match RuntimeType::get() {
-        RuntimeType::Basic => task::spawn_blocking(func).await.unwrap(),
-        RuntimeType::ThreadPool => task::block_in_place(func),
+    match tokio::runtime::Handle::current().runtime_flavor() {
+        tokio::runtime::RuntimeFlavor::MultiThread => task::block_in_place(func),
+        _ => task::spawn_blocking(func).await.unwrap(),
     }
 }
 
@@ -103,7 +73,10 @@ pub(crate) struct LocalFsInner {
 }
 
 #[derive(Debug)]
-struct LocalFsFile(Option<std::fs::File>);
+struct LocalFsFile {
+    file: Option<std::fs::File>,
+    buf: BytesMut,
+}
 
 struct LocalFsReadDir {
     fs: LocalFs,
@@ -340,7 +313,10 @@ impl DavFileSystem for LocalFs {
                     .create_new(options.create_new)
                     .open(path);
                 match res {
-                    Ok(file) => Ok(Box::new(LocalFsFile(Some(file))) as Box<dyn DavFile>),
+                    Ok(file) => Ok(Box::new(LocalFsFile {
+                        file: Some(file),
+                        buf: BytesMut::new(),
+                    }) as Box<dyn DavFile>),
                     Err(e) => Err(e.into()),
                 }
             })
@@ -676,9 +652,9 @@ impl DavDirEntry for LocalFsDirEntry {
 impl DavFile for LocalFsFile {
     fn metadata(&'_ mut self) -> FsFuture<'_, Box<dyn DavMetaData>> {
         async move {
-            let file = self.0.take().unwrap();
+            let file = self.file.take().unwrap();
             let (meta, file) = blocking(move || (file.metadata(), file)).await;
-            self.0 = Some(file);
+            self.file = Some(file);
             Ok(Box::new(LocalFsMetaData(meta?)) as Box<dyn DavMetaData>)
         }
         .boxed()
@@ -686,9 +662,9 @@ impl DavFile for LocalFsFile {
 
     fn write_bytes(&'_ mut self, buf: Bytes) -> FsFuture<'_, ()> {
         async move {
-            let mut file = self.0.take().unwrap();
+            let mut file = self.file.take().unwrap();
             let (res, file) = blocking(move || (file.write_all(&buf), file)).await;
-            self.0 = Some(file);
+            self.file = Some(file);
             res.map_err(|e| e.into())
         }
         .boxed()
@@ -696,7 +672,7 @@ impl DavFile for LocalFsFile {
 
     fn write_buf(&'_ mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<'_, ()> {
         async move {
-            let mut file = self.0.take().unwrap();
+            let mut file = self.file.take().unwrap();
             let (res, file) = blocking(move || {
                 while buf.remaining() > 0 {
                     let n = match file.write(buf.chunk()) {
@@ -708,7 +684,7 @@ impl DavFile for LocalFsFile {
                 (Ok(()), file)
             })
             .await;
-            self.0 = Some(file);
+            self.file = Some(file);
             res.map_err(|e| e.into())
         }
         .boxed()
@@ -716,20 +692,22 @@ impl DavFile for LocalFsFile {
 
     fn read_bytes(&'_ mut self, count: usize) -> FsFuture<'_, Bytes> {
         async move {
-            let mut file = self.0.take().unwrap();
-            let (res, file) = blocking(move || {
-                let mut buf = BytesMut::with_capacity(count);
+            let mut file = self.file.take().unwrap();
+            let mut buf = mem::take(&mut self.buf);
+            let (res, file, buf) = blocking(move || {
+                buf.reserve(count);
                 let res = unsafe {
                     buf.set_len(count);
                     file.read(&mut buf).map(|n| {
                         buf.set_len(n);
-                        buf.freeze()
+                        buf.split().freeze()
                     })
                 };
-                (res, file)
+                (res, file, buf)
             })
             .await;
-            self.0 = Some(file);
+            self.file = Some(file);
+            self.buf = buf;
             res.map_err(|e| e.into())
         }
         .boxed()
@@ -737,9 +715,9 @@ impl DavFile for LocalFsFile {
 
     fn seek(&'_ mut self, pos: SeekFrom) -> FsFuture<'_, u64> {
         async move {
-            let mut file = self.0.take().unwrap();
+            let mut file = self.file.take().unwrap();
             let (res, file) = blocking(move || (file.seek(pos), file)).await;
-            self.0 = Some(file);
+            self.file = Some(file);
             res.map_err(|e| e.into())
         }
         .boxed()
@@ -747,9 +725,9 @@ impl DavFile for LocalFsFile {
 
     fn flush(&'_ mut self) -> FsFuture<'_, ()> {
         async move {
-            let mut file = self.0.take().unwrap();
+            let mut file = self.file.take().unwrap();
             let (res, file) = blocking(move || (file.flush(), file)).await;
-            self.0 = Some(file);
+            self.file = Some(file);
             res.map_err(|e| e.into())
         }
         .boxed()
