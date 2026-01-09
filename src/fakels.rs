@@ -12,9 +12,10 @@
 //! If: headers always succeeds, and nothing is every really locked.
 //!
 //! `FakeLs` implements such a fake locksystem.
+use std::future;
 use std::time::{Duration, SystemTime};
 
-use futures_util::{FutureExt, future};
+use futures_util::FutureExt;
 use uuid::Uuid;
 use xmltree::Element;
 

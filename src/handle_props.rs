@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::{self, Cursor};
+use std::sync::LazyLock;
 
 use futures_util::{FutureExt, StreamExt, future::BoxFuture};
 use headers::HeaderMapExt;
@@ -129,11 +130,9 @@ const MS_ALLPROP_STR: &[&str] = &[
     "Z:Win32LastModifiedTime",
 ];
 
-lazy_static! {
-    static ref ALLPROP: Vec<Element> = init_staticprop(ALLPROP_STR);
-    static ref MS_ALLPROP: Vec<Element> = init_staticprop(MS_ALLPROP_STR);
-    static ref PROPNAME: Vec<Element> = init_staticprop(PROPNAME_STR);
-}
+static ALLPROP: LazyLock<Vec<Element>> = LazyLock::new(|| init_staticprop(ALLPROP_STR));
+static MS_ALLPROP: LazyLock<Vec<Element>> = LazyLock::new(|| init_staticprop(MS_ALLPROP_STR));
+static PROPNAME: LazyLock<Vec<Element>> = LazyLock::new(|| init_staticprop(PROPNAME_STR));
 
 type Emitter = EventWriter<MemBuffer>;
 type Sender = crate::async_stream::Sender<bytes::Bytes, io::Error>;

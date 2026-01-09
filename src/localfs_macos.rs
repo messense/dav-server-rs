@@ -13,7 +13,7 @@ use std::num::NonZeroUsize;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -29,9 +29,7 @@ const DU_CACHE_ENTRIES: usize = 4096;
 const DU_CACHE_MAX_AGE: u64 = 60;
 const DU_CACHE_SLEEP_MS: u64 = 10037;
 
-lazy_static! {
-    static ref DU_CACHE: Arc<DUCache> = Arc::new(DUCache::new(DU_CACHE_ENTRIES));
-}
+static DU_CACHE: LazyLock<DUCache> = LazyLock::new(|| DUCache::new(DU_CACHE_ENTRIES));
 
 static DIR_ID: AtomicUsize = AtomicUsize::new(1);
 

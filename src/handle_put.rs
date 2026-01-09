@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::error::Error as StdError;
 use std::io;
+use std::pin::pin;
 
 use bytes::{Buf, Bytes};
 use headers::HeaderMapExt;
@@ -233,7 +234,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         res.headers_mut()
             .typed_insert(headers::AcceptRanges::bytes());
 
-        pin_utils::pin_mut!(body);
+        let mut body = pin!(body);
 
         // loop, read body, write to file.
         let mut total = 0u64;

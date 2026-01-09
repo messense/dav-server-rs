@@ -8,6 +8,7 @@ use std::task::{Context, Poll};
 use bytes::{Buf, Bytes};
 use futures_util::stream::Stream;
 use http_body::Body as HttpBody;
+use pin_project_lite::pin_project;
 
 use crate::async_stream::AsyncStream;
 
@@ -91,15 +92,14 @@ impl From<AsyncStream<Bytes, io::Error>> for Body {
     }
 }
 
-use pin_project::pin_project;
-
-//
-// A struct that contains a Stream, and implements http_body::Body.
-//
-#[pin_project]
-pub(crate) struct StreamBody<B> {
-    #[pin]
-    body: B,
+pin_project! {
+    //
+    // A struct that contains a Stream, and implements http_body::Body.
+    //
+    pub(crate) struct StreamBody<B> {
+        #[pin]
+        body: B,
+    }
 }
 
 impl<ReqBody, ReqData, ReqError> HttpBody for StreamBody<ReqBody>
