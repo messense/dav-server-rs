@@ -790,6 +790,10 @@ impl DavMetaData for LocalFsMetaData {
     fn is_symlink(&self) -> bool {
         self.0.file_type().is_symlink()
     }
+    #[cfg(feature = "caldav")]
+    fn is_calendar(&self, path: &DavPath) -> bool {
+        crate::caldav::is_path_in_caldav_directory(path)
+    }
 
     #[cfg(unix)]
     fn executable(&self) -> FsResult<bool> {

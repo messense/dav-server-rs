@@ -239,6 +239,10 @@ impl DavMetaData for EmptyMetaData {
     fn created(&self) -> FsResult<SystemTime> {
         self.modified()
     }
+    #[cfg(feature = "caldav")]
+    fn is_calendar(&self, _: &DavPath) -> bool {
+        false
+    }
 }
 
 impl LocalFs {

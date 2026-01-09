@@ -469,6 +469,11 @@ impl DavMetaData for MemFsDirEntry {
     fn is_dir(&self) -> bool {
         self.is_dir
     }
+
+    #[cfg(feature = "caldav")]
+    fn is_calendar(&self, path: &DavPath) -> bool {
+        crate::caldav::is_path_in_caldav_directory(path)
+    }
 }
 
 impl MemFsNode {
@@ -597,8 +602,7 @@ impl TreeExt for Tree {
 // helper
 fn file_name(path: &[u8]) -> Vec<u8> {
     path.split(|&c| c == b'/')
-        .filter(|s| !s.is_empty())
-        .next_back()
+        .rfind(|s| !s.is_empty())
         .unwrap_or(b"")
         .to_vec()
 }
