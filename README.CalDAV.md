@@ -32,10 +32,6 @@ CalDAV support is available as an optional cargo feature:
 dav-server = { version = "0.8", features = ["caldav"] }
 ```
 
-This adds the following dependencies:
-- `icalendar`: For parsing and validating iCalendar data
-- `chrono`: For date/time handling
-
 ## Quick Start
 
 Here's a basic CalDAV server setup:
@@ -44,10 +40,13 @@ Here's a basic CalDAV server setup:
 use dav_server::{DavHandler, fakels::FakeLs, localfs::LocalFs};
 
 let server = DavHandler::builder()
-    .filesystem(LocalFs::new("/calendars", false, false, false))
+    .filesystem(LocalFs::new("/dav_files", false, false, false))
     .locksystem(FakeLs::new())
     .build_handler();
 ```
+## Important Setup Notes
+
+**CalDAV Directory Creation**: The `/calendars` directory (defined in `dav_server::caldav::DEFAULT_CALDAV_DIRECTORY`) must exist before CalDAV operations. `MemFs` and `LocalFs` create it automatically, but custom `GuardedFileSystem` implementations must initialize it during startup.
 
 ## CalDAV Methods
 

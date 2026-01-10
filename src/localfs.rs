@@ -94,6 +94,13 @@ enum Meta {
     Fs(LocalFs),
 }
 
+/// Helper function to create directory on basedir
+#[allow(unused)]
+fn helper_create_directory(basedir: &Path, _new_dir_name: &str) {
+    let new_path = basedir.join(_new_dir_name);
+    std::fs::create_dir_all(&new_path).expect("We expect for the CalDAV feature that the default directory can be created. If this can not be created then your basedir must be wrong.");
+}
+
 // Items from the readdir stream.
 struct LocalFsDirEntry {
     meta: Meta,
@@ -115,8 +122,13 @@ impl LocalFs {
         case_insensitive: bool,
         macos: bool,
     ) -> Box<LocalFs> {
+        let basedir = base.as_ref().to_path_buf();
+
+        #[cfg(feature = "caldav")]
+        helper_create_directory(&basedir, crate::caldav::DEFAULT_CALDAV_NAME);
+
         let inner = LocalFsInner {
-            basedir: base.as_ref().to_path_buf(),
+            basedir,
             public,
             macos,
             case_insensitive,
@@ -159,8 +171,13 @@ impl LocalFs {
         macos: bool,
         fs_access_guard: Option<Box<dyn Fn() -> Box<dyn Any> + Send + Sync + 'static>>,
     ) -> Box<LocalFs> {
+        let basedir = base.as_ref().to_path_buf();
+
+        #[cfg(feature = "caldav")]
+        helper_create_directory(&basedir, crate::caldav::DEFAULT_CALDAV_NAME);
+
         let inner = LocalFsInner {
-            basedir: base.as_ref().to_path_buf(),
+            basedir,
             public,
             macos,
             case_insensitive,

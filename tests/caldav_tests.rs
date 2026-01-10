@@ -50,7 +50,7 @@ mod caldav_tests {
 
         let req = Request::builder()
             .method("MKCALENDAR")
-            .uri("/calendar")
+            .uri("/calendars/my-calendar")
             .body(Body::empty())
             .unwrap();
 
@@ -65,7 +65,7 @@ mod caldav_tests {
         // First create a regular collection
         let req = Request::builder()
             .method("MKCOL")
-            .uri("/calendar")
+            .uri("/calendars/my-calendar")
             .body(Body::empty())
             .unwrap();
         let _ = server.handle(req).await;
@@ -73,7 +73,7 @@ mod caldav_tests {
         // Try to create calendar collection on existing path
         let req = Request::builder()
             .method("MKCALENDAR")
-            .uri("/calendar")
+            .uri("/calendars/my-calendar")
             .body(Body::empty())
             .unwrap();
 
@@ -88,7 +88,7 @@ mod caldav_tests {
         // Create a calendar collection first
         let req = Request::builder()
             .method("MKCALENDAR")
-            .uri("/calendar")
+            .uri("/calendars/my-calendar")
             .body(Body::empty())
             .unwrap();
         let _ = server.handle(req).await;
@@ -105,7 +105,7 @@ mod caldav_tests {
 
         let req = Request::builder()
             .method("PROPFIND")
-            .uri("/calendar")
+            .uri("/calendars/my-calendar")
             .header("Depth", "0")
             .body(Body::from(propfind_body))
             .unwrap();
@@ -126,10 +126,11 @@ mod caldav_tests {
         // Create a calendar collection first
         let req = Request::builder()
             .method("MKCALENDAR")
-            .uri("/calendar")
+            .uri("/calendars/my-calendar")
             .body(Body::empty())
             .unwrap();
-        let _ = server.handle(req).await;
+        let resp = server.handle(req).await;
+        assert!(resp.status().is_success());
 
         // PUT a calendar event
         let ical_data = r#"BEGIN:VCALENDAR
@@ -146,7 +147,7 @@ END:VCALENDAR"#;
 
         let req = Request::builder()
             .method(Method::PUT)
-            .uri("/calendar/event.ics")
+            .uri("/calendars/my-calendar/event.ics")
             .header("Content-Type", "text/calendar")
             .body(Body::from(ical_data))
             .unwrap();
@@ -162,7 +163,7 @@ END:VCALENDAR"#;
         // Create a calendar collection
         let req = Request::builder()
             .method("MKCALENDAR")
-            .uri("/calendar")
+            .uri("/calendars/my-calendar")
             .body(Body::empty())
             .unwrap();
         let _ = server.handle(req).await;
@@ -181,7 +182,7 @@ END:VCALENDAR"#;
 
         let req = Request::builder()
             .method(Method::PUT)
-            .uri("/calendar/event.ics")
+            .uri("/calendars/my-calendar/event.ics")
             .header("Content-Type", "text/calendar")
             .body(Body::from(ical_data))
             .unwrap();
@@ -202,7 +203,7 @@ END:VCALENDAR"#;
 
         let req = Request::builder()
             .method("REPORT")
-            .uri("/calendar")
+            .uri("/calendars/my-calendar")
             .header("Depth", "1")
             .body(Body::from(report_body))
             .unwrap();
@@ -222,7 +223,7 @@ END:VCALENDAR"#;
         // Create a calendar collection
         let req = Request::builder()
             .method("MKCALENDAR")
-            .uri("/calendar")
+            .uri("/calendars/my-calendar")
             .body(Body::empty())
             .unwrap();
         let _ = server.handle(req).await;
@@ -235,13 +236,33 @@ BEGIN:VEVENT
 UID:test-event-123@example.com
 DTSTART:20240101T120000Z
 DTEND:20240101T130000Z
-SUMMARY:Test Event
+SUMMARY:Test Event0001
 END:VEVENT
 END:VCALENDAR"#;
 
         let req = Request::builder()
             .method(Method::PUT)
-            .uri("/calendar/event.ics")
+            .uri("/calendars/my-calendar/event1.ics")
+            .header("Content-Type", "text/calendar")
+            .body(Body::from(ical_data))
+            .unwrap();
+        let _ = server.handle(req).await;
+
+        // Add a calendar event
+        let ical_data = r#"BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test//EN
+BEGIN:VEVENT
+UID:test-event-123@example.com
+DTSTART:20250101T120000Z
+DTEND:20250101T130000Z
+SUMMARY:Test Event2222
+END:VEVENT
+END:VCALENDAR"#;
+
+        let req = Request::builder()
+            .method(Method::PUT)
+            .uri("/calendars/my-calendar/event2.ics")
             .header("Content-Type", "text/calendar")
             .body(Body::from(ical_data))
             .unwrap();
@@ -253,12 +274,13 @@ END:VCALENDAR"#;
   <D:prop>
     <C:calendar-data/>
   </D:prop>
-  <D:href>/calendar/event.ics</D:href>
+  <D:href>/calendars/my-calendar/event1.ics</D:href>
+  <D:href>/calendars/my-calendar/event2.ics</D:href>
 </C:calendar-multiget>"#;
 
         let req = Request::builder()
             .method("REPORT")
-            .uri("/calendar")
+            .uri("/calendars/my-calendar")
             .body(Body::from(report_body))
             .unwrap();
 
@@ -266,8 +288,21 @@ END:VCALENDAR"#;
         assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
 
         let body_str = resp_to_string(resp).await;
-        assert!(body_str.contains("calendar-data"));
-        assert!(body_str.contains("Test Event"));
+        assert!(
+            body_str.contains("calendar-data"),
+            "Response body missing 'calendar-data': {}",
+            body_str
+        );
+        assert!(
+            body_str.contains("Test Event0001"),
+            "Response body missing 'Test Event0001': {}",
+            body_str
+        );
+        assert!(
+            body_str.contains("Test Event2222"),
+            "Response body missing 'Test Event2222': {}",
+            body_str
+        );
     }
 
     #[test]
@@ -357,7 +392,7 @@ mod caldav_disabled_tests {
         // Test MKCALENDAR method
         let req = Request::builder()
             .method("MKCALENDAR")
-            .uri("/calendar")
+            .uri("/calendars/my-calendar")
             .body(Body::empty())
             .unwrap();
         let resp = server.handle(req).await;

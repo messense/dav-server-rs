@@ -32,6 +32,7 @@ pub const CALDAV_PROPERTIES: &[&str] = &[
 ];
 
 /// The default caldav directory, which is beeing used for the preprovided filesystems. Path is without trailing slash
+pub const DEFAULT_CALDAV_NAME: &str = "calendars";
 pub const DEFAULT_CALDAV_DIRECTORY: &str = "/calendars";
 pub const DEFAULT_CALDAV_DIRECTORY_ENDSLASH: &str = "/calendars/";
 
@@ -140,8 +141,10 @@ pub struct TextMatch {
 
 #[derive(Debug, Clone)]
 pub struct TimeRange {
-    pub start: Option<String>, // ISO 8601 format
-    pub end: Option<String>,   // ISO 8601 format
+    /// ISO 8601 format
+    pub start: Option<String>,
+    /// ISO 8601 format
+    pub end: Option<String>,
 }
 
 /// CalDAV REPORT request types
@@ -186,19 +189,20 @@ pub fn create_supported_calendar_data() -> Element {
     elem
 }
 
-pub fn create_calendar_home_set(path: &str) -> Element {
+pub fn create_calendar_home_set(prefix: &str, path: &str) -> Element {
     let mut elem = Element::new("C:calendar-home-set");
     elem.namespace = Some(NS_CALDAV_URI.to_string());
 
     let mut href = Element::new("D:href");
     href.namespace = Some("DAV:".to_string());
-    href.children.push(xmltree::XMLNode::Text(path.to_string()));
+    href.children
+        .push(xmltree::XMLNode::Text(format!("{prefix}{path}")));
 
     elem.children.push(xmltree::XMLNode::Element(href));
     elem
 }
 
-/// Check if a path is within the default CalDAV directory.
+/// Check if a path is within the default CalDAV directory. Expects path without prefix.
 pub(crate) fn is_path_in_caldav_directory(dav_path: &DavPath) -> bool {
     let path_string = dav_path.to_string();
     path_string.len() > DEFAULT_CALDAV_DIRECTORY_ENDSLASH.len()
@@ -214,8 +218,12 @@ pub fn is_calendar_collection(resource_type: &[Element]) -> bool {
 
 /// Check if content appears to be iCalendar data
 pub fn is_calendar_data(content: &[u8]) -> bool {
-    content.starts_with(b"BEGIN:VCALENDAR")
-        && (content.ends_with(b"END:VCALENDAR") || content.ends_with(b"END:VCALENDAR\n"))
+    if !content.starts_with(b"BEGIN:VCALENDAR") {
+        return false;
+    }
+
+    let trimmed = content.trim_ascii_end();
+    trimmed.ends_with(b"END:VCALENDAR")
 }
 
 /// Validate iCalendar data using the icalendar crate

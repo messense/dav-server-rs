@@ -142,7 +142,7 @@ struct StatusElement {
     element: Element,
 }
 
-struct PropWriter<C> {
+pub(crate) struct PropWriter<C> {
     emitter: Emitter,
     tx: Option<Sender>,
     name: String,
@@ -256,6 +256,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             self.fs.clone(),
             self.ls.as_ref(),
             self.credentials.clone(),
+            #[cfg(feature = "caldav")]
+            &path,
         )?;
 
         *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
@@ -557,6 +559,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             self.fs.clone(),
             None,
             self.credentials,
+            #[cfg(feature = "caldav")]
+            &path,
         )?;
         *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
             pw.set_tx(tx);
@@ -571,6 +575,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
 impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
     #[allow(clippy::borrowed_box)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         req: &Request<()>,
         res: &mut Response<Body>,
@@ -579,6 +584,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         fs: Box<dyn GuardedFileSystem<C>>,
         ls: Option<&Box<dyn DavLockSystem>>,
         credentials: C,
+        #[cfg(feature = "caldav")] dav_path: &DavPath,
     ) -> DavResult<Self> {
         let contenttype = "application/xml; charset=utf-8".parse().unwrap();
         res.headers_mut().insert("content-type", contenttype);
@@ -662,7 +668,11 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                 ev = ev.ns("oc", NS_OWNCLOUD_URI);
             }
             #[cfg(feature = "caldav")]
-            if c || req.uri().path().starts_with(DEFAULT_CALDAV_DIRECTORY) {
+            if c || req.uri().path().starts_with(&format!(
+                "{}{}",
+                dav_path.prefix(),
+                DEFAULT_CALDAV_DIRECTORY
+            )) {
                 ev = ev.ns("C", NS_CALDAV_URI);
             }
         }
@@ -1043,7 +1053,8 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             if path_string == DEFAULT_CALDAV_DIRECTORY
                 || path_string == DEFAULT_CALDAV_DIRECTORY_ENDSLASH
             {
-                let elem = create_calendar_home_set(DEFAULT_CALDAV_DIRECTORY_ENDSLASH);
+                let elem =
+                    create_calendar_home_set(path.prefix(), DEFAULT_CALDAV_DIRECTORY_ENDSLASH);
                 add_sc_elem(&mut props, StatusCode::OK, elem);
             }
         }
@@ -1101,6 +1112,65 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
     pub async fn close(&mut self) -> DavResult<()> {
         let _ = self.emitter.write(XmlWEvent::end_element());
         self.flush().await
+    }
+
+    #[cfg(feature = "caldav")]
+    pub(crate) fn write_calendar_data_response(
+        &mut self,
+        href: &DavPath,
+        etag: &str,
+        calendar_data: &str,
+    ) -> DavResult<()> {
+        self.emitter.write(XmlWEvent::start_element("D:response"))?;
+
+        let p = href.as_url_string();
+        Element::new2("D:href")
+            .text(p)
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
+        self.emitter.write(XmlWEvent::start_element("D:prop"))?;
+
+        // Write calendar-data element with content
+        let mut elem = Element::new2("C:calendar-data").ns("C", NS_CALDAV_URI);
+        elem.children.push(XMLNode::Text(calendar_data.to_string()));
+        elem.write_ev(&mut self.emitter)?;
+
+        // Write getetag element
+        Element::new2("D:getetag")
+            .text(etag)
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::end_element())?; // D:prop
+
+        Element::new2("D:status")
+            .text("HTTP/1.1 200 OK".to_string())
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::end_element())?; // D:propstat
+        self.emitter.write(XmlWEvent::end_element())?; // D:response
+
+        Ok(())
+    }
+
+    #[cfg(feature = "caldav")]
+    pub(crate) fn write_calendar_not_found_response(&mut self, href: &str) -> DavResult<()> {
+        self.emitter.write(XmlWEvent::start_element("D:response"))?;
+
+        Element::new2("D:href")
+            .text(href.to_string())
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
+
+        Element::new2("D:status")
+            .text("HTTP/1.1 404 Not Found".to_string())
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::end_element())?; // D:propstat
+        self.emitter.write(XmlWEvent::end_element())?; // D:response
+
+        Ok(())
     }
 }
 
