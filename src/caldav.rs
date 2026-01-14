@@ -31,7 +31,7 @@ pub const CALDAV_PROPERTIES: &[&str] = &[
     "C:schedule-outbox-URL",
 ];
 
-/// The default caldav directory, which is beeing used for the preprovided filesystems. Path is without trailing slash
+/// The default caldav directory, which is being used for the preprovided filesystems. Path is without trailing slash
 pub const DEFAULT_CALDAV_NAME: &str = "calendars";
 pub const DEFAULT_CALDAV_DIRECTORY: &str = "/calendars";
 pub const DEFAULT_CALDAV_DIRECTORY_ENDSLASH: &str = "/calendars/";
