@@ -98,7 +98,9 @@ enum Meta {
 #[allow(unused)]
 fn helper_create_directory(basedir: &Path, _new_dir_name: &str) {
     let new_path = basedir.join(_new_dir_name);
-    std::fs::create_dir_all(&new_path).expect("We expect for the CalDAV feature that the default directory can be created. If this can not be created then your basedir must be wrong.");
+    std::fs::create_dir_all(&new_path).expect(
+        "Failed to create default CalDAV directory; verify that 'basedir' is correct.",
+    );
 }
 
 // Items from the readdir stream.
