@@ -329,8 +329,6 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         let mut results = Vec::new();
 
         let items: Vec<_> = stream.collect().await;
-        let mut missing_hrefs: Vec<String> = Vec::new();
-
         for item in items {
             match item {
                 Ok(dirent) => {
@@ -357,16 +355,13 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                             }
                         }
                     }
-
-                    // Not found
-                    missing_hrefs.push(item_path.to_string());
                 }
                 Err(_) => continue,
             }
         }
 
         // Generate multistatus response
-        self.generate_calendar_multiget_response(results, missing_hrefs)
+        self.generate_calendar_multiget_response(results, Vec::new())
             .await
     }
 

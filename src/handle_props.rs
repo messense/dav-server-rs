@@ -905,25 +905,18 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             });
                         }
                         "calendar-description" => {
-                            // Try to get from properties first
                             if let Ok(props) =
                                 self.fs.get_props(path, docontent, &self.credentials).await
                             {
                                 for prop_item in props {
-                                    if prop_item.name.contains("calendar-description")
-                                        && prop_item.xml.is_some()
-                                    {
-                                        if let Some(elem) = prop_item.xml {
-                                            return Ok(StatusElement {
-                                                status: StatusCode::OK,
-                                                element: elem,
-                                            });
-                                        }
+                                    if prop_item.name.contains("calendar-description") {
+                                        return Ok(StatusElement {
+                                            status: StatusCode::OK,
+                                            element: davprop_to_element(prop_item),
+                                        });
                                     }
                                 }
                             }
-                            // Default description
-                            return self.build_elem(docontent, pfx, prop, "Calendar Collection");
                         }
                         "calendar-timezone" => {
                             // Default to UTC if not set

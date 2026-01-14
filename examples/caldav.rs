@@ -50,7 +50,9 @@ async fn main() {
         addr, DEFAULT_CALDAV_DIRECTORY
     );
     println!();
-    println!("NOTE: This example stores data in a temporary directory (/tmp). Data may be lost when the server stops or when temporary files are cleaned.");
+    println!(
+        "NOTE: This example stores data in a temporary directory (/tmp). Data may be lost when the server stops or when temporary files are cleaned."
+    );
     println!();
     println!("To create a calendar collection, use:");
     println!(
