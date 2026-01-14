@@ -909,15 +909,18 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             if let Ok(props) =
                                 self.fs.get_props(path, docontent, &self.credentials).await
                             {
-                                let mut not_found = false;
                                 for prop_item in props {
                                     if prop_item.name.contains("calendar-description")
                                         && prop_item.xml.is_some()
                                     {
-                                        not_found = true;
+                                        if let Some(elem) = prop_item.xml {
+                                            return Ok(StatusElement {
+                                                status: StatusCode::OK,
+                                                element: elem,
+                                            });
+                                        }
                                     }
                                 }
-                                if not_found {}
                             }
                             // Default description
                             return self.build_elem(docontent, pfx, prop, "Calendar Collection");
