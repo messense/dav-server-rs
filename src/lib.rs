@@ -191,12 +191,17 @@ extern crate log;
 
 mod async_stream;
 mod conditional;
+#[cfg(any(feature = "caldav", feature = "carddav"))]
+pub mod dav_filters;
 mod davhandler;
 mod davheaders;
 mod errors;
 #[cfg(any(docsrs, feature = "caldav"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "caldav")))]
 mod handle_caldav;
+#[cfg(any(docsrs, feature = "carddav"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "carddav")))]
+mod handle_carddav;
 mod handle_copymove;
 mod handle_delete;
 mod handle_gethead;
@@ -221,6 +226,9 @@ pub mod body;
 #[cfg(any(docsrs, feature = "caldav"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "caldav")))]
 pub mod caldav;
+#[cfg(any(docsrs, feature = "carddav"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "carddav")))]
+pub mod carddav;
 pub mod davpath;
 pub mod fakels;
 pub mod fs;

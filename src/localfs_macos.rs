@@ -241,6 +241,10 @@ impl DavMetaData for EmptyMetaData {
     fn is_calendar(&self, _: &DavPath) -> bool {
         false
     }
+    #[cfg(feature = "carddav")]
+    fn is_addressbook(&self, _: &DavPath) -> bool {
+        false
+    }
 }
 
 impl LocalFs {

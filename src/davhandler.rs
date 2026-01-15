@@ -527,7 +527,8 @@ where
             | DavMethod::PropPatch
             | DavMethod::Lock
             | DavMethod::Report
-            | DavMethod::MkCalendar => {}
+            | DavMethod::MkCalendar
+            | DavMethod::MkAddressbook => {}
             _ => {
                 if !body_data.is_empty() {
                     return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into());
@@ -548,14 +549,18 @@ where
             DavMethod::Head | DavMethod::Get => self.handle_get(&req).await,
             DavMethod::Copy | DavMethod::Move => self.handle_copymove(&req, method).await,
             DavMethod::Put | DavMethod::Patch => self.handle_put(&req, body_strm.unwrap()).await,
-            #[cfg(feature = "caldav")]
+            #[cfg(any(feature = "caldav", feature = "carddav"))]
             DavMethod::Report => self.handle_report(&req, &body_data).await,
             #[cfg(feature = "caldav")]
             DavMethod::MkCalendar => self.handle_mkcalendar(&req, &body_data).await,
+            #[cfg(feature = "carddav")]
+            DavMethod::MkAddressbook => self.handle_mkaddressbook(&req, &body_data).await,
+            #[cfg(not(any(feature = "caldav", feature = "carddav")))]
+            DavMethod::Report => Err(DavError::StatusClose(StatusCode::NOT_IMPLEMENTED)),
             #[cfg(not(feature = "caldav"))]
-            DavMethod::Report | DavMethod::MkCalendar => {
-                Err(DavError::StatusClose(StatusCode::NOT_IMPLEMENTED))
-            }
+            DavMethod::MkCalendar => Err(DavError::StatusClose(StatusCode::NOT_IMPLEMENTED)),
+            #[cfg(not(feature = "carddav"))]
+            DavMethod::MkAddressbook => Err(DavError::StatusClose(StatusCode::NOT_IMPLEMENTED)),
         }
     }
 }

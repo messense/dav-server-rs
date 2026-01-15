@@ -14,9 +14,13 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // We could simply not report webdav level 2 support if self.allow doesn't
         // contain LOCK/UNLOCK. However we do advertise support, since there might
         // be LOCK/UNLOCK support in another part of the URL space.
-        #[cfg(feature = "caldav")]
+        #[cfg(all(feature = "caldav", feature = "carddav"))]
+        let dav = "1,2,3,sabredav-partialupdate,calendar-access,addressbook";
+        #[cfg(all(feature = "caldav", not(feature = "carddav")))]
         let dav = "1,2,3,sabredav-partialupdate,calendar-access";
-        #[cfg(not(feature = "caldav"))]
+        #[cfg(all(feature = "carddav", not(feature = "caldav")))]
+        let dav = "1,2,3,sabredav-partialupdate,addressbook";
+        #[cfg(not(any(feature = "caldav", feature = "carddav")))]
         let dav = "1,2,3,sabredav-partialupdate";
         h.insert("DAV", dav.parse().unwrap());
         h.insert("MS-Author-Via", "DAV".parse().unwrap());
@@ -49,6 +53,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             mm(&mut v, "MKCOL", DavMethod::MkCol);
             mm(&mut v, "PUT", DavMethod::Put);
             mm(&mut v, "LOCK", DavMethod::Lock);
+            #[cfg(feature = "caldav")]
+            mm(&mut v, "MKCALENDAR", DavMethod::MkCalendar);
+            #[cfg(feature = "carddav")]
+            mm(&mut v, "MKADDRESSBOOK", DavMethod::MkAddressbook);
         } else {
             if is_file || is_star {
                 mm(&mut v, "HEAD", DavMethod::Head);
@@ -65,12 +73,15 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             }
             mm(&mut v, "LOCK", DavMethod::Lock);
             mm(&mut v, "UNLOCK", DavMethod::Unlock);
+            #[cfg(any(feature = "caldav", feature = "carddav"))]
+            mm(&mut v, "REPORT", DavMethod::Report);
             #[cfg(feature = "caldav")]
-            {
-                mm(&mut v, "REPORT", DavMethod::Report);
-                if is_unmapped {
-                    mm(&mut v, "MKCALENDAR", DavMethod::MkCalendar);
-                }
+            if is_unmapped {
+                mm(&mut v, "MKCALENDAR", DavMethod::MkCalendar);
+            }
+            #[cfg(feature = "carddav")]
+            if is_unmapped {
+                mm(&mut v, "MKADDRESSBOOK", DavMethod::MkAddressbook);
             }
         }
 

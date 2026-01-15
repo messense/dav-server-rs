@@ -32,6 +32,8 @@ use crate::{DavInner, DavResult};
 
 #[cfg(feature = "caldav")]
 use crate::caldav::*;
+#[cfg(feature = "carddav")]
+use crate::carddav::*;
 
 const NS_APACHE_URI: &str = "http://apache.org/dav/props/";
 const NS_DAV_URI: &str = "DAV:";
@@ -40,7 +42,34 @@ const NS_NEXTCLOUD_URI: &str = "http://nextcloud.org/ns";
 const NS_OWNCLOUD_URI: &str = "http://owncloud.org/ns";
 
 // list returned by PROPFIND <propname/>.
-#[cfg(feature = "caldav")]
+#[cfg(all(feature = "caldav", feature = "carddav"))]
+const PROPNAME_STR: &[&str] = &[
+    "D:creationdate",
+    "D:displayname",
+    "D:getcontentlanguage",
+    "D:getcontentlength",
+    "D:getcontenttype",
+    "D:getetag",
+    "D:getlastmodified",
+    "D:lockdiscovery",
+    "D:resourcetype",
+    "D:supportedlock",
+    "D:quota-available-bytes",
+    "D:quota-used-bytes",
+    "A:executable",
+    "Z:Win32LastAccessTime",
+    "C:calendar-description",
+    "C:calendar-timezone",
+    "C:supported-calendar-component-set",
+    "C:supported-calendar-data",
+    "C:calendar-home-set",
+    "CARD:addressbook-description",
+    "CARD:supported-address-data",
+    "CARD:addressbook-home-set",
+    "CARD:max-resource-size",
+];
+
+#[cfg(all(feature = "caldav", not(feature = "carddav")))]
 const PROPNAME_STR: &[&str] = &[
     "D:creationdate",
     "D:displayname",
@@ -63,7 +92,29 @@ const PROPNAME_STR: &[&str] = &[
     "C:calendar-home-set",
 ];
 
-#[cfg(not(feature = "caldav"))]
+#[cfg(all(feature = "carddav", not(feature = "caldav")))]
+const PROPNAME_STR: &[&str] = &[
+    "D:creationdate",
+    "D:displayname",
+    "D:getcontentlanguage",
+    "D:getcontentlength",
+    "D:getcontenttype",
+    "D:getetag",
+    "D:getlastmodified",
+    "D:lockdiscovery",
+    "D:resourcetype",
+    "D:supportedlock",
+    "D:quota-available-bytes",
+    "D:quota-used-bytes",
+    "A:executable",
+    "Z:Win32LastAccessTime",
+    "CARD:addressbook-description",
+    "CARD:supported-address-data",
+    "CARD:addressbook-home-set",
+    "CARD:max-resource-size",
+];
+
+#[cfg(not(any(feature = "caldav", feature = "carddav")))]
 const PROPNAME_STR: &[&str] = &[
     "D:creationdate",
     "D:displayname",
@@ -82,7 +133,24 @@ const PROPNAME_STR: &[&str] = &[
 ];
 
 // properties returned by PROPFIND <allprop/> or empty body.
-#[cfg(feature = "caldav")]
+#[cfg(all(feature = "caldav", feature = "carddav"))]
+const ALLPROP_STR: &[&str] = &[
+    "D:creationdate",
+    "D:displayname",
+    "D:getcontentlanguage",
+    "D:getcontentlength",
+    "D:getcontenttype",
+    "D:getetag",
+    "D:getlastmodified",
+    "D:lockdiscovery",
+    "D:resourcetype",
+    "D:supportedlock",
+    "C:supported-calendar-component-set",
+    "C:supported-calendar-data",
+    "CARD:supported-address-data",
+];
+
+#[cfg(all(feature = "caldav", not(feature = "carddav")))]
 const ALLPROP_STR: &[&str] = &[
     "D:creationdate",
     "D:displayname",
@@ -98,7 +166,22 @@ const ALLPROP_STR: &[&str] = &[
     "C:supported-calendar-data",
 ];
 
-#[cfg(not(feature = "caldav"))]
+#[cfg(all(feature = "carddav", not(feature = "caldav")))]
+const ALLPROP_STR: &[&str] = &[
+    "D:creationdate",
+    "D:displayname",
+    "D:getcontentlanguage",
+    "D:getcontentlength",
+    "D:getcontenttype",
+    "D:getetag",
+    "D:getlastmodified",
+    "D:lockdiscovery",
+    "D:resourcetype",
+    "D:supportedlock",
+    "CARD:supported-address-data",
+];
+
+#[cfg(not(any(feature = "caldav", feature = "carddav")))]
 const ALLPROP_STR: &[&str] = &[
     "D:creationdate",
     "D:displayname",
@@ -256,7 +339,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             self.fs.clone(),
             self.ls.as_ref(),
             self.credentials.clone(),
-            #[cfg(feature = "caldav")]
+            #[cfg(any(feature = "caldav", feature = "carddav"))]
             &path,
         )?;
 
@@ -559,7 +642,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             self.fs.clone(),
             None,
             self.credentials,
-            #[cfg(feature = "caldav")]
+            #[cfg(any(feature = "caldav", feature = "carddav"))]
             &path,
         )?;
         *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
@@ -584,7 +667,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         fs: Box<dyn GuardedFileSystem<C>>,
         ls: Option<&Box<dyn DavLockSystem>>,
         credentials: C,
-        #[cfg(feature = "caldav")] dav_path: &DavPath,
+        #[cfg(any(feature = "caldav", feature = "carddav"))] dav_path: &DavPath,
     ) -> DavResult<Self> {
         let contenttype = "application/xml; charset=utf-8".parse().unwrap();
         res.headers_mut().insert("content-type", contenttype);
@@ -643,6 +726,8 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             let mut oc = false; // OwnCloud
             #[cfg(feature = "caldav")]
             let mut c = false; // CalDAV
+            #[cfg(feature = "carddav")]
+            let mut card = false; // CardDAV
 
             for prop in &props {
                 match prop.namespace.as_deref() {
@@ -652,6 +737,8 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                     Some(NS_OWNCLOUD_URI) => oc = true,
                     #[cfg(feature = "caldav")]
                     Some(NS_CALDAV_URI) => c = true,
+                    #[cfg(feature = "carddav")]
+                    Some(NS_CARDDAV_URI) => card = true,
                     _ => {}
                 }
             }
@@ -674,6 +761,16 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                 DEFAULT_CALDAV_DIRECTORY
             )) {
                 ev = ev.ns("C", NS_CALDAV_URI);
+            }
+            #[cfg(feature = "carddav")]
+            if card
+                || req.uri().path().starts_with(&format!(
+                    "{}{}",
+                    dav_path.prefix(),
+                    DEFAULT_CARDDAV_DIRECTORY
+                ))
+            {
+                ev = ev.ns("CARD", NS_CARDDAV_URI);
             }
         }
         emitter.write(ev)?;
@@ -831,6 +928,12 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                                 let calendar = Element::new2("C:calendar");
                                 elem.children.push(XMLNode::Element(calendar));
                             }
+
+                            #[cfg(feature = "carddav")]
+                            if meta.is_addressbook(path) {
+                                let addressbook = Element::new2("CARD:addressbook");
+                                elem.children.push(XMLNode::Element(addressbook));
+                            }
                         }
                         return Ok(StatusElement {
                             status: StatusCode::OK,
@@ -932,6 +1035,41 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         }
                         "max-date-time" => {
                             return self.build_elem(docontent, pfx, prop, "20991231T235959Z");
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            #[cfg(feature = "carddav")]
+            Some(NS_CARDDAV_URI) => {
+                pfx = "CARD";
+
+                if meta.is_addressbook(path) {
+                    match prop.name.as_str() {
+                        "supported-address-data" => {
+                            let elem = create_supported_address_data();
+                            return Ok(StatusElement {
+                                status: StatusCode::OK,
+                                element: elem,
+                            });
+                        }
+                        "addressbook-description" => {
+                            if let Ok(props) =
+                                self.fs.get_props(path, docontent, &self.credentials).await
+                            {
+                                for prop_item in props {
+                                    if prop_item.name.contains("addressbook-description") {
+                                        return Ok(StatusElement {
+                                            status: StatusCode::OK,
+                                            element: davprop_to_element(prop_item),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        "max-resource-size" => {
+                            let size = DEFAULT_MAX_RESOURCE_SIZE.to_string();
+                            return self.build_elem(docontent, pfx, prop, size);
                         }
                         _ => {}
                     }
@@ -1055,6 +1193,18 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             }
         }
 
+        #[cfg(feature = "carddav")]
+        {
+            let path_string = path.to_string();
+            if path_string == DEFAULT_CARDDAV_DIRECTORY
+                || path_string == DEFAULT_CARDDAV_DIRECTORY_ENDSLASH
+            {
+                let elem =
+                    create_addressbook_home_set(path.prefix(), DEFAULT_CARDDAV_DIRECTORY_ENDSLASH);
+                add_sc_elem(&mut props, StatusCode::OK, elem);
+            }
+        }
+
         // and list props of the filesystem driver if it supports DAV properties
         if self.fs.have_props(path, &self.credentials).await
             && let Ok(v) = self.fs.get_props(path, true, &self.credentials).await
@@ -1151,6 +1301,65 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
 
     #[cfg(feature = "caldav")]
     pub(crate) fn write_calendar_not_found_response(&mut self, href: &str) -> DavResult<()> {
+        self.emitter.write(XmlWEvent::start_element("D:response"))?;
+
+        Element::new2("D:href")
+            .text(href.to_string())
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
+
+        Element::new2("D:status")
+            .text("HTTP/1.1 404 Not Found".to_string())
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::end_element())?; // D:propstat
+        self.emitter.write(XmlWEvent::end_element())?; // D:response
+
+        Ok(())
+    }
+
+    #[cfg(feature = "carddav")]
+    pub(crate) fn write_vcard_data_response(
+        &mut self,
+        href: &DavPath,
+        etag: &str,
+        vcard_data: &str,
+    ) -> DavResult<()> {
+        self.emitter.write(XmlWEvent::start_element("D:response"))?;
+
+        let p = href.as_url_string();
+        Element::new2("D:href")
+            .text(p)
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
+        self.emitter.write(XmlWEvent::start_element("D:prop"))?;
+
+        // Write address-data element with content
+        let mut elem = Element::new2("CARD:address-data").ns("CARD", NS_CARDDAV_URI);
+        elem.children.push(XMLNode::Text(vcard_data.to_string()));
+        elem.write_ev(&mut self.emitter)?;
+
+        // Write getetag element
+        Element::new2("D:getetag")
+            .text(etag)
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::end_element())?; // D:prop
+
+        Element::new2("D:status")
+            .text("HTTP/1.1 200 OK".to_string())
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::end_element())?; // D:propstat
+        self.emitter.write(XmlWEvent::end_element())?; // D:response
+
+        Ok(())
+    }
+
+    #[cfg(feature = "carddav")]
+    pub(crate) fn write_vcard_not_found_response(&mut self, href: &str) -> DavResult<()> {
         self.emitter.write(XmlWEvent::start_element("D:response"))?;
 
         Element::new2("D:href")
