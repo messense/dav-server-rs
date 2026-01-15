@@ -8,6 +8,8 @@
 use icalendar::Calendar;
 use xmltree::Element;
 
+use crate::davpath::DavPath;
+
 // CalDAV XML namespaces
 pub const NS_CALDAV_URI: &str = "urn:ietf:params:xml:ns:caldav";
 pub const NS_CALENDARSERVER_URI: &str = "http://calendarserver.org/ns/";
@@ -28,6 +30,11 @@ pub const CALDAV_PROPERTIES: &[&str] = &[
     "C:schedule-inbox-URL",
     "C:schedule-outbox-URL",
 ];
+
+/// The default caldav directory, which is being used for the preprovided filesystems. Path is without trailing slash
+pub const DEFAULT_CALDAV_NAME: &str = "calendars";
+pub const DEFAULT_CALDAV_DIRECTORY: &str = "/calendars";
+pub const DEFAULT_CALDAV_DIRECTORY_ENDSLASH: &str = "/calendars/";
 
 /// CalDAV resource types
 #[derive(Debug, Clone, PartialEq)]
@@ -134,8 +141,10 @@ pub struct TextMatch {
 
 #[derive(Debug, Clone)]
 pub struct TimeRange {
-    pub start: Option<String>, // ISO 8601 format
-    pub end: Option<String>,   // ISO 8601 format
+    /// ISO 8601 format
+    pub start: Option<String>,
+    /// ISO 8601 format
+    pub end: Option<String>,
 }
 
 /// CalDAV REPORT request types
@@ -148,11 +157,11 @@ pub enum CalDavReportType {
 
 /// Helper functions for CalDAV XML generation
 pub fn create_supported_calendar_component_set(components: &[CalendarComponentType]) -> Element {
-    let mut elem = Element::new("supported-calendar-component-set");
+    let mut elem = Element::new("C:supported-calendar-component-set");
     elem.namespace = Some(NS_CALDAV_URI.to_string());
 
     for comp in components {
-        let mut comp_elem = Element::new("comp");
+        let mut comp_elem = Element::new("C:comp");
         comp_elem.namespace = Some(NS_CALDAV_URI.to_string());
         comp_elem
             .attributes
@@ -164,10 +173,10 @@ pub fn create_supported_calendar_component_set(components: &[CalendarComponentTy
 }
 
 pub fn create_supported_calendar_data() -> Element {
-    let mut elem = Element::new("supported-calendar-data");
+    let mut elem = Element::new("C:supported-calendar-data");
     elem.namespace = Some(NS_CALDAV_URI.to_string());
 
-    let mut calendar_data = Element::new("calendar-data");
+    let mut calendar_data = Element::new("C:calendar-data");
     calendar_data.namespace = Some(NS_CALDAV_URI.to_string());
     calendar_data
         .attributes
@@ -180,16 +189,24 @@ pub fn create_supported_calendar_data() -> Element {
     elem
 }
 
-pub fn create_calendar_home_set(path: &str) -> Element {
-    let mut elem = Element::new("calendar-home-set");
+pub fn create_calendar_home_set(prefix: &str, path: &str) -> Element {
+    let mut elem = Element::new("C:calendar-home-set");
     elem.namespace = Some(NS_CALDAV_URI.to_string());
 
-    let mut href = Element::new("href");
+    let mut href = Element::new("D:href");
     href.namespace = Some("DAV:".to_string());
-    href.children.push(xmltree::XMLNode::Text(path.to_string()));
+    href.children
+        .push(xmltree::XMLNode::Text(format!("{prefix}{path}")));
 
     elem.children.push(xmltree::XMLNode::Element(href));
     elem
+}
+
+/// Check if a path is within the default CalDAV directory. Expects path without prefix.
+pub(crate) fn is_path_in_caldav_directory(dav_path: &DavPath) -> bool {
+    let path_string = dav_path.to_string();
+    path_string.len() > DEFAULT_CALDAV_DIRECTORY_ENDSLASH.len()
+        && path_string.starts_with(DEFAULT_CALDAV_DIRECTORY_ENDSLASH)
 }
 
 /// Check if a resource is a calendar collection based on resource type
@@ -201,22 +218,19 @@ pub fn is_calendar_collection(resource_type: &[Element]) -> bool {
 
 /// Check if content appears to be iCalendar data
 pub fn is_calendar_data(content: &[u8]) -> bool {
-    content.starts_with(b"BEGIN:VCALENDAR")
-        && (content.ends_with(b"END:VCALENDAR") || content.ends_with(b"END:VCALENDAR\n"))
+    if !content.starts_with(b"BEGIN:VCALENDAR") {
+        return false;
+    }
+
+    let trimmed = content.trim_ascii_end();
+    trimmed.ends_with(b"END:VCALENDAR")
 }
 
-#[cfg(feature = "caldav")]
 /// Validate iCalendar data using the icalendar crate
 pub fn validate_calendar_data(content: &str) -> Result<Calendar, String> {
     content
         .parse::<Calendar>()
         .map_err(|e| format!("Invalid iCalendar data: {}", e))
-}
-
-#[cfg(not(feature = "caldav"))]
-/// Stub implementation when caldav feature is disabled
-pub fn validate_calendar_data(_content: &str) -> Result<(), String> {
-    Err("CalDAV feature not enabled".to_string())
 }
 
 /// Extract the UID from calendar data
@@ -232,10 +246,10 @@ pub fn extract_calendar_uid(content: &str) -> Option<String> {
 
 /// Generate a simple calendar collection resource type XML
 pub fn calendar_resource_type() -> Vec<Element> {
-    let mut collection = Element::new("collection");
+    let mut collection = Element::new("D:collection");
     collection.namespace = Some("DAV:".to_string());
 
-    let mut calendar = Element::new("calendar");
+    let mut calendar = Element::new("C:calendar");
     calendar.namespace = Some(NS_CALDAV_URI.to_string());
 
     vec![collection, calendar]
@@ -243,10 +257,10 @@ pub fn calendar_resource_type() -> Vec<Element> {
 
 /// Generate schedule inbox resource type XML
 pub fn schedule_inbox_resource_type() -> Vec<Element> {
-    let mut collection = Element::new("collection");
+    let mut collection = Element::new("D:collection");
     collection.namespace = Some("DAV:".to_string());
 
-    let mut schedule_inbox = Element::new("schedule-inbox");
+    let mut schedule_inbox = Element::new("C:schedule-inbox");
     schedule_inbox.namespace = Some(NS_CALDAV_URI.to_string());
 
     vec![collection, schedule_inbox]
@@ -254,10 +268,10 @@ pub fn schedule_inbox_resource_type() -> Vec<Element> {
 
 /// Generate schedule outbox resource type XML
 pub fn schedule_outbox_resource_type() -> Vec<Element> {
-    let mut collection = Element::new("collection");
+    let mut collection = Element::new("D:collection");
     collection.namespace = Some("DAV:".to_string());
 
-    let mut schedule_outbox = Element::new("schedule-outbox");
+    let mut schedule_outbox = Element::new("C:schedule-outbox");
     schedule_outbox.namespace = Some(NS_CALDAV_URI.to_string());
 
     vec![collection, schedule_outbox]

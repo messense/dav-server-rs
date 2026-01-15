@@ -15,8 +15,8 @@ CalDAV is an extension of WebDAV that provides a standard way to access and mana
 
 The CalDAV implementation in dav-server includes:
 
-- **Calendar Collections**: Special WebDAV collections that contain calendar data
-- **MKCALENDAR Method**: Create new calendar collections
+- **Calendar Collections**: A directory that functions as a calendar, containing one `.ics` file for each event.
+- **MKCALENDAR Method**: Create new calendar collection
 - **REPORT Method**: Query calendar data with filters
 - **CalDAV Properties**: Calendar-specific WebDAV properties
 - **iCalendar Support**: Parse and validate iCalendar data
@@ -32,10 +32,6 @@ CalDAV support is available as an optional cargo feature:
 dav-server = { version = "0.8", features = ["caldav"] }
 ```
 
-This adds the following dependencies:
-- `icalendar`: For parsing and validating iCalendar data
-- `chrono`: For date/time handling
-
 ## Quick Start
 
 Here's a basic CalDAV server setup:
@@ -44,10 +40,13 @@ Here's a basic CalDAV server setup:
 use dav_server::{DavHandler, fakels::FakeLs, localfs::LocalFs};
 
 let server = DavHandler::builder()
-    .filesystem(LocalFs::new("/calendars", false, false, false))
+    .filesystem(LocalFs::new("/dav_files", false, false, false))
     .locksystem(FakeLs::new())
     .build_handler();
 ```
+## Important Setup Notes
+
+**CalDAV Directory Creation**: The `/calendars` directory (defined in `dav_server::caldav::DEFAULT_CALDAV_DIRECTORY`) must exist before CalDAV operations. `MemFs` and `LocalFs` create it automatically, but custom `GuardedFileSystem` implementations must initialize it during startup.
 
 ## CalDAV Methods
 
@@ -56,13 +55,13 @@ let server = DavHandler::builder()
 Creates a new calendar collection:
 
 ```bash
-curl -X MKCALENDAR http://localhost:8080/my-calendar/
+curl -X MKCALENDAR http://localhost:8080/calendars/my-calendar/
 ```
 
 With properties:
 
 ```bash
-curl -X MKCALENDAR http://localhost:8080/my-calendar/ \
+curl -X MKCALENDAR http://localhost:8080/calendars/my-calendar/ \
   -H "Content-Type: application/xml" \
   --data '<?xml version="1.0" encoding="utf-8" ?>
 <C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
@@ -82,7 +81,7 @@ Query calendar data:
 #### Calendar Query
 
 ```bash
-curl -X REPORT http://localhost:8080/my-calendar/ \
+curl -X REPORT http://localhost:8080/calendars/my-calendar/ \
   -H "Content-Type: application/xml" \
   -H "Depth: 1" \
   --data '<?xml version="1.0" encoding="utf-8" ?>
@@ -103,7 +102,7 @@ curl -X REPORT http://localhost:8080/my-calendar/ \
 #### Calendar Multiget
 
 ```bash
-curl -X REPORT http://localhost:8080/my-calendar/ \
+curl -X REPORT http://localhost:8080/calendars/my-calendar/ \
   -H "Content-Type: application/xml" \
   --data '<?xml version="1.0" encoding="utf-8" ?>
 <C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
@@ -141,7 +140,7 @@ The implementation supports standard CalDAV properties:
 Store iCalendar data using PUT:
 
 ```bash
-curl -X PUT http://localhost:8080/my-calendar/event.ics \
+curl -X PUT http://localhost:8080/calendars/my-calendar/event.ics \
   -H "Content-Type: text/calendar" \
   --data 'BEGIN:VCALENDAR
 VERSION:2.0
@@ -161,7 +160,7 @@ END:VCALENDAR'
 Use GET to retrieve individual calendar resources:
 
 ```bash
-curl http://localhost:8080/my-calendar/event.ics
+curl http://localhost:8080/calendars/my-calendar/event.ics
 ```
 
 ## Client Compatibility
@@ -184,7 +183,7 @@ Current limitations include:
 - No recurring event expansion in queries
 
 ## Example Applications
-These calendar server examples lacks authentication and does not support user-specific access. 
+These calendar server examples lacks authentication and does not support user-specific access. The default FileSystems can only create collections on the path "/calendars".  
 For a production environment, you should implement the GuardedFileSystem for better security and user management.
 
 ### Calendar Server
@@ -198,9 +197,6 @@ async fn main() {
     let server = DavHandler::builder()
         .filesystem(LocalFs::new("/calendars", false, false, false))
         .locksystem(FakeLs::new())
-        // Use .strip_prefix if you want to start the handler with a prefix path like "/calendars". 
-        // None will start with root ("/")
-        // .strip_prefix("/calendars")
         .build_handler();
 
     // Serve on port 8080

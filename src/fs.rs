@@ -710,6 +710,9 @@ pub trait DavMetaData: Debug + Send + Sync + DynClone {
     fn modified(&self) -> FsResult<SystemTime>;
     /// File or directory (aka collection).
     fn is_dir(&self) -> bool;
+    /// Is Calendar collection?
+    #[cfg(feature = "caldav")]
+    fn is_calendar(&self, path: &DavPath) -> bool;
 
     /// Simplistic implementation of `etag()`
     ///

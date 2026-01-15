@@ -142,7 +142,7 @@ struct StatusElement {
     element: Element,
 }
 
-struct PropWriter<C> {
+pub(crate) struct PropWriter<C> {
     emitter: Emitter,
     tx: Option<Sender>,
     name: String,
@@ -256,6 +256,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             self.fs.clone(),
             self.ls.as_ref(),
             self.credentials.clone(),
+            #[cfg(feature = "caldav")]
+            &path,
         )?;
 
         *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
@@ -557,6 +559,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             self.fs.clone(),
             None,
             self.credentials,
+            #[cfg(feature = "caldav")]
+            &path,
         )?;
         *res.body_mut() = Body::from(AsyncStream::new(|tx| async move {
             pw.set_tx(tx);
@@ -571,6 +575,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
 impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
     #[allow(clippy::borrowed_box)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         req: &Request<()>,
         res: &mut Response<Body>,
@@ -579,6 +584,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         fs: Box<dyn GuardedFileSystem<C>>,
         ls: Option<&Box<dyn DavLockSystem>>,
         credentials: C,
+        #[cfg(feature = "caldav")] dav_path: &DavPath,
     ) -> DavResult<Self> {
         let contenttype = "application/xml; charset=utf-8".parse().unwrap();
         res.headers_mut().insert("content-type", contenttype);
@@ -635,6 +641,8 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             let mut m = false;
             let mut nc = false; // Nextcloud
             let mut oc = false; // OwnCloud
+            #[cfg(feature = "caldav")]
+            let mut c = false; // CalDAV
 
             for prop in &props {
                 match prop.namespace.as_deref() {
@@ -642,6 +650,8 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                     Some(NS_MS_URI) => m = true,
                     Some(NS_NEXTCLOUD_URI) => nc = true,
                     Some(NS_OWNCLOUD_URI) => oc = true,
+                    #[cfg(feature = "caldav")]
+                    Some(NS_CALDAV_URI) => c = true,
                     _ => {}
                 }
             }
@@ -656,6 +666,14 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             }
             if oc {
                 ev = ev.ns("oc", NS_OWNCLOUD_URI);
+            }
+            #[cfg(feature = "caldav")]
+            if c || req.uri().path().starts_with(&format!(
+                "{}{}",
+                dav_path.prefix(),
+                DEFAULT_CALDAV_DIRECTORY
+            )) {
+                ev = ev.ns("C", NS_CALDAV_URI);
             }
         }
         emitter.write(ev)?;
@@ -809,21 +827,9 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             elem.children.push(XMLNode::Element(dir));
 
                             #[cfg(feature = "caldav")]
-                            {
-                                // Check if this is a calendar collection by looking for calendar properties
-                                if let Ok(props) =
-                                    self.fs.get_props(path, docontent, &self.credentials).await
-                                {
-                                    let has_calendar_props = props.iter().any(|p| {
-                                        p.name.contains("calendar-description")
-                                            || p.name.contains("supported-calendar-component-set")
-                                    });
-
-                                    if has_calendar_props {
-                                        let calendar = Element::new2("C:calendar");
-                                        elem.children.push(XMLNode::Element(calendar));
-                                    }
-                                }
+                            if meta.is_calendar(path) {
+                                let calendar = Element::new2("C:calendar");
+                                elem.children.push(XMLNode::Element(calendar));
                             }
                         }
                         return Ok(StatusElement {
@@ -875,68 +881,60 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             #[cfg(feature = "caldav")]
             Some(NS_CALDAV_URI) => {
                 pfx = "C";
-                match prop.name.as_str() {
-                    "supported-calendar-component-set" => {
-                        let components = vec![
-                            CalendarComponentType::VEvent,
-                            CalendarComponentType::VTodo,
-                            CalendarComponentType::VJournal,
-                            CalendarComponentType::VFreeBusy,
-                        ];
-                        let elem = create_supported_calendar_component_set(&components);
-                        return Ok(StatusElement {
-                            status: StatusCode::OK,
-                            element: elem,
-                        });
-                    }
-                    "supported-calendar-data" => {
-                        let elem = create_supported_calendar_data();
-                        return Ok(StatusElement {
-                            status: StatusCode::OK,
-                            element: elem,
-                        });
-                    }
-                    "calendar-home-set" => {
-                        let home_path = "/calendars/";
-                        let elem = create_calendar_home_set(home_path);
-                        return Ok(StatusElement {
-                            status: StatusCode::OK,
-                            element: elem,
-                        });
-                    }
-                    "calendar-description" => {
-                        // Try to get from properties first
-                        if let Ok(props) =
-                            self.fs.get_props(path, docontent, &self.credentials).await
-                        {
-                            for prop_item in props {
-                                if prop_item.name.contains("calendar-description")
-                                    && let Some(value) = prop_item.xml
-                                {
-                                    let desc = String::from_utf8_lossy(&value);
-                                    return self.build_elem(docontent, pfx, prop, desc);
+
+                if meta.is_calendar(path) {
+                    match prop.name.as_str() {
+                        "supported-calendar-component-set" => {
+                            let components = vec![
+                                CalendarComponentType::VEvent,
+                                CalendarComponentType::VTodo,
+                                CalendarComponentType::VJournal,
+                                CalendarComponentType::VFreeBusy,
+                            ];
+                            let elem = create_supported_calendar_component_set(&components);
+                            return Ok(StatusElement {
+                                status: StatusCode::OK,
+                                element: elem,
+                            });
+                        }
+                        "supported-calendar-data" => {
+                            let elem = create_supported_calendar_data();
+                            return Ok(StatusElement {
+                                status: StatusCode::OK,
+                                element: elem,
+                            });
+                        }
+                        "calendar-description" => {
+                            if let Ok(props) =
+                                self.fs.get_props(path, docontent, &self.credentials).await
+                            {
+                                for prop_item in props {
+                                    if prop_item.name.contains("calendar-description") {
+                                        return Ok(StatusElement {
+                                            status: StatusCode::OK,
+                                            element: davprop_to_element(prop_item),
+                                        });
+                                    }
                                 }
                             }
                         }
-                        // Default description
-                        return self.build_elem(docontent, pfx, prop, "Calendar Collection");
+                        "calendar-timezone" => {
+                            // Default to UTC if not set
+                            let timezone = "BEGIN:VTIMEZONE\r\nTZID:UTC\r\nEND:VTIMEZONE\r\n";
+                            return self.build_elem(docontent, pfx, prop, timezone);
+                        }
+                        "max-resource-size" => {
+                            return self.build_elem(docontent, pfx, prop, "1048576");
+                            // 1MB
+                        }
+                        "min-date-time" => {
+                            return self.build_elem(docontent, pfx, prop, "19000101T000000Z");
+                        }
+                        "max-date-time" => {
+                            return self.build_elem(docontent, pfx, prop, "20991231T235959Z");
+                        }
+                        _ => {}
                     }
-                    "calendar-timezone" => {
-                        // Default to UTC if not set
-                        let timezone = "BEGIN:VTIMEZONE\r\nTZID:UTC\r\nEND:VTIMEZONE\r\n";
-                        return self.build_elem(docontent, pfx, prop, timezone);
-                    }
-                    "max-resource-size" => {
-                        return self.build_elem(docontent, pfx, prop, "1048576");
-                        // 1MB
-                    }
-                    "min-date-time" => {
-                        return self.build_elem(docontent, pfx, prop, "19000101T000000Z");
-                    }
-                    "max-date-time" => {
-                        return self.build_elem(docontent, pfx, prop, "20991231T235959Z");
-                    }
-                    _ => {}
                 }
             }
             Some(NS_MS_URI) => {
@@ -1045,6 +1043,18 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         }
         self.q_cache = qc;
 
+        #[cfg(feature = "caldav")]
+        {
+            let path_string = path.to_string();
+            if path_string == DEFAULT_CALDAV_DIRECTORY
+                || path_string == DEFAULT_CALDAV_DIRECTORY_ENDSLASH
+            {
+                let elem =
+                    create_calendar_home_set(path.prefix(), DEFAULT_CALDAV_DIRECTORY_ENDSLASH);
+                add_sc_elem(&mut props, StatusCode::OK, elem);
+            }
+        }
+
         // and list props of the filesystem driver if it supports DAV properties
         if self.fs.have_props(path, &self.credentials).await
             && let Ok(v) = self.fs.get_props(path, true, &self.credentials).await
@@ -1098,6 +1108,65 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
     pub async fn close(&mut self) -> DavResult<()> {
         let _ = self.emitter.write(XmlWEvent::end_element());
         self.flush().await
+    }
+
+    #[cfg(feature = "caldav")]
+    pub(crate) fn write_calendar_data_response(
+        &mut self,
+        href: &DavPath,
+        etag: &str,
+        calendar_data: &str,
+    ) -> DavResult<()> {
+        self.emitter.write(XmlWEvent::start_element("D:response"))?;
+
+        let p = href.as_url_string();
+        Element::new2("D:href")
+            .text(p)
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
+        self.emitter.write(XmlWEvent::start_element("D:prop"))?;
+
+        // Write calendar-data element with content
+        let mut elem = Element::new2("C:calendar-data").ns("C", NS_CALDAV_URI);
+        elem.children.push(XMLNode::Text(calendar_data.to_string()));
+        elem.write_ev(&mut self.emitter)?;
+
+        // Write getetag element
+        Element::new2("D:getetag")
+            .text(etag)
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::end_element())?; // D:prop
+
+        Element::new2("D:status")
+            .text("HTTP/1.1 200 OK".to_string())
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::end_element())?; // D:propstat
+        self.emitter.write(XmlWEvent::end_element())?; // D:response
+
+        Ok(())
+    }
+
+    #[cfg(feature = "caldav")]
+    pub(crate) fn write_calendar_not_found_response(&mut self, href: &str) -> DavResult<()> {
+        self.emitter.write(XmlWEvent::start_element("D:response"))?;
+
+        Element::new2("D:href")
+            .text(href.to_string())
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
+
+        Element::new2("D:status")
+            .text("HTTP/1.1 404 Not Found".to_string())
+            .write_ev(&mut self.emitter)?;
+
+        self.emitter.write(XmlWEvent::end_element())?; // D:propstat
+        self.emitter.write(XmlWEvent::end_element())?; // D:response
+
+        Ok(())
     }
 }
 

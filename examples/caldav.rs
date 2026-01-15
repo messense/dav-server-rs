@@ -9,41 +9,62 @@
 //! The server will be available at http://localhost:8080
 //! You can connect to it using CalDAV clients like Thunderbird, Apple Calendar, etc.
 
-use dav_server::{DavHandler, DavMethodSet, fakels::FakeLs, memfs::MemFs};
-use hyper::{server::conn::http1, service::service_fn};
-use hyper_util::rt::TokioIo;
-use std::{convert::Infallible, net::SocketAddr};
+use axum::{
+    Extension, Router,
+    body::Body,
+    extract::Request,
+    http::{HeaderValue, StatusCode},
+    middleware::{self, Next},
+    response::IntoResponse,
+    routing::any,
+};
+use chrono::Datelike;
+use dav_server::{DavHandler, caldav::DEFAULT_CALDAV_DIRECTORY, fakels::FakeLs, localfs};
+use http_body_util::BodyExt;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() {
     env_logger::init();
+    let addr = "127.0.0.1:8080";
 
-    let addr: SocketAddr = ([127, 0, 0, 1], 8080).into();
-
-    // Set up the DAV handler with CalDAV support
-    // Note: Using MemFs for this example because it supports the property operations
-    // needed for CalDAV collections. For production use, you'd want a filesystem
-    // implementation that persists properties to disk (e.g., using extended attributes
-    // or sidecar files).
     let dav_server = DavHandler::builder()
-        .filesystem(MemFs::new())
+        .filesystem(localfs::LocalFs::new("/tmp", true, false, false))
         .locksystem(FakeLs::new())
-        .methods(DavMethodSet::all())
+        .autoindex(true)
         .build_handler();
 
-    let listener = TcpListener::bind(addr).await?;
+    let router = Router::new()
+        .route("/.well-known/caldav", any(handle_caldav_redirect))
+        .route("/", any(handle_caldav))
+        .route("/{*path}", any(handle_caldav))
+        .layer(Extension(Arc::new(dav_server)))
+        .layer(middleware::from_fn(log_request_middleware));
 
-    println!("CalDAV server listening on {}", addr);
-    println!("Calendar collections can be accessed at http://{}", addr);
+    let listener = TcpListener::bind(&addr).await.unwrap();
+
+    println!("CalDAV server listening on http://{}", addr);
+    println!(
+        "Calendar collections can be accessed at http://{}{}",
+        addr, DEFAULT_CALDAV_DIRECTORY
+    );
     println!();
-    println!("NOTE: This example uses in-memory storage. Data will be lost when the server stops.");
+    println!(
+        "NOTE: This example stores data in a temporary directory (/tmp). Data may be lost when the server stops or when temporary files are cleaned."
+    );
     println!();
     println!("To create a calendar collection, use:");
-    println!("  curl -i -X MKCALENDAR http://{}/my-calendar/", addr);
+    println!(
+        "  curl -i -X MKCALENDAR http://{}{}/my-calendar/",
+        addr, DEFAULT_CALDAV_DIRECTORY
+    );
     println!();
     println!("To add a calendar event, use:");
-    println!("  curl -i -X PUT http://{}/my-calendar/event1.ics \\", addr);
+    println!(
+        "  curl -i -X PUT http://{}{}/my-calendar/event1.ics \\",
+        addr, DEFAULT_CALDAV_DIRECTORY
+    );
     println!("    -H 'Content-Type: text/calendar' \\");
     println!("    --data-binary @event.ics");
     println!();
@@ -53,37 +74,65 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("PRODID:-//Example Corp//CalDAV Client//EN");
     println!("BEGIN:VEVENT");
     println!("UID:12345@example.com");
-    println!("DTSTART:20240101T120000Z");
-    println!("DTEND:20240101T130000Z");
+    let next_year = chrono::Local::now().year_ce().1 + 1;
+    println!("DTSTART:{}0101T120000Z", next_year);
+    println!("DTEND:{}0101T130000Z", next_year);
     println!("SUMMARY:New Year Meeting");
     println!("DESCRIPTION:Planning meeting for the new year");
     println!("END:VEVENT");
     println!("END:VCALENDAR");
 
-    // Start the server loop
-    loop {
-        let (stream, _) = listener.accept().await?;
-        let dav_server = dav_server.clone();
+    axum::serve(listener, router).await.unwrap();
+}
 
-        let io = TokioIo::new(stream);
+async fn handle_caldav_redirect() -> (
+    StatusCode,
+    [(axum::http::header::HeaderName, HeaderValue); 1],
+) {
+    (
+        StatusCode::MOVED_PERMANENTLY,
+        [(
+            axum::http::header::LOCATION,
+            HeaderValue::from_static(DEFAULT_CALDAV_DIRECTORY),
+        )],
+    )
+}
 
-        tokio::task::spawn(async move {
-            if let Err(err) = http1::Builder::new()
-                .serve_connection(
-                    io,
-                    service_fn({
-                        move |req| {
-                            let dav_server = dav_server.clone();
-                            async move { Ok::<_, Infallible>(dav_server.handle(req).await) }
-                        }
-                    }),
-                )
-                .await
-            {
-                eprintln!("Failed serving connection: {err:?}");
-            }
-        });
+async fn handle_caldav(
+    Extension(dav): Extension<Arc<DavHandler>>,
+    req: Request,
+) -> impl IntoResponse {
+    dav.handle(req).await
+}
+
+async fn log_request_middleware(request: Request, next: Next) -> impl IntoResponse {
+    // Print request line and headers
+    println!("\n========== CLIENT REQUEST ==========");
+    println!("{} {}", request.method(), request.uri(),);
+    println!("--- Headers ---");
+    for (name, value) in request.headers() {
+        println!("{}: {}", name, value.to_str().unwrap_or("<binary>"));
     }
+
+    // Read and print body
+    let (parts, body) = request.into_parts();
+    let collected = body.collect().await.unwrap_or_default();
+    let body_bytes = collected.to_bytes();
+
+    if !body_bytes.is_empty() {
+        println!("--- Body ---");
+        if let Ok(body_str) = std::str::from_utf8(&body_bytes) {
+            println!("{}", body_str);
+        } else {
+            println!("<binary data: {} bytes>", body_bytes.len());
+        }
+    }
+    println!("====================================\n");
+
+    // Reconstruct request with body
+    let request = axum::http::Request::from_parts(parts, Body::from(body_bytes));
+
+    next.run(request).await
 }
 
 #[cfg(not(feature = "caldav"))]

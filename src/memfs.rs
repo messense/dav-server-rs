@@ -71,9 +71,22 @@ struct MemFsFile {
 impl MemFs {
     /// Create a new "memfs" filesystem.
     pub fn new() -> Box<MemFs> {
-        let root = MemFsNode::new_dir();
+        #[allow(unused_mut)]
+        let mut tree = Tree::new(MemFsNode::new_dir());
+
+        #[cfg(feature = "caldav")]
+        {
+            tree.add_child(
+                tree::ROOT_ID,
+                b"calendars".to_vec(),
+                MemFsNode::new_dir(),
+                false,
+            )
+            .unwrap();
+        }
+
         Box::new(MemFs {
-            tree: Arc::new(Mutex::new(Tree::new(root))),
+            tree: Arc::new(Mutex::new(tree)),
         })
     }
 
@@ -469,6 +482,11 @@ impl DavMetaData for MemFsDirEntry {
     fn is_dir(&self) -> bool {
         self.is_dir
     }
+
+    #[cfg(feature = "caldav")]
+    fn is_calendar(&self, path: &DavPath) -> bool {
+        crate::caldav::is_path_in_caldav_directory(path)
+    }
 }
 
 impl MemFsNode {
@@ -597,8 +615,7 @@ impl TreeExt for Tree {
 // helper
 fn file_name(path: &[u8]) -> Vec<u8> {
     path.split(|&c| c == b'/')
-        .filter(|s| !s.is_empty())
-        .next_back()
+        .rfind(|s| !s.is_empty())
         .unwrap_or(b"")
         .to_vec()
 }
