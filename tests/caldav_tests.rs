@@ -350,7 +350,6 @@ END:VCALENDAR"#;
         assert_eq!(props.max_resource_size, Some(1024 * 1024));
     }
 
-    #[cfg(feature = "caldav")]
     #[test]
     fn test_validate_calendar_data() {
         let valid_ical = r#"BEGIN:VCALENDAR
@@ -380,14 +379,17 @@ mod caldav_disabled_tests {
             .locksystem(FakeLs::new())
             .build_handler();
 
-        // Test REPORT method
-        let req = Request::builder()
-            .method("REPORT")
-            .uri("/")
-            .body(Body::empty())
-            .unwrap();
-        let resp = server.handle(req).await;
-        assert_eq!(resp.status(), http::StatusCode::NOT_IMPLEMENTED);
+        // Test REPORT method - only returns NOT_IMPLEMENTED when carddav is also disabled
+        #[cfg(not(feature = "carddav"))]
+        {
+            let req = Request::builder()
+                .method("REPORT")
+                .uri("/")
+                .body(Body::empty())
+                .unwrap();
+            let resp = server.handle(req).await;
+            assert_eq!(resp.status(), http::StatusCode::NOT_IMPLEMENTED);
+        }
 
         // Test MKCALENDAR method
         let req = Request::builder()

@@ -22,7 +22,8 @@ default = ["localfs", "memfs"]
 actix-compat = [ "actix-web" ]
 warp-compat = [ "warp", "hyper" ]
 caldav = [ "icalendar" ]
-all = [ "actix-compat", "warp-compat", "caldav" ]
+carddav = [ "calcard" ]
+all = [ "actix-compat", "warp-compat", "caldav", "carddav" ]
 localfs = ["libc", "lru", "tokio/rt-multi-thread", "parking_lot", "reflink-copy"]
 memfs = ["libc"]
 
@@ -37,6 +38,10 @@ required-features = [ "warp-compat" ]
 [[example]]
 name = "caldav"
 required-features = [ "caldav" ]
+
+[[example]]
+name = "carddav"
+required-features = [ "carddav" ]
 
 [dependencies]
 bytes = "1.0.1"
@@ -67,6 +72,7 @@ warp = { version = "0.3.0", optional = true, default-features = false }
 actix-web = { version = "4.0.0-beta.15", default-features = false, optional = true }
 reflink-copy = { version = "0.1.14", optional = true }
 icalendar = { version = "0.17.1", optional = true }
+calcard = { version = "0.3", default-features = false, optional = true }
 derive-where = "1.6.0"
 
 [dev-dependencies]

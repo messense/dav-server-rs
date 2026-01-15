@@ -713,6 +713,9 @@ pub trait DavMetaData: Debug + Send + Sync + DynClone {
     /// Is Calendar collection?
     #[cfg(feature = "caldav")]
     fn is_calendar(&self, path: &DavPath) -> bool;
+    /// Is Address Book collection?
+    #[cfg(feature = "carddav")]
+    fn is_addressbook(&self, path: &DavPath) -> bool;
 
     /// Simplistic implementation of `etag()`
     ///

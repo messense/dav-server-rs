@@ -128,6 +128,9 @@ impl LocalFs {
         #[cfg(feature = "caldav")]
         helper_create_directory(&basedir, crate::caldav::DEFAULT_CALDAV_NAME);
 
+        #[cfg(feature = "carddav")]
+        helper_create_directory(&basedir, crate::carddav::DEFAULT_CARDDAV_NAME);
+
         let inner = LocalFsInner {
             basedir,
             public,
@@ -176,6 +179,9 @@ impl LocalFs {
 
         #[cfg(feature = "caldav")]
         helper_create_directory(&basedir, crate::caldav::DEFAULT_CALDAV_NAME);
+
+        #[cfg(feature = "carddav")]
+        helper_create_directory(&basedir, crate::carddav::DEFAULT_CARDDAV_NAME);
 
         let inner = LocalFsInner {
             basedir,
@@ -788,6 +794,10 @@ impl DavMetaData for LocalFsMetaData {
     #[cfg(feature = "caldav")]
     fn is_calendar(&self, path: &DavPath) -> bool {
         crate::caldav::is_path_in_caldav_directory(path)
+    }
+    #[cfg(feature = "carddav")]
+    fn is_addressbook(&self, path: &DavPath) -> bool {
+        crate::carddav::is_path_in_carddav_directory(path)
     }
 
     #[cfg(unix)]

@@ -10,6 +10,9 @@ use xmltree::Element;
 
 use crate::davpath::DavPath;
 
+// Re-export shared filter types
+pub use crate::dav_filters::{ParameterFilter, TextMatch};
+
 // CalDAV XML namespaces
 pub const NS_CALDAV_URI: &str = "urn:ietf:params:xml:ns:caldav";
 pub const NS_CALENDARSERVER_URI: &str = "http://calendarserver.org/ns/";
@@ -116,6 +119,10 @@ pub struct ComponentFilter {
     pub comp_filters: Vec<ComponentFilter>,
 }
 
+/// CalDAV property filter with time-range support
+///
+/// Note: CalDAV property filters include time-range which is not present
+/// in the shared ParameterFilter. CardDAV has a similar struct without time_range.
 #[derive(Debug, Clone)]
 pub struct PropertyFilter {
     pub name: String,
@@ -123,20 +130,6 @@ pub struct PropertyFilter {
     pub text_match: Option<TextMatch>,
     pub time_range: Option<TimeRange>,
     pub param_filters: Vec<ParameterFilter>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ParameterFilter {
-    pub name: String,
-    pub is_not_defined: bool,
-    pub text_match: Option<TextMatch>,
-}
-
-#[derive(Debug, Clone)]
-pub struct TextMatch {
-    pub text: String,
-    pub collation: Option<String>,
-    pub negate_condition: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -227,6 +220,23 @@ pub fn is_calendar_data(content: &[u8]) -> bool {
 }
 
 /// Validate iCalendar data using the icalendar crate
+///
+/// This function validates that the content is a well-formed iCalendar object.
+/// Use this function in your application layer to validate calendar data
+/// before or after writing to the filesystem.
+///
+/// # Example
+///
+/// ```ignore
+/// use dav_server::caldav::validate_calendar_data;
+///
+/// let ical = "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n...";
+/// match validate_calendar_data(ical) {
+///     Ok(_) => println!("Valid iCalendar"),
+///     Err(e) => println!("Invalid iCalendar: {}", e),
+/// }
+/// ```
+#[cfg(feature = "caldav")]
 pub fn validate_calendar_data(content: &str) -> Result<Calendar, String> {
     content
         .parse::<Calendar>()
@@ -234,11 +244,20 @@ pub fn validate_calendar_data(content: &str) -> Result<Calendar, String> {
 }
 
 /// Extract the UID from calendar data
+///
+/// Handles both standard `UID:value` and properties with parameters.
 pub fn extract_calendar_uid(content: &str) -> Option<String> {
     for line in content.lines() {
         let line = line.trim();
-        if let Some(uid) = line.strip_prefix("UID:") {
-            return Some(uid.to_string());
+        // Handle simple UID:VALUE
+        if let Some(value) = line.strip_prefix("UID:") {
+            return Some(value.to_string());
+        }
+        // Handle UID with parameters: UID;PARAMS:VALUE
+        if let Some(rest) = line.strip_prefix("UID;")
+            && let Some(colon_pos) = rest.find(':')
+        {
+            return Some(rest[colon_pos + 1..].to_string());
         }
     }
     None

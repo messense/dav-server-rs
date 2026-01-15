@@ -85,6 +85,17 @@ impl MemFs {
             .unwrap();
         }
 
+        #[cfg(feature = "carddav")]
+        {
+            tree.add_child(
+                tree::ROOT_ID,
+                b"addressbooks".to_vec(),
+                MemFsNode::new_dir(),
+                false,
+            )
+            .unwrap();
+        }
+
         Box::new(MemFs {
             tree: Arc::new(Mutex::new(tree)),
         })
@@ -486,6 +497,11 @@ impl DavMetaData for MemFsDirEntry {
     #[cfg(feature = "caldav")]
     fn is_calendar(&self, path: &DavPath) -> bool {
         crate::caldav::is_path_in_caldav_directory(path)
+    }
+
+    #[cfg(feature = "carddav")]
+    fn is_addressbook(&self, path: &DavPath) -> bool {
+        crate::carddav::is_path_in_carddav_directory(path)
     }
 }
 
