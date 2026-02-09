@@ -2,15 +2,10 @@ use std::io;
 
 use actix_web::{App, HttpServer, web};
 use dav_server::actix::*;
-use dav_server::{DavConfig, DavHandler, fakels::FakeLs, localfs::LocalFs};
+use dav_server::{DavHandler, fakels::FakeLs, localfs::LocalFs};
 
 pub async fn dav_handler(req: DavRequest, davhandler: web::Data<DavHandler>) -> DavResponse {
-    if let Some(prefix) = req.prefix() {
-        let config = DavConfig::new().strip_prefix(prefix);
-        davhandler.handle_with(config, req.request).await.into()
-    } else {
-        davhandler.handle(req.request).await.into()
-    }
+    davhandler.handle(req.request).await.into()
 }
 
 #[actix_web::main]
