@@ -102,6 +102,9 @@ pub fn create_supported_address_data() -> Element {
 }
 
 pub fn create_addressbook_home_set(prefix: &str, path: &str) -> Element {
+    log::debug!("create_addressbook_home_set prefix: {:#?}", prefix);
+    log::debug!("create_addressbook_home_set path: {:#?}", path);
+    
     let mut elem = Element::new("CARD:addressbook-home-set");
     elem.namespace = Some(NS_CARDDAV_URI.to_string());
 

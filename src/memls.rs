@@ -142,16 +142,16 @@ impl DavLockSystem for MemLs {
         principal: Option<&str>,
         ignore_principal: bool,
         deep: bool,
-        submitted_tokens: Vec<&str>,
+        submitted_tokens: &[String],
     ) -> LsFuture<'_, Result<(), DavLock>> {
         let inner = &*self.0.lock().unwrap();
-        let _st = submitted_tokens.clone();
+        let _st = submitted_tokens;
         let rc = check_locks_to_path(
             &inner.tree,
             path,
             principal,
             ignore_principal,
-            &submitted_tokens,
+            submitted_tokens,
             false,
         );
         trace!("check: check_lock_to_path: {_st:?}: {rc:?}");
@@ -166,7 +166,7 @@ impl DavLockSystem for MemLs {
                 path,
                 principal,
                 ignore_principal,
-                &submitted_tokens,
+                submitted_tokens,
                 false,
             );
             trace!("check: check_locks_from_path: {rc:?}");
@@ -197,7 +197,7 @@ fn check_locks_to_path(
     path: &DavPath,
     principal: Option<&str>,
     ignore_principal: bool,
-    submitted_tokens: &[&str],
+    submitted_tokens: &[String],
     shared_ok: bool,
 ) -> Result<(), DavLock> {
     // path segments
@@ -256,7 +256,7 @@ fn check_locks_from_path(
     path: &DavPath,
     principal: Option<&str>,
     ignore_principal: bool,
-    submitted_tokens: &[&str],
+    submitted_tokens: &[String],
     shared_ok: bool,
 ) -> Result<(), DavLock> {
     let node_id = match lookup_node(tree, path) {
@@ -279,7 +279,7 @@ fn check_locks_from_node(
     node_id: u64,
     principal: Option<&str>,
     ignore_principal: bool,
-    submitted_tokens: &[&str],
+    submitted_tokens: &[String],
     shared_ok: bool,
 ) -> Result<(), DavLock> {
     let node_locks = match tree.get_node(node_id) {

@@ -29,9 +29,11 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         // if locked check if we hold that lock.
         if let Some(ref locksystem) = self.ls {
-            let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             let principal = self.principal.as_deref();
-            if let Err(_l) = locksystem.check(&path, principal, false, false, t).await {
+            if let Err(_l) = locksystem
+                .check(&path, principal, false, false, &tokens)
+                .await
+            {
                 return Err(DavError::Status(StatusCode::LOCKED));
             }
         }

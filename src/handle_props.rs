@@ -235,6 +235,7 @@ pub(crate) struct PropWriter<C> {
     useragent: String,
     q_cache: QuotaCache,
     credentials: C,
+    principal: Option<String>,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -338,6 +339,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             props,
             self.fs.clone(),
             self.ls.as_ref(),
+            self.principal.clone(),
             self.credentials.clone(),
             #[cfg(any(feature = "caldav", feature = "carddav"))]
             &path,
@@ -413,10 +415,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 if meta.is_symlink() {
                     continue;
                 }
-                if meta.is_dir() {
+                let is_dir = meta.is_dir();
+                if is_dir {
                     npath.add_slash();
                 }
-                let is_dir = meta.is_dir();
                 propwriter.write_props(&npath, meta).await?;
                 propwriter.flush().await?;
                 // For Depth::Default, treat it like Depth::One (no recursion)
@@ -556,9 +558,11 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         // if locked check if we hold that lock.
         if let Some(ref locksystem) = self.ls {
-            let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             let principal = self.principal.as_deref();
-            if let Err(_l) = locksystem.check(&path, principal, false, false, t).await {
+            if let Err(_l) = locksystem
+                .check(&path, principal, false, false, &tokens)
+                .await
+            {
                 return Err(StatusCode::LOCKED.into());
             }
         }
@@ -641,6 +645,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             Vec::new(),
             self.fs.clone(),
             None,
+            self.principal.clone(),
             self.credentials,
             #[cfg(any(feature = "caldav", feature = "carddav"))]
             &path,
@@ -666,6 +671,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         mut props: Vec<Element>,
         fs: Box<dyn GuardedFileSystem<C>>,
         ls: Option<&Box<dyn DavLockSystem>>,
+        principal: Option<String>,
         credentials: C,
         #[cfg(any(feature = "caldav", feature = "carddav"))] dav_path: &DavPath,
     ) -> DavResult<Self> {
@@ -785,6 +791,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             useragent: ua.to_string(),
             q_cache: Default::default(),
             credentials,
+            principal,
         })
     }
 
@@ -939,6 +946,18 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             status: StatusCode::OK,
                             element: elem,
                         });
+                    }
+                    "current-user-principal" => {
+                        if let Some(pr) = &self.principal {
+                            let mut elem = prop.clone();
+                            let mut principal_href = Element::new2("D:href");
+                            principal_href = principal_href.text(pr.clone());
+                            elem.children.push(xmltree::XMLNode::Element(principal_href));
+                            return Ok(StatusElement {
+                                status: StatusCode::OK,
+                                element: elem,
+                            });
+                        }
                     }
                     "supportedlock" => {
                         return Ok(StatusElement {

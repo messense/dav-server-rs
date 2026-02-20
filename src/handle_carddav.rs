@@ -484,6 +484,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             Vec::new(),
             self.fs.clone(),
             self.ls.as_ref(),
+            self.principal.clone(),
             self.credentials.clone(),
             &empty_path,
         )?;
