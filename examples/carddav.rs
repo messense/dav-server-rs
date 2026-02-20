@@ -34,7 +34,7 @@ async fn main() {
         .autoindex(true)
         // For a real world application you would have your own GuardedFilesystem
         // and use server.handle_guarded(req, format!("/principals/users/{user_name}"), credentials)
-        .principal("/addressbooks") 
+        .principal("/addressbooks")
         .build_handler();
 
     let router = Router::new()

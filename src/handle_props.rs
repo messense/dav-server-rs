@@ -952,7 +952,8 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             let mut elem = prop.clone();
                             let mut principal_href = Element::new2("D:href");
                             principal_href = principal_href.text(pr.clone());
-                            elem.children.push(xmltree::XMLNode::Element(principal_href));
+                            elem.children
+                                .push(xmltree::XMLNode::Element(principal_href));
                             return Ok(StatusElement {
                                 status: StatusCode::OK,
                                 element: elem,
