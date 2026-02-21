@@ -237,6 +237,9 @@ impl DavMetaData for EmptyMetaData {
     fn created(&self) -> FsResult<SystemTime> {
         self.modified()
     }
+    fn is_symlink(&self) -> bool {
+        false
+    }
     #[cfg(feature = "caldav")]
     fn is_calendar(&self, _: &DavPath) -> bool {
         false

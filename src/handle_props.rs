@@ -293,6 +293,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // path and meta
         let mut path = self.path(req);
         let meta = self.fs.metadata(&path, &self.credentials).await?;
+        if self.hide_symlinks.is_none_or(|x| x) && meta.is_symlink() {
+            return Err(DavError::Status(StatusCode::NOT_FOUND));
+        }
         let meta = self.fixpath(&mut res, &mut path, meta);
 
         let mut root = None;
@@ -377,13 +380,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         propwriter: &'a mut PropWriter<C>,
     ) -> BoxFuture<'a, DavResult<()>> {
         async move {
-            let readdir_meta = match self.hide_symlinks {
-                Some(true) | None => ReadDirMeta::DataSymlink,
-                Some(false) => ReadDirMeta::Data,
-            };
             let mut entries = match self
                 .fs
-                .read_dir(path, readdir_meta, &self.credentials)
+                .read_dir(path, self.get_read_dir_meta(), &self.credentials)
                 .await
             {
                 Ok(entries) => entries,
@@ -443,7 +442,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         if prop.get_text().is_none() || prop.has_child_elems() {
                             return StatusCode::CONFLICT;
                         }
-                        // FIXME only here to make "litmus" happy, really...
+                        // only here to make "litmus" happy, really...
                         if let Some(s) = prop.get_text()
                             && davheaders::ContentLanguage::try_from(s.as_ref()).is_err()
                         {

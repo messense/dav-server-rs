@@ -810,8 +810,8 @@ impl DavMetaData for LocalFsMetaData {
 
     #[cfg(windows)]
     fn executable(&self) -> FsResult<bool> {
-        // FIXME: implement
-        Err(FsError::NotImplemented)
+        // Windows filesystem does not have executable flag, so we return always true
+        Ok(true)
     }
 
     // same as the default apache etag.
