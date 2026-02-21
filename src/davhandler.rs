@@ -205,6 +205,7 @@ impl<C: Clone + Send + Sync + 'static> DavHandler<C> {
     pub async fn handle_guarded<ReqBody, ReqData, ReqError>(
         &self,
         req: Request<ReqBody>,
+        principal: String,
         credentials: C,
     ) -> Response<Body>
     where
@@ -212,7 +213,8 @@ impl<C: Clone + Send + Sync + 'static> DavHandler<C> {
         ReqError: StdError + Send + Sync + 'static,
         ReqBody: HttpBody<Data = ReqData, Error = ReqError>,
     {
-        let inner = DavInner::new(self.config.as_ref().clone(), credentials);
+        let mut inner = DavInner::new(self.config.as_ref().clone(), credentials);
+        inner.principal = Some(principal);
         inner.handle(req).await
     }
 }

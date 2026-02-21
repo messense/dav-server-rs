@@ -114,7 +114,7 @@ impl DavLockSystem for FakeLs {
         _principal: Option<&str>,
         _ignore_principal: bool,
         _deep: bool,
-        _submitted_tokens: Vec<&str>,
+        _submitted_tokens: &[String],
     ) -> LsFuture<'_, Result<(), DavLock>> {
         future::ready(Ok(())).boxed()
     }

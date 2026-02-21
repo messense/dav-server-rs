@@ -159,7 +159,10 @@ where
                         false
                     } else {
                         match *ls {
-                            Some(ref ls) => ls.check(p, None, true, false, vec![s]).await.is_ok(),
+                            Some(ref ls) => {
+                                let tokens: Vec<String> = vec![s.to_owned()];
+                                ls.check(p, None, true, false, &tokens).await.is_ok()
+                            }
                             None => false,
                         }
                     }

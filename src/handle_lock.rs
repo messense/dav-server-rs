@@ -48,23 +48,30 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             }
 
             // try refresh
-            // FIXME: you can refresh a lock owned by someone else. is that OK?
-            let timeout = get_timeout(req, true, false);
-            let lock = match locksystem.refresh(&path, &tokens[0], timeout).await {
-                Ok(lock) => lock,
-                Err(_) => return Err(SC::PRECONDITION_FAILED.into()),
-            };
+            if locksystem
+                .check(&path, self.principal.as_deref(), false, false, &tokens)
+                .await
+                .is_ok()
+            {
+                let timeout = get_timeout(req, true, false);
+                let lock = match locksystem.refresh(&path, &tokens[0], timeout).await {
+                    Ok(lock) => lock,
+                    Err(_) => return Err(SC::PRECONDITION_FAILED.into()),
+                };
 
-            // output result
-            let prop = build_lock_prop(&lock, true);
-            let mut emitter = xmltree_ext::emitter(MemBuffer::new())?;
-            prop.write_ev(&mut emitter)?;
-            let buffer = emitter.into_inner().take();
+                // output result
+                let prop = build_lock_prop(&lock, true);
+                let mut emitter = xmltree_ext::emitter(MemBuffer::new())?;
+                prop.write_ev(&mut emitter)?;
+                let buffer = emitter.into_inner().take();
 
-            let ct = "application/xml; charset=utf-8".to_owned();
-            res.headers_mut().typed_insert(davheaders::ContentType(ct));
-            *res.body_mut() = Body::from(buffer);
-            return Ok(res);
+                let ct = "application/xml; charset=utf-8".to_owned();
+                res.headers_mut().typed_insert(davheaders::ContentType(ct));
+                *res.body_mut() = Body::from(buffer);
+                return Ok(res);
+            } else {
+                return Err(SC::PRECONDITION_FAILED.into());
+            }
         }
 
         // handle Depth:

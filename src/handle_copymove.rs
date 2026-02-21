@@ -239,19 +239,21 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // a conflicting lock, we do not return a 207 multistatus, but
         // just a simple status.
         if let Some(ref locksystem) = self.ls {
-            let t = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
             let principal = self.principal.as_deref();
             if method == DavMethod::Move {
                 // for MOVE check if source path is locked
                 if let Err(_l) = locksystem
-                    .check(&path, principal, false, true, t.clone())
+                    .check(&path, principal, false, true, &tokens)
                     .await
                 {
                     return Err(StatusCode::LOCKED.into());
                 }
             }
             // for MOVE and COPY check if destination is locked
-            if let Err(_l) = locksystem.check(&dest, principal, false, true, t).await {
+            if let Err(_l) = locksystem
+                .check(&dest, principal, false, true, &tokens)
+                .await
+            {
                 return Err(StatusCode::LOCKED.into());
             }
         }

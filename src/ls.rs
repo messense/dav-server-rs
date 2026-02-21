@@ -73,7 +73,7 @@ pub trait DavLockSystem: Debug + Send + Sync + DynClone {
         principal: Option<&str>,
         ignore_principal: bool,
         deep: bool,
-        submitted_tokens: Vec<&str>,
+        submitted_tokens: &[String],
     ) -> LsFuture<'_, Result<(), DavLock>>;
 
     /// Find and return all locks that cover a given path.

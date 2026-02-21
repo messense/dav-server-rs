@@ -66,7 +66,9 @@ async fn handle(
             return Ok(response);
         }
     };
-    Ok(handler.handle_guarded(request, filter).await)
+    Ok(handler
+        .handle_guarded(request, "/principals/users/www_user".to_string(), filter)
+        .await)
 }
 
 #[derive(Clone)]
