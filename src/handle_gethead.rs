@@ -29,6 +29,13 @@ const BOUNDARY_END: &str = "\n--BOUNDARY--\n";
 const READ_BUF_SIZE: usize = 16384;
 
 impl<C: Clone + Send + Sync + 'static> DavInner<C> {
+    pub(crate) fn get_read_dir_meta(&self) -> ReadDirMeta {
+        match self.hide_symlinks {
+            Some(true) | None => ReadDirMeta::DataSymlink,
+            Some(false) => ReadDirMeta::Data,
+        }
+    }
+
     pub(crate) async fn handle_get(&self, req: &Request<()>) -> DavResult<Response<Body>> {
         let head = req.method() == http::Method::HEAD;
         let mut path = self.path(req);
@@ -42,8 +49,17 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             return Ok(response);
         }
 
-        // check if it's a directory.
-        let meta = self.fs.metadata(&path, &self.credentials).await?;
+        // check if it's a symlink.
+        let meta = if self.hide_symlinks.is_none_or(|x| x) {
+            let meta = self.fs.symlink_metadata(&path, &self.credentials).await?;
+            if meta.is_symlink() {
+                return Err(DavError::Status(StatusCode::NOT_FOUND));
+            }
+            meta
+        } else {
+            self.fs.metadata(&path, &self.credentials).await?
+        };
+
         if meta.is_dir() {
             //
             // This is a directory. If the path doesn't end in "/", send a redir.
@@ -316,7 +332,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // read directory or bail.
         let mut entries = self
             .fs
-            .read_dir(&path, ReadDirMeta::Data, &self.credentials)
+            .read_dir(&path, self.get_read_dir_meta(), &self.credentials)
             .await?;
 
         // start output
@@ -354,6 +370,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     let mut npath = path.clone();
                     npath.push_segment(&name);
                     if let Ok(meta) = dirent.metadata().await {
+                        if meta.is_symlink() {
+                            continue;
+                        }
                         if meta.is_dir() {
                             name.push(b'/');
                             npath.add_slash();

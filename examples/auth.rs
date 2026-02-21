@@ -32,6 +32,8 @@ async fn main() {
     let dav_server = DavHandler::builder()
         .filesystem(Box::new(fs) as _)
         .locksystem(FakeLs::new())
+        .autoindex(true)
+        .hide_symlinks(true)
         .build_handler();
     let listener = TcpListener::bind(addr).await.unwrap();
     println!("Listening {addr}");
@@ -119,6 +121,14 @@ impl GuardedFileSystem<Filter> for FilteredFs {
         _credentials: &'a Filter,
     ) -> FsFuture<'a, Box<dyn DavMetaData>> {
         self.inner.metadata(path, &())
+    }
+
+    fn symlink_metadata<'a>(
+        &'a self,
+        path: &'a DavPath,
+        _credentials: &'a Filter,
+    ) -> FsFuture<'a, Box<dyn DavMetaData>> {
+        self.inner.symlink_metadata(path, &())
     }
 }
 
