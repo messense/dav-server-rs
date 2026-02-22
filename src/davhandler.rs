@@ -26,6 +26,15 @@ use crate::fs::*;
 use crate::ls::*;
 use crate::voidfs::{VoidFs, is_voidfs};
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum DavOptionHide {
+    Never,
+    InAutoIndexListings,
+    InListings,
+    ForDirectPaths,
+    Always,
+}
+
 /// WebDAV request handler.
 ///
 /// The [`new`](Self::new) and [`builder`](Self::builder) methods are used to instantiate a handler.
@@ -57,7 +66,9 @@ pub struct DavConfig<C = ()> {
     // Hide symbolic links? `None` maps to `true`.
     pub(crate) hide_symlinks: Option<bool>,
     // Allow infinity depth header? Default: `false`.
-    pub(crate) allow_infinity_depth: bool,
+    pub(crate) allow_infinity_depth: Option<bool>,
+    // Hide files/directories beginning with "."? Default: `HideDotPrefix::InAutoIndexListings`.
+    pub(crate) hide_dot_prefix: Option<DavOptionHide>,
     // Does GET on a directory return indexes.
     pub(crate) autoindex: Option<bool>,
     // index.html
@@ -71,10 +82,7 @@ pub struct DavConfig<C = ()> {
 impl<C> DavConfig<C> {
     /// Create a new configuration builder.
     pub fn new() -> Self {
-        Self {
-            allow_infinity_depth: false,
-            ..Self::default()
-        }
+        Self::default()
     }
 
     /// Use the configuration that was built to generate a [`DavHandler`].
@@ -130,7 +138,14 @@ impl<C> DavConfig<C> {
     /// sets allow_infinity_depth (default is false)
     pub fn allow_infinity_depth(self, allow: bool) -> Self {
         let mut this = self;
-        this.allow_infinity_depth = allow;
+        this.allow_infinity_depth = Some(allow);
+        this
+    }
+
+    /// sets hide_dot_prefix (default is false)
+    pub fn hide_dot_prefix(self, hide: DavOptionHide) -> Self {
+        let mut this = self;
+        this.hide_dot_prefix = Some(hide);
         this
     }
 
@@ -169,7 +184,8 @@ impl<C> DavConfig<C> {
             allow: new.allow.or(self.allow),
             principal: new.principal.or_else(|| self.principal.clone()),
             hide_symlinks: new.hide_symlinks.or(self.hide_symlinks),
-            allow_infinity_depth: new.allow_infinity_depth,
+            allow_infinity_depth: new.allow_infinity_depth.or(self.allow_infinity_depth),
+            hide_dot_prefix: new.hide_dot_prefix.or(self.hide_dot_prefix),
             autoindex: new.autoindex.or(self.autoindex),
             indexfile: new.indexfile.or_else(|| self.indexfile.clone()),
             read_buf_size: new.read_buf_size.or(self.read_buf_size),
@@ -188,8 +204,9 @@ pub(crate) struct DavInner<C> {
     pub ls: Option<Box<dyn DavLockSystem>>,
     pub allow: Option<DavMethodSet>,
     pub principal: Option<String>,
-    pub hide_symlinks: Option<bool>,
+    pub hide_symlinks: bool,
     pub allow_infinity_depth: bool,
+    pub hide_dot_prefix: DavOptionHide,
     pub autoindex: Option<bool>,
     pub indexfile: Option<String>,
     pub read_buf_size: Option<usize>,
@@ -321,6 +338,7 @@ where
             principal,
             hide_symlinks,
             allow_infinity_depth,
+            hide_dot_prefix,
             autoindex,
             indexfile,
             read_buf_size,
@@ -332,8 +350,9 @@ where
             ls,
             allow,
             principal,
-            hide_symlinks,
-            allow_infinity_depth,
+            hide_symlinks: hide_symlinks.unwrap_or(false),
+            allow_infinity_depth: allow_infinity_depth.unwrap_or(false),
+            hide_dot_prefix: hide_dot_prefix.unwrap_or(DavOptionHide::InAutoIndexListings),
             autoindex,
             indexfile,
             read_buf_size,

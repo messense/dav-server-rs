@@ -8,7 +8,7 @@ use futures_util::{FutureExt, StreamExt, future::BoxFuture};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
-use crate::xmltree_ext::*;
+use crate::{DavOptionHide, xmltree_ext::*};
 use xml::EmitterConfig;
 use xml::common::XmlVersion;
 use xml::writer::EventWriter;
@@ -390,6 +390,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 }
             };
 
+            let hide_dot_prefix = self.hide_dot_prefix == DavOptionHide::InListings || self.hide_dot_prefix == DavOptionHide::Always;
             while let Some(dirent) = entries.next().await {
                 let dirent = match dirent {
                     Ok(dirent) => dirent,
@@ -398,6 +399,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         continue;
                     }
                 };
+                
+                if hide_dot_prefix && dirent.name().starts_with(b".") {
+                    continue;
+                }
 
                 let mut npath = path.clone();
                 npath.push_segment(&dirent.name());

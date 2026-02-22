@@ -253,5 +253,5 @@ pub(crate) use crate::davhandler::DavInner;
 pub(crate) use crate::errors::{DavError, DavResult};
 pub(crate) use crate::fs::*;
 
-pub use crate::davhandler::{DavConfig, DavHandler};
+pub use crate::davhandler::{DavConfig, DavHandler, DavOptionHide};
 pub use crate::util::{DavMethod, DavMethodSet};
