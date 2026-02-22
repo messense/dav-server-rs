@@ -65,7 +65,7 @@ impl Server {
         };
 
         if let Some(user) = user {
-            let config = DavConfig::new().principal(user);
+            let config = DavConfig::new().principal(user).allow_infinity_depth(true);
             Ok(self.dh.handle_with(config, req).await)
         } else {
             Ok(self.dh.handle(req).await)

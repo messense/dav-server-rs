@@ -56,6 +56,8 @@ pub struct DavConfig<C = ()> {
     pub(crate) principal: Option<String>,
     // Hide symbolic links? `None` maps to `true`.
     pub(crate) hide_symlinks: Option<bool>,
+    // Allow infinity depth header? Default: `false`.
+    pub(crate) allow_infinity_depth: bool,
     // Does GET on a directory return indexes.
     pub(crate) autoindex: Option<bool>,
     // index.html
@@ -69,7 +71,10 @@ pub struct DavConfig<C = ()> {
 impl<C> DavConfig<C> {
     /// Create a new configuration builder.
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            allow_infinity_depth: false,
+            ..Self::default()
+        }
     }
 
     /// Use the configuration that was built to generate a [`DavHandler`].
@@ -122,6 +127,13 @@ impl<C> DavConfig<C> {
         this
     }
 
+    /// sets allow_infinity_depth (default is false)
+    pub fn allow_infinity_depth(self, allow: bool) -> Self {
+        let mut this = self;
+        this.allow_infinity_depth = allow;
+        this
+    }
+
     /// Does a GET on a directory produce a directory index.
     pub fn autoindex(self, autoindex: bool) -> Self {
         let mut this = self;
@@ -157,6 +169,7 @@ impl<C> DavConfig<C> {
             allow: new.allow.or(self.allow),
             principal: new.principal.or_else(|| self.principal.clone()),
             hide_symlinks: new.hide_symlinks.or(self.hide_symlinks),
+            allow_infinity_depth: new.allow_infinity_depth,
             autoindex: new.autoindex.or(self.autoindex),
             indexfile: new.indexfile.or_else(|| self.indexfile.clone()),
             read_buf_size: new.read_buf_size.or(self.read_buf_size),
@@ -176,6 +189,7 @@ pub(crate) struct DavInner<C> {
     pub allow: Option<DavMethodSet>,
     pub principal: Option<String>,
     pub hide_symlinks: Option<bool>,
+    pub allow_infinity_depth: bool,
     pub autoindex: Option<bool>,
     pub indexfile: Option<String>,
     pub read_buf_size: Option<usize>,
@@ -306,6 +320,7 @@ where
             allow,
             principal,
             hide_symlinks,
+            allow_infinity_depth,
             autoindex,
             indexfile,
             read_buf_size,
@@ -318,6 +333,7 @@ where
             allow,
             principal,
             hide_symlinks,
+            allow_infinity_depth,
             autoindex,
             indexfile,
             read_buf_size,

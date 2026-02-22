@@ -277,8 +277,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         let depth = match req.headers().typed_get::<davheaders::Depth>() {
             Some(davheaders::Depth::Infinity) => {
-                if req.headers().typed_get::<davheaders::XLitmus>().is_none() {
-                    let ct = "application/xml; charset=utf-8".to_owned();
+                if !self.allow_infinity_depth {
+                    let ct = "application/xml; charset=utf-8".to_string();
                     res.headers_mut().typed_insert(davheaders::ContentType(ct));
                     *res.status_mut() = StatusCode::NOT_IMPLEMENTED;
                     *res.body_mut() = dav_xml_error("<D:propfind-finite-depth/>");
