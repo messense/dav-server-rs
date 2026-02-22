@@ -8,7 +8,7 @@ use futures_util::{FutureExt, StreamExt, future::BoxFuture};
 use headers::HeaderMapExt;
 use http::{Request, Response, StatusCode};
 
-use crate::xmltree_ext::*;
+use crate::{DavOptionHide, xmltree_ext::*};
 use xml::EmitterConfig;
 use xml::common::XmlVersion;
 use xml::writer::EventWriter;
@@ -277,8 +277,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         let depth = match req.headers().typed_get::<davheaders::Depth>() {
             Some(davheaders::Depth::Infinity) => {
-                if req.headers().typed_get::<davheaders::XLitmus>().is_none() {
-                    let ct = "application/xml; charset=utf-8".to_owned();
+                if !self.allow_infinity_depth {
+                    let ct = "application/xml; charset=utf-8".to_string();
                     res.headers_mut().typed_insert(davheaders::ContentType(ct));
                     *res.status_mut() = StatusCode::NOT_IMPLEMENTED;
                     *res.body_mut() = dav_xml_error("<D:propfind-finite-depth/>");
@@ -390,6 +390,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 }
             };
 
+            let hide_dot_prefix = self.hide_dot_prefix == DavOptionHide::InListings
+                || self.hide_dot_prefix == DavOptionHide::Always;
             while let Some(dirent) = entries.next().await {
                 let dirent = match dirent {
                     Ok(dirent) => dirent,
@@ -398,6 +400,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         continue;
                     }
                 };
+
+                if hide_dot_prefix && dirent.name().starts_with(b".") {
+                    continue;
+                }
 
                 let mut npath = path.clone();
                 npath.push_segment(&dirent.name());

@@ -1,11 +1,12 @@
 #[cfg(target_os = "linux")]
 mod dav_tests {
-    use dav_server::{DavHandler, body::Body, fakels::FakeLs, localfs::LocalFs};
+    use dav_server::{DavHandler, DavOptionHide, body::Body, fakels::FakeLs, localfs::LocalFs};
     use http::{Request, StatusCode};
 
     fn setup_dav_server_symlink() -> DavHandler {
         let _ = std::fs::create_dir("/tmp/DAV_SERVER_TEST");
         let _ = std::fs::create_dir("/tmp/DAV_SERVER_TEST/normal_dir");
+        let _ = std::fs::create_dir("/tmp/DAV_SERVER_TEST/.hidden_folder");
         let _ = std::os::unix::fs::symlink(
             "/tmp/DAV_SERVER_TEST/normal_dir",
             "/tmp/DAV_SERVER_TEST/symlink_to_dir",
@@ -17,6 +18,7 @@ mod dav_tests {
             .locksystem(FakeLs::new())
             .autoindex(true)
             .hide_symlinks(true)
+            .hide_dot_prefix(DavOptionHide::Always)
             .build_handler()
     }
 
@@ -94,5 +96,65 @@ mod dav_tests {
         assert_eq!(resp.status(), StatusCode::OK);
         let resp_text = resp_to_string(resp).await;
         assert!(!resp_text.contains("/symlink_to_dir"));
+    }
+
+    #[tokio::test]
+    async fn test_dav_dotprefix_propfind_one() {
+        let server = setup_dav_server_symlink();
+
+        let req = Request::builder()
+            .method("PROPFIND")
+            .uri("/.hidden_folder")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = server.handle(req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_dav_dotprefix_propfind_dir() {
+        let server = setup_dav_server_symlink();
+
+        let req = Request::builder()
+            .method("PROPFIND")
+            .uri("/")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = server.handle(req).await;
+        assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
+        let resp_text = resp_to_string(resp).await;
+        assert!(!resp_text.contains("/.hidden_folder"));
+    }
+
+    #[tokio::test]
+    async fn test_dav_dotprefix_get_autoindex_one() {
+        let server = setup_dav_server_symlink();
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/.hidden_folder")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = server.handle(req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_dav_dotprefix_get_autoindex_dir() {
+        let server = setup_dav_server_symlink();
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = server.handle(req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let resp_text = resp_to_string(resp).await;
+        assert!(!resp_text.contains("/.hidden_folder"));
     }
 }

@@ -11,6 +11,7 @@ use bytes::Bytes;
 use crate::async_stream::AsyncStream;
 use crate::body::Body;
 use crate::conditional;
+use crate::davhandler::DavOptionHide;
 use crate::davheaders;
 use crate::davpath::DavPath;
 use crate::errors::*;
@@ -30,15 +31,23 @@ const READ_BUF_SIZE: usize = 16384;
 
 impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     pub(crate) fn get_read_dir_meta(&self) -> ReadDirMeta {
-        match self.hide_symlinks {
-            Some(true) | None => ReadDirMeta::DataSymlink,
-            Some(false) => ReadDirMeta::Data,
+        if self.hide_symlinks {
+            ReadDirMeta::DataSymlink
+        } else {
+            ReadDirMeta::Data
         }
     }
 
-    /// Returns the metadata depending on hide_symlinks
+    /// Returns the metadata depending on hide_symlinks & hide_dot_prefix
     pub(crate) async fn visible_metadata(&self, path: &DavPath) -> DavResult<Box<dyn DavMetaData>> {
-        if self.hide_symlinks.is_none_or(|x| x) {
+        if (self.hide_dot_prefix == DavOptionHide::Always
+            || self.hide_dot_prefix == DavOptionHide::ForDirectPaths)
+            && path.file_name_bytes().starts_with(b".")
+        {
+            return Err(DavError::Status(StatusCode::NOT_FOUND));
+        }
+
+        if self.hide_symlinks {
             let meta = self.fs.symlink_metadata(path, &self.credentials).await?;
             if meta.is_symlink() {
                 return Err(DavError::Status(StatusCode::NOT_FOUND));
@@ -353,6 +362,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         // now just loop and send data.
         *res.body_mut() = Body::from(AsyncStream::new(|mut tx| {
+            let hide_dot_prefix = self.hide_dot_prefix == DavOptionHide::InAutoIndexListings
+                || self.hide_dot_prefix == DavOptionHide::InListings
+                || self.hide_dot_prefix == DavOptionHide::Always;
             async move {
                 // transform all entries into a dirent struct.
                 struct Dirent {
@@ -372,7 +384,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     };
 
                     let mut name = dirent.name();
-                    if name.starts_with(b".") {
+                    if hide_dot_prefix && name.starts_with(b".") {
                         continue;
                     }
                     let mut npath = path.clone();
