@@ -36,7 +36,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }
     }
 
-    /// Returns the metadate depending on hide_symlinks
+    /// Returns the metadata depending on hide_symlinks
     pub(crate) async fn visible_metadata(&self, path: &DavPath) -> DavResult<Box<dyn DavMetaData>> {
         if self.hide_symlinks.is_none_or(|x| x) {
             let meta = self.fs.symlink_metadata(path, &self.credentials).await?;
