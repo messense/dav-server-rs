@@ -390,7 +390,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 }
             };
 
-            let hide_dot_prefix = self.hide_dot_prefix == DavOptionHide::InListings || self.hide_dot_prefix == DavOptionHide::Always;
+            let hide_dot_prefix = self.hide_dot_prefix == DavOptionHide::InListings
+                || self.hide_dot_prefix == DavOptionHide::Always;
             while let Some(dirent) = entries.next().await {
                 let dirent = match dirent {
                     Ok(dirent) => dirent,
@@ -399,7 +400,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         continue;
                     }
                 };
-                
+
                 if hide_dot_prefix && dirent.name().starts_with(b".") {
                     continue;
                 }

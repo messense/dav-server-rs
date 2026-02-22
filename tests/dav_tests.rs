@@ -1,6 +1,6 @@
 #[cfg(target_os = "linux")]
 mod dav_tests {
-    use dav_server::{DavHandler, body::Body, fakels::FakeLs, localfs::LocalFs, DavOptionHide};
+    use dav_server::{DavHandler, DavOptionHide, body::Body, fakels::FakeLs, localfs::LocalFs};
     use http::{Request, StatusCode};
 
     fn setup_dav_server_symlink() -> DavHandler {

@@ -40,7 +40,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
     /// Returns the metadata depending on hide_symlinks & hide_dot_prefix
     pub(crate) async fn visible_metadata(&self, path: &DavPath) -> DavResult<Box<dyn DavMetaData>> {
-        if (self.hide_dot_prefix == DavOptionHide::Always || self.hide_dot_prefix == DavOptionHide::ForDirectPaths) && path.file_name_bytes().starts_with(b".") {
+        if (self.hide_dot_prefix == DavOptionHide::Always
+            || self.hide_dot_prefix == DavOptionHide::ForDirectPaths)
+            && path.file_name_bytes().starts_with(b".")
+        {
             return Err(DavError::Status(StatusCode::NOT_FOUND));
         }
 
@@ -359,7 +362,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         // now just loop and send data.
         *res.body_mut() = Body::from(AsyncStream::new(|mut tx| {
-            let hide_dot_prefix = self.hide_dot_prefix == DavOptionHide::InAutoIndexListings || self.hide_dot_prefix == DavOptionHide::InListings || self.hide_dot_prefix == DavOptionHide::Always;
+            let hide_dot_prefix = self.hide_dot_prefix == DavOptionHide::InAutoIndexListings
+                || self.hide_dot_prefix == DavOptionHide::InListings
+                || self.hide_dot_prefix == DavOptionHide::Always;
             async move {
                 // transform all entries into a dirent struct.
                 struct Dirent {
