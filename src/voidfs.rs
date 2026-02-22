@@ -32,6 +32,14 @@ impl<C: Clone + Send + Sync + 'static> GuardedFileSystem<C> for VoidFs<C> {
         Box::pin(async { Err(FsError::NotImplemented) })
     }
 
+    fn symlink_metadata<'a>(
+        &'a self,
+        _path: &'a DavPath,
+        _credentials: &'a C,
+    ) -> FsFuture<'a, Box<dyn DavMetaData>> {
+        Box::pin(async { Err(FsError::NotImplemented) })
+    }
+
     fn read_dir<'a>(
         &'a self,
         _path: &'a DavPath,

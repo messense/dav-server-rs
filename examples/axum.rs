@@ -27,6 +27,8 @@ async fn async_main() {
         .filesystem(LocalFs::new("/tmp", false, false, false))
         .locksystem(FakeLs::new())
         .strip_prefix("/dav")
+        .autoindex(true)
+        .hide_symlinks(true)
         .build_handler();
 
     let router = Router::new()

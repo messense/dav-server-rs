@@ -159,6 +159,10 @@ impl DavFileSystem for MemFs {
         .boxed()
     }
 
+    fn symlink_metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
+        <Self as DavFileSystem>::metadata(self, path)
+    }
+
     fn read_dir<'a>(
         &'a self,
         path: &'a DavPath,
@@ -492,6 +496,10 @@ impl DavMetaData for MemFsDirEntry {
 
     fn is_dir(&self) -> bool {
         self.is_dir
+    }
+
+    fn is_symlink(&self) -> bool {
+        false
     }
 
     #[cfg(feature = "caldav")]

@@ -179,11 +179,8 @@ pub trait DavFileSystem {
     /// it return the metadata for the link itself, not for the thing
     /// it points to.
     ///
-    /// The default implementation returns [`FsError::NotImplemented`].
-    #[allow(unused_variables)]
-    fn symlink_metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
-        self.metadata(path)
-    }
+    /// Must be implemented so that hide_symlinks is able to work.
+    fn symlink_metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>>;
 
     /// Create a directory.
     ///
@@ -367,15 +364,12 @@ where
     /// it return the metadata for the link itself, not for the thing
     /// it points to.
     ///
-    /// The default implementation returns [`FsError::NotImplemented`].
-    #[allow(unused_variables)]
+    /// Must be implemented so that hide_symlinks is able to work.
     fn symlink_metadata<'a>(
         &'a self,
         path: &'a DavPath,
         credentials: &'a C,
-    ) -> FsFuture<'a, Box<dyn DavMetaData>> {
-        self.metadata(path, credentials)
-    }
+    ) -> FsFuture<'a, Box<dyn DavMetaData>>;
 
     /// Create a directory.
     ///
@@ -716,6 +710,8 @@ pub trait DavMetaData: Debug + Send + Sync + DynClone {
     /// Is Address Book collection?
     #[cfg(feature = "carddav")]
     fn is_addressbook(&self, path: &DavPath) -> bool;
+    /// Is this a symbolic link? Must be implemented so that hide_symlinks is able to work.
+    fn is_symlink(&self) -> bool;
 
     /// Simplistic implementation of `etag()`
     ///
@@ -739,11 +735,6 @@ pub trait DavMetaData: Debug + Send + Sync + DynClone {
     /// Is this a file and not a directory. Default: `!is_dir()`.
     fn is_file(&self) -> bool {
         !self.is_dir()
-    }
-
-    /// Is this a symbolic link. Default: false.
-    fn is_symlink(&self) -> bool {
-        false
     }
 
     /// Last access time. Default: `FsError::NotImplemented`.
