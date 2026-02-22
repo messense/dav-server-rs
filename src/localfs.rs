@@ -810,8 +810,14 @@ impl DavMetaData for LocalFsMetaData {
 
     #[cfg(windows)]
     fn executable(&self) -> FsResult<bool> {
-        // Windows filesystem does not have executable flag, so we return always true
-        Ok(true)
+        // Windows filesystem does not have an executable flag; for regular files we
+        // assume they are executable, and for non-files we match the Unix behavior
+        // by reporting this as not implemented.
+        if self.0.is_file() {
+            Ok(true)
+        } else {
+            Err(FsError::NotImplemented)
+        }
     }
 
     // same as the default apache etag.
