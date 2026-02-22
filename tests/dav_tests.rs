@@ -6,7 +6,10 @@ mod dav_tests {
     fn setup_dav_server_symlink() -> DavHandler {
         let _ = std::fs::create_dir("/tmp/DAV_SERVER_TEST");
         let _ = std::fs::create_dir("/tmp/DAV_SERVER_TEST/normal_dir");
-        let _ = std::os::unix::fs::symlink("/tmp/DAV_SERVER_TEST/normal_dir", "/tmp/DAV_SERVER_TEST/symlink_to_dir");
+        let _ = std::os::unix::fs::symlink(
+            "/tmp/DAV_SERVER_TEST/normal_dir",
+            "/tmp/DAV_SERVER_TEST/symlink_to_dir",
+        );
 
         DavHandler::builder()
             // We need LocalFs to test for symlinks
