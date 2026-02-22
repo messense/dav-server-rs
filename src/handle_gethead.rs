@@ -36,6 +36,22 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }
     }
 
+    /// Returns the metadate depending on hide_symlinks
+    pub(crate) async fn visible_metadata(&self, path: &DavPath) -> DavResult<Box<dyn DavMetaData>> {
+        if self.hide_symlinks.is_none_or(|x| x) {
+            let meta = self.fs.symlink_metadata(path, &self.credentials).await?;
+            if meta.is_symlink() {
+                return Err(DavError::Status(StatusCode::NOT_FOUND));
+            }
+            Ok(meta)
+        } else {
+            match self.fs.metadata(path, &self.credentials).await {
+                Ok(val) => Ok(val),
+                Err(err) => Err(DavError::FsError(err)),
+            }
+        }
+    }
+
     pub(crate) async fn handle_get(&self, req: &Request<()>) -> DavResult<Response<Body>> {
         let head = req.method() == http::Method::HEAD;
         let mut path = self.path(req);
@@ -50,15 +66,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }
 
         // check if it's a symlink.
-        let meta = if self.hide_symlinks.is_none_or(|x| x) {
-            let meta = self.fs.symlink_metadata(&path, &self.credentials).await?;
-            if meta.is_symlink() {
-                return Err(DavError::Status(StatusCode::NOT_FOUND));
-            }
-            meta
-        } else {
-            self.fs.metadata(&path, &self.credentials).await?
-        };
+        let meta = self.visible_metadata(&path).await?;
 
         if meta.is_dir() {
             //

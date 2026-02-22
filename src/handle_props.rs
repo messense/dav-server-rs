@@ -292,10 +292,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         // path and meta
         let mut path = self.path(req);
-        let meta = self.fs.metadata(&path, &self.credentials).await?;
-        if self.hide_symlinks.is_none_or(|x| x) && meta.is_symlink() {
-            return Err(DavError::Status(StatusCode::NOT_FOUND));
-        }
+        let meta = self.visible_metadata(&path).await?;
         let meta = self.fixpath(&mut res, &mut path, meta);
 
         let mut root = None;
