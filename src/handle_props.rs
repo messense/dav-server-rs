@@ -834,7 +834,6 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
     async fn get_quota<'a>(
         &'a self,
         qc: &'a mut QuotaCache,
-        path: &'a DavPath,
         meta: &'a dyn DavMetaData,
     ) -> FsResult<(u64, Option<u64>)> {
         // do lookup only once.
@@ -855,11 +854,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         }
 
         // if not "/", return for "used" just the size of this file/dir.
-        let used = if path.as_bytes() == b"/" {
-            qc.q_used
-        } else {
-            meta.len()
-        };
+        let used = if meta.is_dir() { qc.q_used } else { meta.len() };
 
         // calculate available space.
         let avail = qc.q_total.map(|total| total.saturating_sub(used));
@@ -975,12 +970,12 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         });
                     }
                     "quota-available-bytes" => {
-                        if let Ok((_, Some(avail))) = self.get_quota(qc, path, meta).await {
+                        if let Ok((_, Some(avail))) = self.get_quota(qc, meta).await {
                             return self.build_elem(docontent, pfx, prop, avail.to_string());
                         }
                     }
                     "quota-used-bytes" => {
-                        if let Ok((used, _)) = self.get_quota(qc, path, meta).await {
+                        if let Ok((used, _)) = self.get_quota(qc, meta).await {
                             let used = if self.useragent.contains("WebDAVFS") {
                                 // Need this on MacOs, otherwise the value is off
                                 // by a factor of 10 or so .. ?!?!!?
