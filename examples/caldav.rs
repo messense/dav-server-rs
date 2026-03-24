@@ -107,6 +107,7 @@ async fn handle_caldav(
 
 async fn log_request_middleware(request: Request, next: Next) -> impl IntoResponse {
     // Print request line and headers
+    println!("========================================================================\n");
     println!("\n========== CLIENT REQUEST ==========");
     println!("{} {}", request.method(), request.uri(),);
     println!("--- Headers ---");
@@ -119,20 +120,36 @@ async fn log_request_middleware(request: Request, next: Next) -> impl IntoRespon
     let collected = body.collect().await.unwrap_or_default();
     let body_bytes = collected.to_bytes();
 
+    // if !body_bytes.is_empty() {
+    //     println!("--- Body ---");
+    //     if let Ok(body_str) = std::str::from_utf8(&body_bytes) {
+    //         println!("{}", body_str);
+    //     } else {
+    //         println!("<binary data: {} bytes>", body_bytes.len());
+    //     }
+    // }
+    println!("====================================\n");
+
+    // Reconstruct request with body
+    let request = axum::http::Request::from_parts(parts, Body::from(body_bytes));
+
+    let response: axum::response::Response = next.run(request).await;
+    println!(
+        "\n========== SERVER RESPONSE ({}) ==========",
+        response.status()
+    );
+    let (parts, body) = response.into_parts();
+    let collected = body.collect().await.unwrap_or_default();
+    let body_bytes = collected.to_bytes();
     if !body_bytes.is_empty() {
-        println!("--- Body ---");
         if let Ok(body_str) = std::str::from_utf8(&body_bytes) {
             println!("{}", body_str);
         } else {
             println!("<binary data: {} bytes>", body_bytes.len());
         }
     }
-    println!("====================================\n");
-
-    // Reconstruct request with body
-    let request = axum::http::Request::from_parts(parts, Body::from(body_bytes));
-
-    next.run(request).await
+    println!("========================================================================\n");
+    axum::http::Response::from_parts(parts, Body::from(body_bytes))
 }
 
 #[cfg(not(feature = "caldav"))]

@@ -109,11 +109,6 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // Create the calendar collection
         self.fs.create_dir(&path, &self.credentials).await?;
 
-        // Set calendar-specific properties to identify this as a calendar collection
-        // Note: This may fail if the filesystem doesn't support properties, but that's OK
-        // because is_calendar() uses path-based detection as a fallback
-        let _ = self.set_calendar_properties(&path).await;
-
         let mut resp = Response::new(Body::empty());
         *resp.status_mut() = StatusCode::CREATED;
         resp.headers_mut().typed_insert(headers::ContentLength(0));
@@ -535,34 +530,5 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }));
 
         Ok(resp)
-    }
-
-    /// Save Calendar data to DavFile
-    ///
-    /// Set calendar-specific properties to identify a directory as a calendar collection
-    async fn set_calendar_properties(&self, path: &DavPath) -> DavResult<()> {
-        use crate::fs::DavProp;
-
-        // Set supported-calendar-component-set property
-        let comp_set_prop = DavProp {
-            name: "supported-calendar-component-set".to_string(),
-            prefix: Some("C".to_string()),
-            namespace: Some(NS_CALDAV_URI.to_string()),
-            xml: Some(b"<C:supported-calendar-component-set xmlns:C=\"urn:ietf:params:xml:ns:caldav\"><C:comp name=\"VEVENT\"/><C:comp name=\"VTODO\"/><C:comp name=\"VJOURNAL\"/><C:comp name=\"VFREEBUSY\"/></C:supported-calendar-component-set>".to_vec()),
-        };
-
-        // Set calendar-description property
-        let desc_prop = DavProp {
-            name: "calendar-description".to_string(),
-            prefix: Some("C".to_string()),
-            namespace: Some(NS_CALDAV_URI.to_string()),
-            xml: Some(b"<C:calendar-description xmlns:C=\"urn:ietf:params:xml:ns:caldav\">Calendar Collection</C:calendar-description>".to_vec()),
-        };
-
-        // Save properties using patch_props (true = set property)
-        let patch = vec![(true, comp_set_prop), (true, desc_prop)];
-        self.fs.patch_props(path, patch, &self.credentials).await?;
-
-        Ok(())
     }
 }

@@ -11,6 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use dyn_clone::{DynClone, clone_trait_object};
 use futures_util::{FutureExt, Stream, TryFutureExt};
+#[cfg(feature = "proppatch")]
 use http::StatusCode;
 
 use crate::davpath::DavPath;

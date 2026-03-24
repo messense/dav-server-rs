@@ -17,7 +17,6 @@ use xmltree::{Element, XMLNode};
 
 use crate::async_stream::AsyncStream;
 use crate::body::Body;
-use crate::conditional::if_match_get_tokens;
 use crate::davheaders;
 use crate::davpath::*;
 use crate::errors::*;
@@ -437,6 +436,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     // set/change a live property. returns StatusCode::CONTINUE if
     // this wasnt't  a live property (or, if we want it handled
     // as a dead property, e.g. DAV:displayname).
+    #[cfg(feature = "proppatch")]
     fn liveprop_set(&self, prop: &Element, can_deadprop: bool) -> StatusCode {
         match prop.namespace.as_deref() {
             Some(NS_DAV_URI) => {
@@ -514,6 +514,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
     // In general, live properties cannot be removed, with the
     // exception of getcontentlanguage and displayname.
+    #[cfg(feature = "proppatch")]
     fn liveprop_remove(&self, prop: &Element, can_deadprop: bool) -> StatusCode {
         match prop.namespace.as_deref() {
             Some(NS_DAV_URI) => match prop.name.as_str() {
@@ -545,7 +546,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         let meta = self.fixpath(&mut res, &mut path, meta);
 
         // check the If and If-* headers.
-        let tokens = match if_match_get_tokens(
+        let tokens = match crate::conditional::if_match_get_tokens(
             req,
             Some(meta.as_ref()),
             self.fs.as_ref(),
@@ -879,6 +880,45 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             Some(NS_DAV_URI) => {
                 pfx = "D";
                 match prop.name.as_str() {
+                    #[cfg(feature = "caldav")]
+                    "supported-report-set" => {
+                        let mut ns: xmltree::Namespace = xmltree::Namespace::empty();
+                        ns.put("C".to_string(), NS_CALDAV_URI.to_string());
+
+                        return Ok(StatusElement {
+                            status: StatusCode::OK,
+                            element: Element {
+                                prefix: Some("D".to_string()),
+                                namespace: None,
+                                namespaces: Some(ns),
+                                name: "supported-report-set".to_string(),
+                                attributes: HashMap::new(),
+                                children: vec![
+                                    Element::new3(
+                                        "D",
+                                        "supported-report",
+                                        vec![Element::new3(
+                                            "D",
+                                            "report",
+                                            vec![Element::new3("C", "calendar-query", vec![])],
+                                        )],
+                                    ),
+                                    Element::new3(
+                                        "D",
+                                        "supported-report",
+                                        vec![Element::new3(
+                                            "D",
+                                            "report",
+                                            vec![Element::new3("C", "calendar-multiget", vec![])],
+                                        )],
+                                    ),
+                                ]
+                                .into_iter()
+                                .map(XMLNode::Element)
+                                .collect(),
+                            },
+                        });
+                    }
                     "creationdate" => {
                         if let Ok(time) = meta.created() {
                             let tm = systemtime_to_rfc3339_without_nanosecond(time);
@@ -1402,6 +1442,7 @@ fn add_sc_elem(hm: &mut HashMap<StatusCode, Vec<Element>>, sc: StatusCode, e: El
     hm.get_mut(&sc).unwrap().push(e)
 }
 
+#[allow(dead_code)]
 fn element_to_davprop_full(elem: &Element) -> DavProp {
     let mut emitter = EventWriter::new(Cursor::new(Vec::new()));
     elem.write_ev(&mut emitter).ok();
@@ -1425,11 +1466,8 @@ fn element_to_davprop(elem: &Element) -> DavProp {
 
 fn davprop_to_element(prop: DavProp) -> Element {
     if let Some(xml) = prop.xml {
-        let txt: String = xml.clone().try_into().unwrap();
-        println!("      {txt}");
         match Element::parse2(Cursor::new(xml)) {
             Ok(result) => {
-                println!("davprop_to_element result {:?}", result);
                 return result;
             }
             Err(error) => {

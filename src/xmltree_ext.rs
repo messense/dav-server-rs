@@ -1,6 +1,6 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::io::{Read, Write};
-
 use xml::EmitterConfig;
 use xml::common::XmlVersion;
 use xml::writer::EventWriter;
@@ -13,6 +13,9 @@ use crate::{DavError, DavResult};
 pub(crate) trait ElementExt {
     /// Builder.
     fn new2<'a, E: Into<&'a str>>(e: E) -> Self;
+    /// Builder.
+    #[allow(dead_code)]
+    fn new3(prefix: &str, name: &str, children: Vec<Element>) -> Self;
     /// Builder.
     fn ns<S: Into<String>>(self, prefix: S, namespace: S) -> Self;
     /// Builder.
@@ -49,6 +52,17 @@ impl ElementExt for Element {
             let mut e = Element::new(v[1]);
             e.prefix = Some(v[0].to_string());
             e
+        }
+    }
+
+    fn new3(prefix: &str, name: &str, children: Vec<Element>) -> Element {
+        Element {
+            prefix: Some(prefix.to_string()),
+            namespace: None,
+            namespaces: None,
+            name: name.to_string(),
+            attributes: HashMap::new(),
+            children: children.into_iter().map(XMLNode::Element).collect(),
         }
     }
 

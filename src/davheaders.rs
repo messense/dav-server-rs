@@ -345,6 +345,12 @@ impl FromStr for ETag {
                 tag: t.to_owned(),
                 weak,
             })
+        } else if !t.is_empty() && !t.contains('\"') {
+            // allow more leniant if-match header
+            Ok(ETag {
+                tag: format!("\"{t}\""),
+                weak,
+            })
         } else {
             Err(invalid())
         }
