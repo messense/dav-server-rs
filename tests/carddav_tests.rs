@@ -1,4 +1,4 @@
-#[cfg(feature = "carddav")]
+#[cfg(all(feature = "carddav", feature = "memfs"))]
 mod carddav_tests {
     use dav_server::{DavHandler, body::Body, carddav::*, fakels::FakeLs, memfs::MemFs};
     use http::{Method, Request, StatusCode};
@@ -449,7 +449,7 @@ END:VCARD"#;
     }
 }
 
-#[cfg(not(feature = "carddav"))]
+#[cfg(all(not(feature = "carddav"), feature = "memfs"))]
 mod carddav_disabled_tests {
     use dav_server::{DavHandler, body::Body, fakels::FakeLs, memfs::MemFs};
     use http::Request;
