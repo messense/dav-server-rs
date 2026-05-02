@@ -630,7 +630,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             // made changes to live props, but come on, we're not
             // builing a transaction engine here.
             let deadret = self.fs.patch_props(&path, patch, &self.credentials).await?;
-            ret.extend(deadret.into_iter());
+            ret.extend(deadret);
         }
 
         // group by statuscode.
@@ -944,10 +944,8 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             return self.build_elem(docontent, pfx, prop, etag);
                         }
                     }
-                    "getcontentlength" => {
-                        if !meta.is_dir() {
-                            return self.build_elem(docontent, pfx, prop, meta.len().to_string());
-                        }
+                    "getcontentlength" if !meta.is_dir() => {
+                        return self.build_elem(docontent, pfx, prop, meta.len().to_string());
                     }
                     "getcontenttype" => {
                         return if meta.is_dir() {
