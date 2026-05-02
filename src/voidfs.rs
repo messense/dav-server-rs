@@ -59,7 +59,7 @@ impl<C: Clone + Send + Sync + 'static> GuardedFileSystem<C> for VoidFs<C> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "memfs"))]
 mod tests {
     use super::*;
     use crate::memfs::MemFs;

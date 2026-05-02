@@ -1,4 +1,4 @@
-#[cfg(feature = "caldav")]
+#[cfg(all(feature = "caldav", feature = "memfs"))]
 mod caldav_tests {
     use dav_server::{DavHandler, body::Body, caldav::*, fakels::FakeLs};
     use http::response::Response;
@@ -328,7 +328,7 @@ END:VCALENDAR"#;
     }
 }
 
-#[cfg(not(feature = "caldav"))]
+#[cfg(all(not(feature = "caldav"), feature = "memfs"))]
 mod caldav_disabled_tests {
     use dav_server::{DavHandler, body::Body, fakels::FakeLs, memfs::MemFs};
     use http::Request;

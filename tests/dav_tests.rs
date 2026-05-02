@@ -1,4 +1,4 @@
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "localfs"))]
 mod dav_tests {
     use dav_server::{DavHandler, DavOptionHide, body::Body, fakels::FakeLs, localfs::LocalFs};
     use http::{Request, StatusCode};
