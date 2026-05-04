@@ -2,7 +2,7 @@
 //!
 use std::error::Error;
 use std::ffi::OsStr;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "wasi"))]
 use std::ffi::OsString;
 #[cfg(target_family = "unix")]
 use std::os::unix::ffi::OsStrExt;
@@ -326,9 +326,9 @@ impl DavPathRef {
         if b.len() > 1 && b.ends_with(b"/") {
             b = &b[..b.len() - 1];
         }
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(all(not(target_os = "windows"), not(target_os = "wasi")))]
         let os_string = OsStr::from_bytes(b).to_owned();
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "wasi"))]
         let os_string = OsString::from(String::from_utf8(b.to_vec()).unwrap());
         PathBuf::from(os_string)
     }
@@ -370,9 +370,9 @@ impl DavPathRef {
         if path.ends_with(b"/") {
             path = &path[..path.len() - 1];
         }
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(all(not(target_os = "windows"), not(target_os = "wasi")))]
         let os_string = OsStr::from_bytes(path);
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "wasi"))]
         let os_string: &OsStr = std::str::from_utf8(path).unwrap().as_ref();
         Path::new(os_string)
     }
