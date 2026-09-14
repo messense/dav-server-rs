@@ -43,7 +43,7 @@ impl std::fmt::Display for DavPath {
 
 impl std::fmt::Debug for DavPath {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", &self.as_url_string_with_prefix_debug())
+        write!(f, "{:?}", self.as_url_string_with_prefix_debug())
     }
 }
 

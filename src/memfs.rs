@@ -128,7 +128,7 @@ impl MemFs {
             return Err(FsError::Forbidden);
         }
         if options.truncate {
-            node.as_file_mut()?.data.truncate(0);
+            node.as_file_mut()?.data.clear();
             node.update_mtime(SystemTime::now());
         }
         Ok(Box::new(MemFsFile {
