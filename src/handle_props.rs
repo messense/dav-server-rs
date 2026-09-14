@@ -25,7 +25,8 @@ use crate::handle_lock::{list_lockdiscovery, list_supportedlock};
 use crate::ls::*;
 use crate::util::MemBuffer;
 use crate::util::{
-    dav_xml_error, systemtime_to_httpdate, systemtime_to_rfc3339_without_nanosecond,
+    dav_xml_error, httpdate_to_systemtime, systemtime_to_httpdate,
+    systemtime_to_rfc3339_without_nanosecond,
 };
 use crate::{DavInner, DavResult};
 
@@ -493,10 +494,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             }
             Some(NS_MS_URI) => {
                 match prop.name.as_str() {
-                    "Win32CreationTime"
-                    | "Win32FileAttributes"
-                    | "Win32LastAccessTime"
-                    | "Win32LastModifiedTime" => {
+                    "Win32CreationTime" | "Win32FileAttributes" | "Win32LastAccessTime" => {
                         if prop.get_text().is_none() || prop.has_child_elems() {
                             return StatusCode::CONFLICT;
                         }
@@ -505,6 +503,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         // makes the windows webdav client work.
                         StatusCode::OK
                     }
+                    // Win32LastModifiedTime is applied in handle_proppatch.
                     _ => StatusCode::FORBIDDEN,
                 }
             }
@@ -529,6 +528,27 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             },
             Some(NS_APACHE_URI) | Some(NS_MS_URI) => StatusCode::FORBIDDEN,
             _ => StatusCode::CONTINUE,
+        }
+    }
+
+    #[cfg(feature = "proppatch")]
+    async fn apply_win32_last_modified(&self, path: &DavPath, prop: &Element) -> StatusCode {
+        let Some(text) = prop.get_text() else {
+            return StatusCode::CONFLICT;
+        };
+        if prop.has_child_elems() {
+            return StatusCode::CONFLICT;
+        }
+        let Some(tm) = httpdate_to_systemtime(text.trim()) else {
+            return StatusCode::CONFLICT;
+        };
+        match self.fs.set_modified(path, tm, &self.credentials).await {
+            Ok(()) => StatusCode::OK,
+            Err(FsError::NotImplemented) => StatusCode::OK,
+            Err(e) => {
+                debug!("failed to apply Win32LastModifiedTime: {e:?}");
+                StatusCode::OK
+            }
         }
     }
 
@@ -584,26 +604,40 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         let mut ret = Vec::new();
         let can_deadprop = self.fs.have_props(&path, &self.credentials).await;
 
+        // Collect before awaiting so the xmltree iterator (not Send) is dropped.
+        let updates: Vec<(&str, &Element)> = tree
+            .child_elems_iter()
+            .flat_map(|elem| {
+                elem.child_elems_iter()
+                    .filter(|e| e.name == "prop")
+                    .flat_map(|e| e.child_elems_iter())
+                    .map(move |n| (elem.name.as_str(), n))
+            })
+            .collect();
+
         // walk over the element tree and feed "set" and "remove" items to
         // the liveprop_set/liveprop_remove functions. If skipped by those,
         // gather .them in the "patch" Vec to be processed as dead properties.
-        for elem in tree.child_elems_iter() {
-            for n in elem
-                .child_elems_iter()
-                .filter(|e| e.name == "prop")
-                .flat_map(|e| e.child_elems_iter())
-            {
-                match elem.name.as_str() {
-                    "set" => match self.liveprop_set(n, can_deadprop) {
-                        StatusCode::CONTINUE => patch.push((true, element_to_davprop_full(n))),
-                        s => ret.push((s, element_to_davprop(n))),
-                    },
-                    "remove" => match self.liveprop_remove(n, can_deadprop) {
-                        StatusCode::CONTINUE => patch.push((false, element_to_davprop(n))),
-                        s => ret.push((s, element_to_davprop(n))),
-                    },
-                    _ => {}
+        for (op, n) in updates {
+            match op {
+                "set" => {
+                    if n.namespace.as_deref() == Some(NS_MS_URI)
+                        && n.name == "Win32LastModifiedTime"
+                    {
+                        let s = self.apply_win32_last_modified(&path, n).await;
+                        ret.push((s, element_to_davprop(n)));
+                    } else {
+                        match self.liveprop_set(n, can_deadprop) {
+                            StatusCode::CONTINUE => patch.push((true, element_to_davprop_full(n))),
+                            s => ret.push((s, element_to_davprop(n))),
+                        }
+                    }
                 }
+                "remove" => match self.liveprop_remove(n, can_deadprop) {
+                    StatusCode::CONTINUE => patch.push((false, element_to_davprop(n))),
+                    s => ret.push((s, element_to_davprop(n))),
+                },
+                _ => {}
             }
         }
 

@@ -527,3 +527,192 @@ mod oc_timestamp_localfs_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+#[cfg(all(feature = "memfs", feature = "proppatch"))]
+mod win32_mtime_tests {
+    use dav_server::{DavHandler, body::Body, fakels::FakeLs, memfs::MemFs};
+    use http::{Request, StatusCode};
+
+    const MTIME_HTTP: &str = "Tue, 07 Feb 2023 17:06:21 GMT";
+
+    fn setup() -> DavHandler {
+        DavHandler::builder()
+            .filesystem(MemFs::new())
+            .locksystem(FakeLs::new())
+            .build_handler()
+    }
+
+    async fn resp_to_string(mut resp: http::Response<Body>) -> String {
+        use futures_util::StreamExt;
+
+        let mut data = Vec::new();
+        let body = resp.body_mut();
+
+        while let Some(chunk) = body.next().await {
+            match chunk {
+                Ok(bytes) => data.extend_from_slice(&bytes),
+                Err(e) => panic!("Error reading body stream: {}", e),
+            }
+        }
+
+        String::from_utf8(data).unwrap_or_else(|_| "".to_string())
+    }
+
+    fn proppatch(uri: &str, mtime: &str) -> Request<Body> {
+        Request::builder()
+            .method("PROPPATCH")
+            .uri(uri)
+            .body(Body::from(format!(
+                r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:schemas-microsoft-com:">
+  <D:set>
+    <D:prop>
+      <Z:Win32LastModifiedTime>{mtime}</Z:Win32LastModifiedTime>
+    </D:prop>
+  </D:set>
+</D:propertyupdate>"#
+            )))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn proppatch_win32_last_modified_sets_mtime() {
+        let server = setup();
+
+        let resp = server
+            .handle(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/notes.txt")
+                    .body(Body::from("hello"))
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let resp = server.handle(proppatch("/notes.txt", MTIME_HTTP)).await;
+        assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
+        let body = resp_to_string(resp).await;
+        assert!(
+            body.contains("200 OK") || body.contains("HTTP/1.1 200"),
+            "expected 200 for Win32LastModifiedTime, got {body}"
+        );
+
+        let req = Request::builder()
+            .method("PROPFIND")
+            .uri("/notes.txt")
+            .header("Depth", "0")
+            .body(Body::from(
+                r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:">
+  <D:prop>
+    <D:getlastmodified/>
+  </D:prop>
+</D:propfind>"#,
+            ))
+            .unwrap();
+        let resp = server.handle(req).await;
+        assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
+        let body = resp_to_string(resp).await;
+        assert!(
+            body.contains(MTIME_HTTP),
+            "getlastmodified missing {MTIME_HTTP} in {body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn proppatch_win32_last_modified_malformed_is_conflict() {
+        let server = setup();
+
+        let resp = server
+            .handle(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/notes.txt")
+                    .body(Body::from("hello"))
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let resp = server.handle(proppatch("/notes.txt", "not-a-date")).await;
+        assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
+        let body = resp_to_string(resp).await;
+        assert!(
+            body.contains("409") || body.contains("Conflict"),
+            "expected 409 for malformed Win32LastModifiedTime, got {body}"
+        );
+    }
+}
+
+#[cfg(all(feature = "localfs", feature = "proppatch"))]
+mod win32_mtime_localfs_tests {
+    use dav_server::{DavHandler, body::Body, localfs::LocalFs};
+    use http::{Request, StatusCode};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    const MTIME: u64 = 1675789581;
+    const MTIME_HTTP: &str = "Tue, 07 Feb 2023 17:06:21 GMT";
+
+    #[tokio::test]
+    async fn proppatch_win32_last_modified_localfs() {
+        let dir = std::env::temp_dir().join(format!(
+            "dav-win32-mtime-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let server = DavHandler::builder()
+            .filesystem(LocalFs::new(&dir, true, false, false))
+            .build_handler();
+
+        let resp = server
+            .handle(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/notes.txt")
+                    .body(Body::from("hello"))
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let resp = server
+            .handle(
+                Request::builder()
+                    .method("PROPPATCH")
+                    .uri("/notes.txt")
+                    .body(Body::from(format!(
+                        r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:schemas-microsoft-com:">
+  <D:set>
+    <D:prop>
+      <Z:Win32LastModifiedTime>{MTIME_HTTP}</Z:Win32LastModifiedTime>
+    </D:prop>
+  </D:set>
+</D:propertyupdate>"#
+                    )))
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
+
+        let meta = std::fs::metadata(dir.join("notes.txt")).unwrap();
+        let modified = meta.modified().unwrap();
+        let expected = UNIX_EPOCH + Duration::from_secs(MTIME);
+        let delta = modified
+            .duration_since(expected)
+            .or_else(|_| expected.duration_since(modified))
+            .unwrap();
+        assert!(
+            delta < Duration::from_secs(1),
+            "localfs mtime {modified:?} not close to {expected:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

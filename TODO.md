@@ -75,6 +75,7 @@ the lock database is seperate from the webdav server.
   then also store creationdate in an attribute.
 
 - Add support for changing live props like mtime/atime
+  - Win32LastModifiedTime on PROPPATCH is applied via set_modified
   - atime could be done with Win32LastAccessTime
   - allow setting apache "executable" prop
   - it appears that there are webdav implementations that allow
@@ -91,7 +92,7 @@ the lock database is seperate from the webdav server.
 
 - allow setting of some windows live props:
   - readonly (on files, via chmod)
-  - Win32LastAccessTime, Win32LastModifiedTime
+  - Win32LastAccessTime
  
 - implement [RFC4437 Webdav Redirectref](https://tools.ietf.org/html/rfc4437) -- basically support for symbolic links
 
