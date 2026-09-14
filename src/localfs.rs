@@ -517,14 +517,14 @@ impl DavFileSystem for LocalFs {
     }
 
     fn set_created<'a>(&'a self, davpath: &'a DavPath, tm: SystemTime) -> FsFuture<'a, ()> {
-        async move {
-            #[cfg(not(any(windows, target_vendor = "apple", target_os = "freebsd")))]
-            {
-                let _ = (self, davpath, tm);
-                return Err(FsError::NotImplemented);
-            }
-            #[cfg(any(windows, target_vendor = "apple", target_os = "freebsd"))]
-            {
+        #[cfg(not(any(windows, target_vendor = "apple", target_os = "freebsd")))]
+        {
+            let _ = (self, davpath, tm);
+            Box::pin(future::ready(Err(FsError::NotImplemented)))
+        }
+        #[cfg(any(windows, target_vendor = "apple", target_os = "freebsd"))]
+        {
+            async move {
                 trace!("FS: set_created {:?}", self.fspath_dbg(davpath));
                 if self.is_forbidden(davpath) {
                     return Err(FsError::Forbidden);
@@ -537,8 +537,8 @@ impl DavFileSystem for LocalFs {
                 })
                 .await
             }
+            .boxed()
         }
-        .boxed()
     }
 }
 
