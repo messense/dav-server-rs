@@ -111,9 +111,9 @@ struct LocalFsDirEntry {
 impl LocalFs {
     /// Create a new LocalFs DavFileSystem, serving "base".
     ///
-    /// If "public" is set to true, all files and directories created will be
-    /// publically readable (mode 644/755), otherwise they will be private
-    /// (mode 600/700). Umask still overrides this.
+    /// If "public" is set to true, files and directories are created with
+    /// mode 666/777 so the process umask applies (typically 644/755, or
+    /// 664/775 with umask 002). Otherwise they are private (mode 600/700).
     ///
     /// If "case_insensitive" is set to true, all filesystem lookups will
     /// be case insensitive. Note that this has a _lot_ of overhead!
@@ -314,7 +314,7 @@ impl DavFileSystem for LocalFs {
                 return Err(FsError::Forbidden);
             }
             #[cfg(unix)]
-            let mode = if self.inner.public { 0o644 } else { 0o600 };
+            let mode = if self.inner.public { 0o666 } else { 0o600 };
             let path = self.fspath(path);
             self.blocking(move || {
                 #[cfg(unix)]
@@ -356,7 +356,7 @@ impl DavFileSystem for LocalFs {
                 return Err(FsError::Forbidden);
             }
             #[cfg(unix)]
-            let mode = if self.inner.public { 0o755 } else { 0o700 };
+            let mode = if self.inner.public { 0o777 } else { 0o700 };
             let path = self.fspath(path);
             self.blocking(move || {
                 #[cfg(unix)]
