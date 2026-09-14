@@ -164,10 +164,9 @@ mod localfs_umask_tests {
     use dav_server::{DavHandler, body::Body, localfs::LocalFs};
     use http::{Request, StatusCode};
     use std::os::unix::fs::PermissionsExt;
-    use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    static UMASK_LOCK: Mutex<()> = Mutex::new(());
+    static UMASK_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     struct UmaskGuard(libc::mode_t);
 
@@ -205,7 +204,7 @@ mod localfs_umask_tests {
 
     #[tokio::test]
     async fn put_and_mkcol_honor_umask() {
-        let _lock = UMASK_LOCK.lock().unwrap();
+        let _lock = UMASK_LOCK.lock().await;
         let _umask = UmaskGuard::set(0o002);
         let dir = tempdir();
 
