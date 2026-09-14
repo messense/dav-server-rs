@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::str::FromStr;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use headers::Header;
 use http::header::{HeaderName, HeaderValue};
@@ -19,6 +20,8 @@ pub static IF_NONE_MATCH: HeaderName = HeaderName::from_static("if-none-match");
 pub static X_UPDATE_RANGE: HeaderName = HeaderName::from_static("x-update-range");
 pub static IF: HeaderName = HeaderName::from_static("if");
 pub static CONTENT_LANGUAGE: HeaderName = HeaderName::from_static("content-language");
+pub static X_OC_MTIME: HeaderName = HeaderName::from_static("x-oc-mtime");
+pub static X_OC_CTIME: HeaderName = HeaderName::from_static("x-oc-ctime");
 
 // helper.
 fn one<'i, I>(values: &mut I) -> Result<&'i HeaderValue, headers::Error>
@@ -80,6 +83,79 @@ header!(ContentType, CONTENT_TYPE, "content-type");
 header!(ContentLocation, CONTENT_LOCATION, "content-location");
 header!(LockToken, LOCK_TOKEN, "lock-token");
 header!(XLitmus, X_LITMUS, "x-litmus");
+
+/// ownCloud/Nextcloud `X-OC-MTime` request header: Unix timestamp in seconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct XOcMTime(pub SystemTime);
+
+impl Header for XOcMTime {
+    fn name() -> &'static HeaderName {
+        &X_OC_MTIME
+    }
+
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        decode_unix_timestamp(values).map(XOcMTime)
+    }
+
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
+        encode_unix_timestamp(self.0, values);
+    }
+}
+
+/// ownCloud/Nextcloud `X-OC-CTime` request header: Unix timestamp in seconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct XOcCTime(pub SystemTime);
+
+impl Header for XOcCTime {
+    fn name() -> &'static HeaderName {
+        &X_OC_CTIME
+    }
+
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        decode_unix_timestamp(values).map(XOcCTime)
+    }
+
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<HeaderValue>,
+    {
+        encode_unix_timestamp(self.0, values);
+    }
+}
+
+/// Parse a Unix timestamp (seconds since epoch) as a decimal integer.
+/// Non-digit characters are rejected, matching Apache `DavHonorMtimeHeader`.
+fn decode_unix_timestamp<'i, I>(values: &mut I) -> Result<SystemTime, headers::Error>
+where
+    I: Iterator<Item = &'i HeaderValue>,
+{
+    let raw = one(values)?.to_str().map_err(map_invalid)?;
+    if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(invalid());
+    }
+    let secs = raw.parse::<u64>().map_err(map_invalid)?;
+    UNIX_EPOCH
+        .checked_add(Duration::from_secs(secs))
+        .ok_or_else(invalid)
+}
+
+fn encode_unix_timestamp(t: SystemTime, values: &mut impl Extend<HeaderValue>) {
+    let secs = t
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let value = HeaderValue::from_str(&secs.to_string()).unwrap();
+    values.extend(std::iter::once(value));
+}
 
 /// - "Depth" header for PROPFIND requests. See the items for its response behaviour
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -850,5 +926,22 @@ mod tests {
         assert!(t1 != t2);
         assert!(t2 != t3);
         assert!(t3 == t4);
+    }
+
+    #[test]
+    fn oc_mtime_header() {
+        let hdrval = HeaderValue::from_static("1675789581");
+        let mut iter = std::iter::once(&hdrval);
+        let hdr = XOcMTime::decode(&mut iter).unwrap();
+        assert_eq!(hdr.0, UNIX_EPOCH + Duration::from_secs(1675789581));
+
+        for invalid_val in ["", "not-a-time", "-1", "12.5", "+1", " 1"] {
+            let hdrval = HeaderValue::from_static(invalid_val);
+            let mut iter = std::iter::once(&hdrval);
+            assert!(
+                XOcMTime::decode(&mut iter).is_err(),
+                "expected {invalid_val:?} to be rejected"
+            );
+        }
     }
 }

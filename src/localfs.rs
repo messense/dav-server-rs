@@ -9,11 +9,17 @@ use std::collections::VecDeque;
 use std::future::{self, Future};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::mem;
+#[cfg(target_vendor = "apple")]
+use std::os::darwin::fs::FileTimesExt;
+#[cfg(target_os = "freebsd")]
+use std::os::unix::fs::FileTimesExt;
 #[cfg(unix)]
 use std::os::unix::{
     ffi::OsStrExt,
     fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt},
 };
+#[cfg(windows)]
+use std::os::windows::fs::FileTimesExt;
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;
 use std::path::{Path, PathBuf};
@@ -100,6 +106,32 @@ fn helper_create_directory(basedir: &Path, _new_dir_name: &str) {
     let new_path = basedir.join(_new_dir_name);
     std::fs::create_dir_all(&new_path)
         .expect("Failed to create default directory; verify that 'basedir' is correct.");
+}
+
+/// Open a file or directory with enough access to change timestamps.
+fn open_for_times(path: &Path) -> io::Result<std::fs::File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x02000000;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)
+            .or_else(|_| {
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+                    .open(path)
+            })
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .or_else(|_| std::fs::File::open(path))
+    }
 }
 
 // Items from the readdir stream.
@@ -462,6 +494,48 @@ impl DavFileSystem for LocalFs {
                     );
                     Err(e.into())
                 }
+            }
+        }
+        .boxed()
+    }
+
+    fn set_modified<'a>(&'a self, davpath: &'a DavPath, tm: SystemTime) -> FsFuture<'a, ()> {
+        async move {
+            trace!("FS: set_modified {:?}", self.fspath_dbg(davpath));
+            if self.is_forbidden(davpath) {
+                return Err(FsError::Forbidden);
+            }
+            let path = self.fspath(davpath);
+            self.blocking(move || {
+                open_for_times(&path)?
+                    .set_modified(tm)
+                    .map_err(FsError::from)
+            })
+            .await
+        }
+        .boxed()
+    }
+
+    fn set_created<'a>(&'a self, davpath: &'a DavPath, tm: SystemTime) -> FsFuture<'a, ()> {
+        async move {
+            #[cfg(not(any(windows, target_vendor = "apple", target_os = "freebsd")))]
+            {
+                let _ = (self, davpath, tm);
+                return Err(FsError::NotImplemented);
+            }
+            #[cfg(any(windows, target_vendor = "apple", target_os = "freebsd"))]
+            {
+                trace!("FS: set_created {:?}", self.fspath_dbg(davpath));
+                if self.is_forbidden(davpath) {
+                    return Err(FsError::Forbidden);
+                }
+                let path = self.fspath(davpath);
+                self.blocking(move || {
+                    let file = open_for_times(&path)?;
+                    let times = std::fs::FileTimes::new().set_created(tm);
+                    file.set_times(times).map_err(FsError::from)
+                })
+                .await
             }
         }
         .boxed()
