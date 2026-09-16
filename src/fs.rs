@@ -242,11 +242,24 @@ pub trait DavFileSystem {
 
     /// Set the modified time of a file / directory.
     ///
-    /// The default implementation returns [`FsError::NotImplemented`].
-    #[doc(hidden)]
+    /// Called when a client sends the ownCloud/Nextcloud `X-OC-MTime` header
+    /// on `PUT` or `MKCOL`, or `Win32LastModifiedTime` on `PROPPATCH`. The
+    /// default implementation returns [`FsError::NotImplemented`]; in that
+    /// case the request still succeeds but the timestamp is not acknowledged.
     #[allow(unused_variables)]
     fn set_modified<'a>(&'a self, path: &'a DavPath, tm: SystemTime) -> FsFuture<'a, ()> {
         notimplemented_fut!("set_modified")
+    }
+
+    /// Set the creation time of a file / directory.
+    ///
+    /// Called when a client sends the ownCloud/Nextcloud `X-OC-CTime` header
+    /// on `PUT` or `MKCOL`. The default implementation returns
+    /// [`FsError::NotImplemented`]; in that case the request still succeeds
+    /// but the header is not acknowledged.
+    #[allow(unused_variables)]
+    fn set_created<'a>(&'a self, path: &'a DavPath, tm: SystemTime) -> FsFuture<'a, ()> {
+        notimplemented_fut!("set_created")
     }
 
     /// Indicator that tells if this filesystem driver supports DAV properties.
@@ -447,8 +460,10 @@ where
 
     /// Set the modified time of a file / directory.
     ///
-    /// The default implementation returns [`FsError::NotImplemented`].
-    #[doc(hidden)]
+    /// Called when a client sends the ownCloud/Nextcloud `X-OC-MTime` header
+    /// on `PUT` or `MKCOL`, or `Win32LastModifiedTime` on `PROPPATCH`. The
+    /// default implementation returns [`FsError::NotImplemented`]; in that
+    /// case the request still succeeds but the timestamp is not acknowledged.
     #[allow(unused_variables)]
     fn set_modified<'a>(
         &'a self,
@@ -456,7 +471,23 @@ where
         tm: SystemTime,
         credentials: &'a C,
     ) -> FsFuture<'a, ()> {
-        notimplemented_fut!("set_mofified")
+        notimplemented_fut!("set_modified")
+    }
+
+    /// Set the creation time of a file / directory.
+    ///
+    /// Called when a client sends the ownCloud/Nextcloud `X-OC-CTime` header
+    /// on `PUT` or `MKCOL`. The default implementation returns
+    /// [`FsError::NotImplemented`]; in that case the request still succeeds
+    /// but the header is not acknowledged.
+    #[allow(unused_variables)]
+    fn set_created<'a>(
+        &'a self,
+        path: &'a DavPath,
+        tm: SystemTime,
+        credentials: &'a C,
+    ) -> FsFuture<'a, ()> {
+        notimplemented_fut!("set_created")
     }
 
     /// Indicator that tells if this filesystem driver supports DAV properties.
@@ -607,6 +638,15 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         _credentials: &(),
     ) -> FsFuture<'a, ()> {
         DavFileSystem::set_modified(self, path, tm)
+    }
+
+    fn set_created<'a>(
+        &'a self,
+        path: &'a DavPath,
+        tm: SystemTime,
+        _credentials: &(),
+    ) -> FsFuture<'a, ()> {
+        DavFileSystem::set_created(self, path, tm)
     }
 
     fn have_props<'a>(
