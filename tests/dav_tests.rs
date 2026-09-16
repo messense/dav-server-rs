@@ -158,3 +158,92 @@ mod dav_tests {
         assert!(!resp_text.contains("/.hidden_folder"));
     }
 }
+
+#[cfg(all(unix, feature = "localfs"))]
+mod localfs_umask_tests {
+    use dav_server::{DavHandler, body::Body, localfs::LocalFs};
+    use http::{Request, StatusCode};
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static UMASK_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    struct UmaskGuard(libc::mode_t);
+
+    impl UmaskGuard {
+        fn set(mask: libc::mode_t) -> Self {
+            let old = unsafe { libc::umask(mask) };
+            Self(old)
+        }
+    }
+
+    impl Drop for UmaskGuard {
+        fn drop(&mut self) {
+            unsafe {
+                libc::umask(self.0);
+            }
+        }
+    }
+
+    fn unix_mode(path: &std::path::Path) -> u32 {
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    fn tempdir() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "dav-umask-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn put_and_mkcol_honor_umask() {
+        let _lock = UMASK_LOCK.lock().await;
+        let _umask = UmaskGuard::set(0o002);
+        let dir = tempdir();
+
+        let server = DavHandler::builder()
+            .filesystem(LocalFs::new(&dir, true, false, false))
+            .build_handler();
+
+        let put = server
+            .handle(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/group.txt")
+                    .body(Body::from("hi"))
+                    .unwrap(),
+            )
+            .await;
+        assert!(put.status().is_success(), "{}", put.status());
+        assert_eq!(
+            unix_mode(&dir.join("group.txt")),
+            0o664,
+            "PUT file should be 0664 under umask 002, not 0644"
+        );
+
+        let mk = server
+            .handle(
+                Request::builder()
+                    .method("MKCOL")
+                    .uri("/album")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(mk.status(), StatusCode::CREATED, "{}", mk.status());
+        assert_eq!(
+            unix_mode(&dir.join("album")),
+            0o775,
+            "MKCOL dir should be 0775 under umask 002, not 0755"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
