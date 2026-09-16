@@ -85,7 +85,7 @@ impl DavLockSystem for MemLs {
             shared,
             deep,
         };
-        trace!("lock {} created", &lock.token);
+        trace!("lock {} created", lock.token);
         let slock = lock.clone();
         node.push(slock);
         future::ready(Ok(lock)).boxed()
@@ -339,7 +339,7 @@ fn lookup_lock(tree: &Tree, path: &DavPath, token: &str) -> Option<u64> {
             Err(_) => break,
         };
         let node = tree.get_node(node_id).unwrap();
-        trace!("lookup_lock: locks here: {:?}", &node);
+        trace!("lookup_lock: locks here: {:?}", node);
         if node.iter().any(|n| n.token == token) {
             return Some(node_id);
         }

@@ -73,7 +73,7 @@ impl DavLockSystem for FakeLs {
             shared,
             deep,
         };
-        debug!("lock {} created", &lock.token);
+        debug!("lock {} created", lock.token);
         future::ready(Ok(lock)).boxed()
     }
 
