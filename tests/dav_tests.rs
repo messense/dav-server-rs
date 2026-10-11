@@ -7,6 +7,7 @@ mod dav_tests {
         let _ = std::fs::create_dir("/tmp/DAV_SERVER_TEST");
         let _ = std::fs::create_dir("/tmp/DAV_SERVER_TEST/normal_dir");
         let _ = std::fs::create_dir("/tmp/DAV_SERVER_TEST/.hidden_folder");
+        let _ = std::fs::write("/tmp/DAV_SERVER_TEST/normal_dir/normal_file", "hello world");
         let _ = std::os::unix::fs::symlink(
             "/tmp/DAV_SERVER_TEST/normal_dir",
             "/tmp/DAV_SERVER_TEST/symlink_to_dir",
@@ -50,6 +51,21 @@ mod dav_tests {
 
         let resp = server.handle(req).await;
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_dav_propfind_namespace_consistent() {
+        let server = setup_dav_server_symlink();
+
+        let req = Request::builder()
+            .method("PROPFIND")
+            .uri("/normal_dir")
+            .body(Body::from(r#"<?xml version="1.0"?><a:propfind xmlns:a="DAV:"><a:prop><a:resourcetype/><a:getcontentlength/><a:getlastmodified/></a:prop></a:propfind>"#))
+            .unwrap();
+
+        let resp = server.handle(req).await;
+        let content = resp_to_string(resp).await;
+        assert!(content.contains(r#"<D:resourcetype></D:resourcetype>"#));
     }
 
     #[tokio::test]
