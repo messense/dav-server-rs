@@ -166,6 +166,12 @@ pub(crate) fn systemtime_to_httpdate(t: SystemTime) -> String {
     v[0].to_str().unwrap().to_owned()
 }
 
+pub(crate) fn httpdate_to_systemtime(s: &str) -> Option<SystemTime> {
+    let v = http::HeaderValue::from_str(s.trim()).ok()?;
+    let mut iter = std::iter::once(&v);
+    headers::Date::decode(&mut iter).ok().map(SystemTime::from)
+}
+
 pub(crate) fn systemtime_to_rfc3339_without_nanosecond(t: SystemTime) -> String {
     // 1996-12-19T16:39:57Z
     DateTime::<Utc>::from(t).to_rfc3339_opts(SecondsFormat::Secs, true)
@@ -206,5 +212,15 @@ mod tests {
     fn test_rfc3339_no_nanosecond() {
         let t = UNIX_EPOCH + std::time::Duration::new(1, 5);
         assert!(systemtime_to_rfc3339_without_nanosecond(t) == "1970-01-01T00:00:01Z");
+    }
+
+    #[test]
+    fn test_httpdate_roundtrip() {
+        let t = UNIX_EPOCH + std::time::Duration::from_secs(1_675_789_581);
+        let s = systemtime_to_httpdate(t);
+        assert_eq!(s, "Tue, 07 Feb 2023 17:06:21 GMT");
+        let parsed = httpdate_to_systemtime(&s).unwrap();
+        assert_eq!(systemtime_to_httpdate(parsed), s);
+        assert!(httpdate_to_systemtime("not-a-date").is_none());
     }
 }
