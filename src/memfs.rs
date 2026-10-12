@@ -281,6 +281,26 @@ impl DavFileSystem for MemFs {
         .boxed()
     }
 
+    fn set_modified<'a>(&'a self, path: &'a DavPath, tm: SystemTime) -> FsFuture<'a, ()> {
+        async move {
+            let tree = &mut *self.tree.lock().unwrap();
+            let node_id = tree.lookup(path.as_bytes())?;
+            tree.get_node_mut(node_id)?.update_mtime(tm);
+            Ok(())
+        }
+        .boxed()
+    }
+
+    fn set_created<'a>(&'a self, path: &'a DavPath, tm: SystemTime) -> FsFuture<'a, ()> {
+        async move {
+            let tree = &mut *self.tree.lock().unwrap();
+            let node_id = tree.lookup(path.as_bytes())?;
+            tree.get_node_mut(node_id)?.update_crtime(tm);
+            Ok(())
+        }
+        .boxed()
+    }
+
     fn have_props<'a>(&'a self, _path: &'a DavPath) -> BoxFuture<'a, bool> {
         future::ready(true).boxed()
     }
@@ -551,6 +571,13 @@ impl MemFsNode {
         match *self {
             MemFsNode::Dir(ref mut d) => d.mtime = tm,
             MemFsNode::File(ref mut f) => f.mtime = tm,
+        }
+    }
+
+    fn update_crtime(&mut self, tm: std::time::SystemTime) {
+        match *self {
+            MemFsNode::Dir(ref mut d) => d.crtime = tm,
+            MemFsNode::File(ref mut f) => f.crtime = tm,
         }
     }
 

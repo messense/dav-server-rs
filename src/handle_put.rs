@@ -2,10 +2,12 @@ use std::any::Any;
 use std::error::Error as StdError;
 use std::io;
 use std::pin::pin;
+use std::time::SystemTime;
 
 use bytes::{Buf, Bytes};
 use headers::HeaderMapExt;
 use http::StatusCode as SC;
+use http::header::HeaderValue;
 use http::{self, Request, Response};
 use http_body::Body as HttpBody;
 use http_body_util::BodyExt;
@@ -13,6 +15,7 @@ use http_body_util::BodyExt;
 use crate::body::Body;
 use crate::conditional::if_match_get_tokens;
 use crate::davheaders;
+use crate::davpath::DavPath;
 use crate::fs::*;
 use crate::{DavError, DavInner, DavResult};
 
@@ -95,6 +98,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             .get("OC-Checksum")
             .and_then(|v| v.to_str().ok().map(|s| s.to_string()));
         oo.checksum = checksum;
+
+        let (oc_mtime, oc_ctime) = Self::oc_timestamps(req, true)?;
 
         let path = self.path(req);
         let meta = self.fs.metadata(&path, &self.credentials).await;
@@ -266,6 +271,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             }
         }
         file.flush().await?;
+        drop(file);
 
         if have_count && total > count {
             error!("PUT file: sender is sending more bytes than expected");
@@ -289,7 +295,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // no errors, connection may be kept open.
         res.headers_mut().remove(http::header::CONNECTION);
 
-        if let Ok(meta) = file.metadata().await {
+        self.apply_oc_timestamps(&path, oc_mtime, oc_ctime, &mut res)
+            .await;
+
+        if let Ok(meta) = self.fs.metadata(&path, &self.credentials).await {
             if let Some(etag) = davheaders::ETag::from_meta(meta.as_ref()) {
                 res.headers_mut().typed_insert(etag);
             }
@@ -299,5 +308,63 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             }
         }
         Ok(res)
+    }
+
+    /// Parse ownCloud/Nextcloud `X-OC-MTime` / `X-OC-CTime` headers.
+    /// Malformed values yield 400. `close` selects `StatusClose` vs `Status`.
+    pub(crate) fn oc_timestamps(
+        req: &Request<()>,
+        close: bool,
+    ) -> DavResult<(Option<SystemTime>, Option<SystemTime>)> {
+        let bad_request = || {
+            if close {
+                DavError::StatusClose(SC::BAD_REQUEST)
+            } else {
+                DavError::Status(SC::BAD_REQUEST)
+            }
+        };
+        let mtime = match req.headers().typed_try_get::<davheaders::XOcMTime>() {
+            Ok(v) => v.map(|h| h.0),
+            Err(_) => return Err(bad_request()),
+        };
+        let ctime = match req.headers().typed_try_get::<davheaders::XOcCTime>() {
+            Ok(v) => v.map(|h| h.0),
+            Err(_) => return Err(bad_request()),
+        };
+        Ok((mtime, ctime))
+    }
+
+    /// Apply client-supplied timestamps and echo `accepted` when the backend honors them.
+    pub(crate) async fn apply_oc_timestamps(
+        &self,
+        path: &DavPath,
+        mtime: Option<SystemTime>,
+        ctime: Option<SystemTime>,
+        res: &mut Response<Body>,
+    ) {
+        if let Some(tm) = mtime {
+            match self.fs.set_modified(path, tm, &self.credentials).await {
+                Ok(()) => {
+                    res.headers_mut().insert(
+                        davheaders::X_OC_MTIME.clone(),
+                        HeaderValue::from_static("accepted"),
+                    );
+                }
+                Err(FsError::NotImplemented) => {}
+                Err(e) => debug!("failed to apply X-OC-MTime: {e:?}"),
+            }
+        }
+        if let Some(tm) = ctime {
+            match self.fs.set_created(path, tm, &self.credentials).await {
+                Ok(()) => {
+                    res.headers_mut().insert(
+                        davheaders::X_OC_CTIME.clone(),
+                        HeaderValue::from_static("accepted"),
+                    );
+                }
+                Err(FsError::NotImplemented) => {}
+                Err(e) => debug!("failed to apply X-OC-CTime: {e:?}"),
+            }
+        }
     }
 }

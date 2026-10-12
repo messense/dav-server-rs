@@ -66,6 +66,12 @@
 //! which is what Apache's `mod_dav` implements, and [`PATCH` with the `X-Update-Range`
 //! header][PATCH] from `SabreDav`.
 //!
+//! The ownCloud/Nextcloud `X-OC-MTime` and `X-OC-CTime` request headers are
+//! honored on `PUT` and `MKCOL` so sync clients can preserve original
+//! modification and creation times. When the filesystem backend accepts a
+//! timestamp, the response includes `X-OC-MTime: accepted` and/or
+//! `X-OC-CTime: accepted`. A malformed timestamp yields `400 Bad Request`.
+//!
 //! ## Backends.
 //!
 //! Included are two filesystems:

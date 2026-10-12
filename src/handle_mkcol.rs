@@ -10,6 +10,7 @@ use crate::{DavError, DavInner, DavResult};
 impl<C: Clone + Send + Sync + 'static> DavInner<C> {
     pub(crate) async fn handle_mkcol(&self, req: &Request<()>) -> DavResult<Response<Body>> {
         let mut path = self.path(req);
+        let (oc_mtime, oc_ctime) = Self::oc_timestamps(req, false)?;
         let meta = self.fs.metadata(&path, &self.credentials).await;
 
         // check the If and If-* headers.
@@ -55,6 +56,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 *res.status_mut() = StatusCode::CREATED;
             }
         }
+
+        self.apply_oc_timestamps(&path, oc_mtime, oc_ctime, &mut res)
+            .await;
 
         Ok(res)
     }
