@@ -11,6 +11,7 @@ use http::{Request, Response, StatusCode};
 use crate::{DavOptionHide, xmltree_ext::*};
 use xml::EmitterConfig;
 use xml::common::XmlVersion;
+use xml::namespace::Namespace;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
 use xmltree::{Element, XMLNode};
@@ -897,6 +898,36 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         Ok((used, avail))
     }
 
+    fn fix_prop_namespace_prefix(prop: &Element, prefix: &str, namespace: &str) -> Option<Element> {
+        let namespaces = prop.namespaces.as_ref()?;
+
+        // only do this if we encounter the DAV namespace with a different prefix
+        let has_wrong_prefix = namespaces
+            .iter()
+            .any(|(key, value)| value == namespace && key != prefix);
+
+        if !has_wrong_prefix {
+            return None;
+        }
+
+        let mut new_namespace = Namespace::empty();
+        for (vk, vvalue) in namespaces.iter().map(|(k, ns)| {
+            // copy all namespaces over, but fix the prefix for the requested one
+            if ns == namespace {
+                (prefix, ns)
+            } else {
+                (k, ns)
+            }
+        }) {
+            new_namespace.put(vk, vvalue);
+        }
+
+        let mut cln = prop.clone();
+        cln.namespaces = Some(new_namespace);
+        cln.prefix = Some(prefix.into());
+        Some(cln)
+    }
+
     async fn build_prop<'a>(
         &'a self,
         prop: &'a Element,
@@ -913,6 +944,20 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         match prop.namespace.as_deref() {
             Some(NS_DAV_URI) => {
                 pfx = "D";
+
+                // prop may come from the document the client sent, so it may contain different
+                // namespace prefixs than we are using.
+                // We may need to clone it in order to fix its namespace map,and if we do that,
+                // we need to keep the clone alive longer than the burrow.
+                let cln;
+                let prop =
+                    if let Some(new_ele) = Self::fix_prop_namespace_prefix(prop, pfx, NS_DAV_URI) {
+                        cln = new_ele;
+                        &cln
+                    } else {
+                        prop
+                    };
+
                 match prop.name.as_str() {
                     #[cfg(feature = "caldav")]
                     "supported-report-set" => {
