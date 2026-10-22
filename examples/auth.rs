@@ -1,4 +1,4 @@
-use std::{convert::Infallible, fmt::Display, net::SocketAddr, path::Path};
+use std::{convert::Infallible, fmt::Display, net::SocketAddr, path::Path, time::SystemTime};
 
 use futures_util::{StreamExt, stream};
 use http::{Request, Response, StatusCode};
@@ -23,6 +23,11 @@ use dav_server::{
 /// For example, try this URLs:
 /// - dav://dirs:-@127.0.0.1:4918 — responds only with directories.
 /// - dav://files:-@127.0.0.1:4918 — responds only with files.
+///
+/// The authenticated user is the WebDAV principal `/principals/users/www_user`
+/// (RFC5397); the filesystem serves that URL as a principal resource (RFC3744),
+/// so e.g. `PROPFIND /principals/users/www_user` returns `DAV:resourcetype`
+/// with `<D:principal/>`.
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -129,6 +134,51 @@ impl GuardedFileSystem<Filter> for FilteredFs {
         _credentials: &'a Filter,
     ) -> FsFuture<'a, Box<dyn DavMetaData>> {
         self.inner.symlink_metadata(path, &())
+    }
+
+    fn principal_metadata<'a>(
+        &'a self,
+        path: &'a DavPath,
+        _credentials: &'a Filter,
+    ) -> FsFuture<'a, Option<Box<dyn DavMetaData>>> {
+        Box::pin(async move {
+            // Serve `/principals/users/www_user` as a virtual WebDAV
+            // principal resource (RFC3744). It is what `handle_guarded()`
+            // below reports as the current user's principal.
+            if path.with_prefix().as_url_string().trim_end_matches('/')
+                == "/principals/users/www_user"
+            {
+                return Ok(Some(Box::new(PrincipalMeta) as Box<dyn DavMetaData>));
+            }
+            Ok(None)
+        })
+    }
+}
+
+/// Metadata for the virtual principal resource served by `FilteredFs`.
+#[derive(Debug, Clone)]
+struct PrincipalMeta;
+
+impl DavMetaData for PrincipalMeta {
+    fn len(&self) -> u64 {
+        0
+    }
+    fn modified(&self) -> FsResult<SystemTime> {
+        Ok(SystemTime::UNIX_EPOCH)
+    }
+    fn is_dir(&self) -> bool {
+        true
+    }
+    fn is_symlink(&self) -> bool {
+        false
+    }
+    #[cfg(feature = "caldav")]
+    fn is_calendar(&self, _path: &DavPath) -> bool {
+        false
+    }
+    #[cfg(feature = "carddav")]
+    fn is_addressbook(&self, _path: &DavPath) -> bool {
+        false
     }
 }
 

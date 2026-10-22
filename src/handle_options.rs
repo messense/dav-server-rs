@@ -42,7 +42,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         };
 
         let path = self.path(req);
-        let meta = self.fs.metadata(&path, &self.credentials).await;
+        // Consult principal_metadata() too so OPTIONS on a principal
+        // resource (RFC3744) reports the mapped-collection method list.
+        let meta = self.lookup_metadata(&path).await.map(|(meta, _)| meta);
         let is_unmapped = meta.is_err();
         let is_file = meta.map(|m| m.is_file()).unwrap_or_default();
         let is_star = path.is_star() && method == DavMethod::Options;
