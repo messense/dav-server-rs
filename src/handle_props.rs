@@ -58,7 +58,6 @@ const PROPNAME_STR: &[&str] = &[
     "D:supported-privilege-set",
     "D:principal-URL",
     "D:owner",
-    "D:current-user-privilege-set",
     "D:quota-available-bytes",
     "D:quota-used-bytes",
     "A:executable",
@@ -89,7 +88,6 @@ const PROPNAME_STR: &[&str] = &[
     "D:supported-privilege-set",
     "D:principal-URL",
     "D:owner",
-    "D:current-user-privilege-set",
     "D:quota-available-bytes",
     "D:quota-used-bytes",
     "A:executable",
@@ -116,7 +114,6 @@ const PROPNAME_STR: &[&str] = &[
     "D:supported-privilege-set",
     "D:principal-URL",
     "D:owner",
-    "D:current-user-privilege-set",
     "D:quota-available-bytes",
     "D:quota-used-bytes",
     "A:executable",
@@ -142,7 +139,6 @@ const PROPNAME_STR: &[&str] = &[
     "D:supported-privilege-set",
     "D:principal-URL",
     "D:owner",
-    "D:current-user-privilege-set",
     "D:quota-available-bytes",
     "D:quota-used-bytes",
     "A:executable",
@@ -1157,7 +1153,8 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             element: elem,
                         });
                     }
-                    // RFC3744 section 5.2.
+                    // RFC3744 section 5.3. The set is static capability
+                    // information about the resource, not a per-user claim.
                     "supported-privilege-set" => {
                         if !docontent {
                             return self.build_elem(false, pfx, prop, "");
@@ -1166,19 +1163,6 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             status: StatusCode::OK,
                             element: create_supported_privilege_set(),
                         });
-                    }
-                    // RFC3744 section 5.4. Without a known current user this
-                    // property does not exist (404).
-                    "current-user-privilege-set" => {
-                        if self.principal.is_some() {
-                            if !docontent {
-                                return self.build_elem(false, pfx, prop, "");
-                            }
-                            return Ok(StatusElement {
-                                status: StatusCode::OK,
-                                element: create_current_user_privilege_set(),
-                            });
-                        }
                     }
                     "supportedlock" => {
                         return Ok(StatusElement {
@@ -1671,33 +1655,67 @@ fn dav_privilege(names: &[&str]) -> Element {
     e
 }
 
-/// A `<D:supported-privilege>` element containing the named privileges.
-fn dav_supported_privilege(names: &[&str]) -> Element {
+/// A `<D:description>` element with the language required by RFC3744
+/// section 5.3 ("Servers MUST indicate the human language ... using the
+/// xml:lang attribute").
+fn dav_description(text: &str) -> Element {
+    let mut e = dav_empty("description");
+    e.attributes
+        .insert("xml:lang".to_string(), "en".to_string());
+    e.text(text)
+}
+
+/// A `<D:supported-privilege>` element containing the named privilege,
+/// optionally marked abstract, and its human-readable description.
+///
+/// Element order follows RFC3744 section 5.3:
+/// `(privilege, abstract?, description, supported-privilege*)`.
+fn dav_supported_privilege(name: &str, description: &str, is_abstract: bool) -> Element {
     let mut e = dav_empty("supported-privilege");
-    e.children.push(XMLNode::Element(dav_privilege(names)));
+    e.children.push(XMLNode::Element(dav_privilege(&[name])));
+    if is_abstract {
+        e.children.push(XMLNode::Element(dav_empty("abstract")));
+    }
+    e.children
+        .push(XMLNode::Element(dav_description(description)));
     e
 }
 
-/// DAV:supported-privilege-set (RFC3744 section 5.2).
+/// DAV:supported-privilege-set (RFC3744 section 5.3).
+///
+/// This describes which privileges exist on a resource; it does not say
+/// anything about the privileges of the current user.
 fn create_supported_privilege_set() -> Element {
-    let mut all = dav_supported_privilege(&["all"]);
-    all.children
-        .push(XMLNode::Element(dav_supported_privilege(&["read"])));
-    all.children
-        .push(XMLNode::Element(dav_supported_privilege(&["write"])));
+    // RFC3744 section 3.12: DAV:write MUST contain DAV:bind, DAV:unbind,
+    // DAV:write-properties and DAV:write-content.
+    let mut write = dav_supported_privilege("write", "Write any object", false);
+    for (name, description) in [
+        ("bind", "Add a member to a collection"),
+        ("unbind", "Remove a member from a collection"),
+        ("write-properties", "Write properties"),
+        ("write-content", "Write resource content"),
+    ] {
+        write
+            .children
+            .push(XMLNode::Element(dav_supported_privilege(
+                name,
+                description,
+                false,
+            )));
+    }
+
+    // DAV:all is an aggregate privilege. Marking it abstract keeps clients
+    // from trying to grant it in an ACE (RFC3744 section 3.11).
+    let mut all = dav_supported_privilege("all", "Any operation", true);
+    all.children.push(XMLNode::Element(dav_supported_privilege(
+        "read",
+        "Read any object",
+        false,
+    )));
+    all.children.push(XMLNode::Element(write));
 
     let mut e = dav_empty("supported-privilege-set");
     e.children.push(XMLNode::Element(all));
-    e
-}
-
-/// DAV:current-user-privilege-set (RFC3744 section 5.4).
-///
-/// The request principal has full access; the filesystem backend does
-/// the actual authorization.
-fn create_current_user_privilege_set() -> Element {
-    let mut e = dav_empty("current-user-privilege-set");
-    e.children.push(XMLNode::Element(dav_privilege(&["all"])));
     e
 }
 

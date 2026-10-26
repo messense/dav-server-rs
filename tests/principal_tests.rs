@@ -1,5 +1,5 @@
 //! Tests for WebDAV principal support (RFC5397 current-user-principal,
-//! RFC3744 principal resources and privilege sets).
+//! RFC3744 principal resources and supported-privilege-set).
 //!
 //! The test filesystem wraps `MemFs` and serves one virtual principal
 //! resource at `/principals/users/testuser` via the optional
@@ -249,7 +249,7 @@ mod principal_tests {
     }
 
     #[tokio::test]
-    async fn test_privilege_sets() {
+    async fn test_supported_privilege_set() {
         let server = setup();
         let content = propfind(
             &server,
@@ -259,8 +259,35 @@ mod principal_tests {
         )
         .await;
         assert!(content.contains("<D:supported-privilege-set>"));
-        assert!(content.contains("<D:current-user-privilege-set>"));
         assert!(content.contains("<D:all"));
+        // RFC3744 section 5.3 requires a DAV:description for every
+        // DAV:supported-privilege, with its language in xml:lang.
+        assert!(content.contains(r#"<D:description xml:lang="en">Any operation</D:description>"#));
+        assert!(
+            content.contains(r#"<D:description xml:lang="en">Read any object</D:description>"#)
+        );
+        assert!(
+            content.contains(r#"<D:description xml:lang="en">Write any object</D:description>"#)
+        );
+        // RFC3744 section 3.12: DAV:write contains the predefined
+        // non-aggregate write privileges.
+        for name in ["bind", "unbind", "write-properties", "write-content"] {
+            assert!(
+                content.contains(&format!("<D:{name}>")),
+                "missing {name} in {content}"
+            );
+        }
+        assert_eq!(content.matches("<D:supported-privilege>").count(), 7);
+        assert_eq!(
+            content.matches(r#"<D:description xml:lang="en">"#).count(),
+            7
+        );
+        // DAV:all is an abstract aggregate privilege.
+        assert_eq!(content.matches("<D:abstract>").count(), 1);
+
+        // RFC3744 section 5.4: without a real ACL model there is no exact
+        // per-user privilege set, so this property is not advertised.
+        assert!(!content.contains("<D:current-user-privilege-set"));
     }
 
     #[tokio::test]
@@ -288,12 +315,7 @@ mod principal_tests {
         )
         .await;
 
-        for name in [
-            "principal-URL",
-            "owner",
-            "supported-privilege-set",
-            "current-user-privilege-set",
-        ] {
+        for name in ["principal-URL", "owner", "supported-privilege-set"] {
             assert!(
                 content.contains(&format!("<D:{name}")),
                 "missing {name} in {content}"
@@ -321,10 +343,11 @@ mod principal_tests {
         assert!(!content.contains("<D:principal-URL"));
         assert!(!content.contains("<D:owner"));
 
-        // Privilege properties exist on every resource (and a principal is
-        // configured here, so the current-user variant exists too).
+        // The supported privilege set is static capability information, so it
+        // exists on every resource. The per-user privilege set is not
+        // advertised because there is no real ACL model.
         assert!(content.contains("<D:supported-privilege-set"));
-        assert!(content.contains("<D:current-user-privilege-set"));
+        assert!(!content.contains("<D:current-user-privilege-set"));
     }
 
     #[tokio::test]

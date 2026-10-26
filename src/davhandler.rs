@@ -124,10 +124,9 @@ impl<C> DavConfig<C> {
     /// Set the URL of the current user's "webdav principal" (RFC5397).
     ///
     /// This is the value returned in the `DAV:current-user-principal` property,
-    /// it will be the owner of any created locks, and it determines the
-    /// `DAV:current-user-privilege-set` property. It is also used to recognize
-    /// the current user's own principal resource when the filesystem backend
-    /// implements [`principal_metadata()`][GuardedFileSystem::principal_metadata].
+    /// and it will be the owner of any created locks. It is also used to
+    /// recognize the current user's own principal resource when the filesystem
+    /// backend implements [`principal_metadata()`][GuardedFileSystem::principal_metadata].
     pub fn principal(self, principal: impl Into<String>) -> Self {
         let mut this = self;
         this.principal = Some(principal.into());

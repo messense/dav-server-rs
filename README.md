@@ -52,10 +52,11 @@ checks][README_litmus] of the Webdav Litmus Test testsuite. That's all of the ba
 The litmus test suite also has tests for RFC3744 "acl" and "principal",
 for which there is partial support: a filesystem backend can declare
 principal resources with `principal_metadata()`, and the `DAV:current-user-principal`
-(RFC5397), `DAV:principal-URL`, `DAV:owner`, `DAV:supported-privilege-set`
-and `DAV:current-user-privilege-set` live properties are generated. The
-ACL method is not supported, and neither are RFC5842 "bind" and RFC3253
-"versioning".
+(RFC5397), `DAV:principal-URL`, `DAV:owner` and `DAV:supported-privilege-set`
+live properties are generated. `DAV:current-user-privilege-set` is not
+advertised because there is no access control model that could provide an
+exact per-user privilege set. The ACL method is not supported, and neither
+are RFC5842 "bind" and RFC3253 "versioning".
 
 The relevant parts of the HTTP RFCs are also implemented, such as the
 preconditions (If-Match, If-None-Match, If-Modified-Since, If-Unmodified-Since,
