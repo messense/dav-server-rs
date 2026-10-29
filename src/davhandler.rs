@@ -121,7 +121,12 @@ impl<C> DavConfig<C> {
         this
     }
 
-    /// Set the name of the "webdav principal". This will be the owner of any created locks.
+    /// Set the URL of the current user's "webdav principal" (RFC5397).
+    ///
+    /// This is the value returned in the `DAV:current-user-principal` property,
+    /// and it will be the owner of any created locks. It is also used to
+    /// recognize the current user's own principal resource when the filesystem
+    /// backend implements [`principal_metadata()`][GuardedFileSystem::principal_metadata].
     pub fn principal(self, principal: impl Into<String>) -> Self {
         let mut this = self;
         this.principal = Some(principal.into());
@@ -369,6 +374,23 @@ where
             .await
             .map(|m| m.is_dir())
             .unwrap_or(false)
+    }
+
+    // helper. Like `fs.metadata()`, but consults the backend's optional
+    // `principal_metadata()` first so that WebDAV principal resources
+    // (RFC3744) are recognized. The bool is true when the backend flagged
+    // the path as a principal resource.
+    pub(crate) async fn lookup_metadata(
+        &self,
+        path: &DavPath,
+    ) -> FsResult<(Box<dyn DavMetaData>, bool)> {
+        if let Some(meta) = self.fs.principal_metadata(path, &self.credentials).await? {
+            return Ok((meta, true));
+        }
+        self.fs
+            .metadata(path, &self.credentials)
+            .await
+            .map(|meta| (meta, false))
     }
 
     // helper.

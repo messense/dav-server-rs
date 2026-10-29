@@ -55,6 +55,9 @@ const PROPNAME_STR: &[&str] = &[
     "D:lockdiscovery",
     "D:resourcetype",
     "D:supportedlock",
+    "D:supported-privilege-set",
+    "D:principal-URL",
+    "D:owner",
     "D:quota-available-bytes",
     "D:quota-used-bytes",
     "A:executable",
@@ -82,6 +85,9 @@ const PROPNAME_STR: &[&str] = &[
     "D:lockdiscovery",
     "D:resourcetype",
     "D:supportedlock",
+    "D:supported-privilege-set",
+    "D:principal-URL",
+    "D:owner",
     "D:quota-available-bytes",
     "D:quota-used-bytes",
     "A:executable",
@@ -105,6 +111,9 @@ const PROPNAME_STR: &[&str] = &[
     "D:lockdiscovery",
     "D:resourcetype",
     "D:supportedlock",
+    "D:supported-privilege-set",
+    "D:principal-URL",
+    "D:owner",
     "D:quota-available-bytes",
     "D:quota-used-bytes",
     "A:executable",
@@ -127,6 +136,9 @@ const PROPNAME_STR: &[&str] = &[
     "D:lockdiscovery",
     "D:resourcetype",
     "D:supportedlock",
+    "D:supported-privilege-set",
+    "D:principal-URL",
+    "D:owner",
     "D:quota-available-bytes",
     "D:quota-used-bytes",
     "A:executable",
@@ -293,7 +305,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         // path and meta
         let mut path = self.path(req);
-        let meta = self.visible_metadata(&path).await?;
+        let (meta, is_principal) = self.visible_metadata(&path).await?;
         let meta = self.fixpath(&mut res, &mut path, meta);
 
         let mut root = None;
@@ -352,7 +364,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
             // Handle Depth::Default case: no target resource, only Depth 1 children
             if depth != davheaders::Depth::Default {
-                pw.write_props(&path, meta).await?;
+                pw.write_props(&path, meta, is_principal).await?;
                 pw.flush().await?;
             }
 
@@ -422,7 +434,25 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 if is_dir {
                     npath.add_slash();
                 }
-                propwriter.write_props(&npath, meta).await?;
+                // Let the backend flag directory entries as principal resources
+                // (RFC3744) so their PROPFIND response is generated accordingly.
+                let (meta, is_principal) = if is_dir {
+                    match self.fs.principal_metadata(&npath, &self.credentials).await {
+                        Ok(Some(pmeta)) => (pmeta, true),
+                        Ok(None) => (meta, false),
+                        Err(e) => {
+                            // Do not fall back to ordinary metadata when the
+                            // principal lookup failed: the entry might be a
+                            // principal resource we must not expose or recurse
+                            // into. Skip it instead.
+                            trace!("principal_metadata error on {npath}. Skipping {e:?}");
+                            continue;
+                        }
+                    }
+                } else {
+                    (meta, false)
+                };
+                propwriter.write_props(&npath, meta, is_principal).await?;
                 propwriter.flush().await?;
                 // For Depth::Default, treat it like Depth::One (no recursion)
                 // Only recurse for Depth::Infinity
@@ -838,6 +868,16 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         self.tx = Some(tx)
     }
 
+    /// Is `path` the URL of the current user's principal resource?
+    #[cfg(any(feature = "caldav", feature = "carddav"))]
+    fn is_principal_url(&self, path: &DavPath) -> bool {
+        let Some(pr) = self.principal.as_deref() else {
+            return false;
+        };
+        let href = path.with_prefix().as_url_string();
+        href.trim_end_matches('/') == pr.trim_end_matches('/')
+    }
+
     fn build_elem<T>(
         &self,
         content: bool,
@@ -935,6 +975,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         meta: &'a dyn DavMetaData,
         qc: &'a mut QuotaCache,
         docontent: bool,
+        is_principal: bool,
     ) -> DavResult<StatusElement> {
         // in some cases, a live property might be stored in the
         // dead prop database, like DAV:displayname.
@@ -1056,12 +1097,21 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                                 let addressbook = Element::new2("CARD:addressbook");
                                 elem.children.push(XMLNode::Element(addressbook));
                             }
+
+                            // RFC3744 principal resource.
+                            if is_principal {
+                                let principal = Element::new2("D:principal");
+                                elem.children.push(XMLNode::Element(principal));
+                            }
                         }
                         return Ok(StatusElement {
                             status: StatusCode::OK,
                             element: elem,
                         });
                     }
+                    // RFC5397. This property is computed per request, so it
+                    // is not included in allprop/propname responses; clients
+                    // must ask for it explicitly.
                     "current-user-principal" => {
                         if let Some(pr) = &self.principal {
                             let mut elem = prop.clone();
@@ -1074,6 +1124,45 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                                 element: elem,
                             });
                         }
+                    }
+                    // RFC3744 section 4.3. Only exists on principal resources.
+                    "principal-URL" if is_principal => {
+                        if !docontent {
+                            return self.build_elem(false, pfx, prop, "");
+                        }
+                        let mut elem = prop.clone();
+                        let mut href = Element::new2("D:href");
+                        href = href.text(path.with_prefix().as_url_string());
+                        elem.children.push(xmltree::XMLNode::Element(href));
+                        return Ok(StatusElement {
+                            status: StatusCode::OK,
+                            element: elem,
+                        });
+                    }
+                    // RFC3744 section 2.1.1. Only exists on principal resources.
+                    "owner" if is_principal => {
+                        if !docontent {
+                            return self.build_elem(false, pfx, prop, "");
+                        }
+                        let mut elem = prop.clone();
+                        let mut href = Element::new2("D:href");
+                        href = href.text(path.with_prefix().as_url_string());
+                        elem.children.push(xmltree::XMLNode::Element(href));
+                        return Ok(StatusElement {
+                            status: StatusCode::OK,
+                            element: elem,
+                        });
+                    }
+                    // RFC3744 section 5.3. The set is static capability
+                    // information about the resource, not a per-user claim.
+                    "supported-privilege-set" => {
+                        if !docontent {
+                            return self.build_elem(false, pfx, prop, "");
+                        }
+                        return Ok(StatusElement {
+                            status: StatusCode::OK,
+                            element: create_supported_privilege_set(),
+                        });
                     }
                     "supportedlock" => {
                         return Ok(StatusElement {
@@ -1119,6 +1208,21 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             #[cfg(feature = "caldav")]
             Some(NS_CALDAV_URI) => {
                 pfx = "C";
+
+                // The current user's principal resource advertises the
+                // calendar home collection (RFC4791 section 5.2).
+                if prop.name.as_str() == "calendar-home-set"
+                    && is_principal
+                    && self.is_principal_url(path)
+                {
+                    return Ok(StatusElement {
+                        status: StatusCode::OK,
+                        element: create_calendar_home_set(
+                            path.prefix(),
+                            DEFAULT_CALDAV_DIRECTORY_ENDSLASH,
+                        ),
+                    });
+                }
 
                 if meta.is_calendar(path) {
                     match prop.name.as_str() {
@@ -1178,6 +1282,21 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             #[cfg(feature = "carddav")]
             Some(NS_CARDDAV_URI) => {
                 pfx = "CARD";
+
+                // The current user's principal resource advertises the
+                // addressbook home collection (RFC6352 section 5.2).
+                if prop.name.as_str() == "addressbook-home-set"
+                    && is_principal
+                    && self.is_principal_url(path)
+                {
+                    return Ok(StatusElement {
+                        status: StatusCode::OK,
+                        element: create_addressbook_home_set(
+                            path.prefix(),
+                            DEFAULT_CARDDAV_DIRECTORY_ENDSLASH,
+                        ),
+                    });
+                }
 
                 if meta.is_addressbook(path) {
                     match prop.name.as_str() {
@@ -1299,6 +1418,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         &'a mut self,
         path: &'a DavPath,
         meta: Box<dyn DavMetaData + 'static>,
+        is_principal: bool,
     ) -> Result<(), DavError> {
         // A HashMap<StatusCode, Vec<Element>> for the result.
         let mut props = HashMap::new();
@@ -1308,7 +1428,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         let mut qc = self.q_cache;
         for p in &self.props {
             let res = self
-                .build_prop(p, path, &*meta, &mut qc, do_content)
+                .build_prop(p, path, &*meta, &mut qc, do_content, is_principal)
                 .await?;
             if res.status == StatusCode::OK {
                 add_sc_elem(&mut props, res.status, res.element);
@@ -1517,6 +1637,86 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
 fn add_sc_elem(hm: &mut HashMap<StatusCode, Vec<Element>>, sc: StatusCode, e: Element) {
     hm.entry(sc).or_default();
     hm.get_mut(&sc).unwrap().push(e)
+}
+
+/// An empty element in the DAV: namespace.
+fn dav_empty(name: &str) -> Element {
+    let mut e = Element::new(name);
+    e.prefix = Some("D".to_string());
+    e
+}
+
+/// A `<D:privilege>` element containing the named privileges.
+fn dav_privilege(names: &[&str]) -> Element {
+    let mut e = dav_empty("privilege");
+    for n in names {
+        e.children.push(XMLNode::Element(dav_empty(n)));
+    }
+    e
+}
+
+/// A `<D:description>` element with the language required by RFC3744
+/// section 5.3 ("Servers MUST indicate the human language ... using the
+/// xml:lang attribute").
+fn dav_description(text: &str) -> Element {
+    let mut e = dav_empty("description");
+    e.attributes
+        .insert("xml:lang".to_string(), "en".to_string());
+    e.text(text)
+}
+
+/// A `<D:supported-privilege>` element containing the named privilege,
+/// optionally marked abstract, and its human-readable description.
+///
+/// Element order follows RFC3744 section 5.3:
+/// `(privilege, abstract?, description, supported-privilege*)`.
+fn dav_supported_privilege(name: &str, description: &str, is_abstract: bool) -> Element {
+    let mut e = dav_empty("supported-privilege");
+    e.children.push(XMLNode::Element(dav_privilege(&[name])));
+    if is_abstract {
+        e.children.push(XMLNode::Element(dav_empty("abstract")));
+    }
+    e.children
+        .push(XMLNode::Element(dav_description(description)));
+    e
+}
+
+/// DAV:supported-privilege-set (RFC3744 section 5.3).
+///
+/// This describes which privileges exist on a resource; it does not say
+/// anything about the privileges of the current user.
+fn create_supported_privilege_set() -> Element {
+    // RFC3744 section 3.12: DAV:write MUST contain DAV:bind, DAV:unbind,
+    // DAV:write-properties and DAV:write-content.
+    let mut write = dav_supported_privilege("write", "Write any object", false);
+    for (name, description) in [
+        ("bind", "Add a member to a collection"),
+        ("unbind", "Remove a member from a collection"),
+        ("write-properties", "Write properties"),
+        ("write-content", "Write resource content"),
+    ] {
+        write
+            .children
+            .push(XMLNode::Element(dav_supported_privilege(
+                name,
+                description,
+                false,
+            )));
+    }
+
+    // DAV:all is an aggregate privilege. Marking it abstract keeps clients
+    // from trying to grant it in an ACE (RFC3744 section 3.11).
+    let mut all = dav_supported_privilege("all", "Any operation", true);
+    all.children.push(XMLNode::Element(dav_supported_privilege(
+        "read",
+        "Read any object",
+        false,
+    )));
+    all.children.push(XMLNode::Element(write));
+
+    let mut e = dav_empty("supported-privilege-set");
+    e.children.push(XMLNode::Element(all));
+    e
 }
 
 #[allow(dead_code)]

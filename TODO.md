@@ -96,7 +96,13 @@ the lock database is seperate from the webdav server.
  
 - implement [RFC4437 Webdav Redirectref](https://tools.ietf.org/html/rfc4437) -- basically support for symbolic links
 
-- implement [RFC3744 Webdac ACL](https://tools.ietf.org/html/rfc3744)
+- finish [RFC3744 Webdav ACL](https://tools.ietf.org/html/rfc3744): principal
+  resources (`principal_metadata()`) and `supported-privilege-set` are
+  implemented; what's missing is the ACL method and a real access control model
+  (inherited ACLs, `principal-collection-set`, ACE persistence).
+  `DAV:current-user-privilege-set` is deliberately not advertised until that
+  model exists: only the filesystem knows the effective per-resource
+  permissions, so it must come from a backend hook, not from `methods()`.
 
 ## Things I thought of but aren't going to work:
 

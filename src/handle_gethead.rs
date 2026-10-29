@@ -38,8 +38,13 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }
     }
 
-    /// Returns the metadata depending on hide_symlinks & hide_dot_prefix
-    pub(crate) async fn visible_metadata(&self, path: &DavPath) -> DavResult<Box<dyn DavMetaData>> {
+    /// Returns the metadata depending on hide_symlinks & hide_dot_prefix.
+    /// The returned bool is true when the backend flagged the path as a
+    /// WebDAV principal resource (RFC3744) via `principal_metadata()`.
+    pub(crate) async fn visible_metadata(
+        &self,
+        path: &DavPath,
+    ) -> DavResult<(Box<dyn DavMetaData>, bool)> {
         if (self.hide_dot_prefix == DavOptionHide::Always
             || self.hide_dot_prefix == DavOptionHide::ForDirectPaths)
             && path.file_name_bytes().starts_with(b".")
@@ -48,16 +53,16 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }
 
         if self.hide_symlinks {
+            if let Some(meta) = self.fs.principal_metadata(path, &self.credentials).await? {
+                return Ok((meta, true));
+            }
             let meta = self.fs.symlink_metadata(path, &self.credentials).await?;
             if meta.is_symlink() {
                 return Err(DavError::Status(StatusCode::NOT_FOUND));
             }
-            Ok(meta)
+            Ok((meta, false))
         } else {
-            match self.fs.metadata(path, &self.credentials).await {
-                Ok(val) => Ok(val),
-                Err(err) => Err(DavError::FsError(err)),
-            }
+            self.lookup_metadata(path).await.map_err(DavError::FsError)
         }
     }
 
@@ -74,8 +79,11 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             return Ok(response);
         }
 
-        // check if it's a symlink.
-        let meta = self.visible_metadata(&path).await?;
+        // Principal resources are not retrievable.
+        let (meta, is_principal) = self.visible_metadata(&path).await?;
+        if is_principal {
+            return Err(DavError::Status(StatusCode::METHOD_NOT_ALLOWED));
+        }
 
         if meta.is_dir() {
             //

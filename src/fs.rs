@@ -183,6 +183,33 @@ pub trait DavFileSystem {
     /// Must be implemented so that hide_symlinks is able to work.
     fn symlink_metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>>;
 
+    /// Return metadata when `path` is a WebDAV principal resource (RFC3744),
+    /// `Ok(None)` otherwise.
+    ///
+    /// Backends that implement this method serve a "principal space": URLs that
+    /// are declared to be [principal resources]. The returned metadata must be
+    /// for a collection (`is_dir()` is `true`). It is used to add
+    /// `DAV:principal` to the `DAV:resourcetype` property and to generate the
+    /// `DAV:principal-URL` and `DAV:owner` live properties on PROPFIND.
+    ///
+    /// `metadata()` should normally also map principal paths; this method is
+    /// what *flags* them. Since the backend owns the principal space, it should
+    /// also protect it: principal resources are neither retrievable nor
+    /// writable, so return [`FsError::Forbidden`] from `open()`, `create_dir()`,
+    /// `remove_dir()` and `remove_file()` for those paths.
+    ///
+    /// The default implementation returns `Ok(None)`, meaning the backend
+    /// serves no principal resources.
+    ///
+    /// [principal resources]: https://datatracker.ietf.org/doc/html/rfc3744#section-2.1
+    #[allow(unused_variables)]
+    fn principal_metadata<'a>(
+        &'a self,
+        path: &'a DavPath,
+    ) -> FsFuture<'a, Option<Box<dyn DavMetaData>>> {
+        Box::pin(future::ready(Ok(None)))
+    }
+
     /// Create a directory.
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
@@ -385,6 +412,34 @@ where
         path: &'a DavPath,
         credentials: &'a C,
     ) -> FsFuture<'a, Box<dyn DavMetaData>>;
+
+    /// Return metadata when `path` is a WebDAV principal resource (RFC3744),
+    /// `Ok(None)` otherwise.
+    ///
+    /// Backends that implement this method serve a "principal space": URLs that
+    /// are declared to be [principal resources]. The returned metadata must be
+    /// for a collection (`is_dir()` is `true`). It is used to add
+    /// `DAV:principal` to the `DAV:resourcetype` property and to generate the
+    /// `DAV:principal-URL` and `DAV:owner` live properties on PROPFIND.
+    ///
+    /// [`metadata()`][Self::metadata] should normally also map principal paths;
+    /// this method is what *flags* them. Since the backend owns the principal
+    /// space, it should also protect it: principal resources are neither
+    /// retrievable nor writable, so return [`FsError::Forbidden`] from `open()`,
+    /// `create_dir()`, `remove_dir()` and `remove_file()` for those paths.
+    ///
+    /// The default implementation returns `Ok(None)`, meaning the backend
+    /// serves no principal resources.
+    ///
+    /// [principal resources]: https://datatracker.ietf.org/doc/html/rfc3744#section-2.1
+    #[allow(unused_variables)]
+    fn principal_metadata<'a>(
+        &'a self,
+        path: &'a DavPath,
+        credentials: &'a C,
+    ) -> FsFuture<'a, Option<Box<dyn DavMetaData>>> {
+        Box::pin(future::ready(Ok(None)))
+    }
 
     /// Create a directory.
     ///
@@ -590,6 +645,14 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         _credentials: &(),
     ) -> FsFuture<'a, Box<dyn DavMetaData>> {
         DavFileSystem::symlink_metadata(self, path)
+    }
+
+    fn principal_metadata<'a>(
+        &'a self,
+        path: &'a DavPath,
+        _credentials: &(),
+    ) -> FsFuture<'a, Option<Box<dyn DavMetaData>>> {
+        DavFileSystem::principal_metadata(self, path)
     }
 
     fn create_dir<'a>(&'a self, path: &'a DavPath, _credentials: &()) -> FsFuture<'a, ()> {
