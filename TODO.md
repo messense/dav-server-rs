@@ -50,7 +50,7 @@ Anyway:
 The temporary lock should probably have a timeout of say 10 seconds, where we
 refresh it every 5 seconds or so, so that a stale lock doesn't hang around
 too long if something goes catastrophically wrong. Might only happen when
-the lock database is seperate from the webdav server.
+the lock database is separate from the webdav server.
 
 ## Improvements:
 
