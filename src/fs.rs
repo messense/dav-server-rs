@@ -824,6 +824,9 @@ pub trait DavMetaData: Debug + Send + Sync + DynClone {
     ///
     /// Returns a simple etag that basically is `\<length\>-\<timestamp_in_ms\>`
     /// with the numbers in hex. Enough for most implementations.
+    ///
+    /// The tag must not contain quotes: the server adds them when it emits
+    /// the `ETag` header and the `getetag` property.
     fn etag(&self) -> Option<String> {
         if let Ok(t) = self.modified()
             && let Ok(t) = t.duration_since(UNIX_EPOCH)

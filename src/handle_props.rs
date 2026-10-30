@@ -1060,8 +1060,8 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         try_deadprop = true;
                     }
                     "getetag" => {
-                        if let Some(etag) = meta.etag() {
-                            return self.build_elem(docontent, pfx, prop, etag);
+                        if let Some(etag) = davheaders::ETag::from_meta(meta) {
+                            return self.build_elem(docontent, pfx, prop, etag.to_string());
                         }
                     }
                     "getcontentlength" if !meta.is_dir() => {
