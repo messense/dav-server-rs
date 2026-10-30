@@ -13,6 +13,7 @@ use crate::{DavInner, DavResult};
 
 use crate::async_stream::AsyncStream;
 use crate::caldav::*;
+use crate::davheaders::ETag;
 use crate::davpath::DavPath;
 use crate::handle_props::PropWriter;
 
@@ -392,7 +393,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                         .await
                     {
                         let metadata = file.metadata().await?;
-                        let etag = metadata.etag().unwrap_or_default().to_string();
+                        let etag = ETag::from_meta(metadata.as_ref())
+                            .map(|e| e.to_string())
+                            .unwrap_or_default();
 
                         if let Ok(data) = file.read_bytes(metadata.len() as usize).await
                             && is_calendar_data(&data)
@@ -429,7 +432,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 && let Ok(data) = file.read_bytes(metadata.len() as usize).await
                 && is_calendar_data(&data)
             {
-                let etag = metadata.etag().unwrap_or_default().to_string();
+                let etag = ETag::from_meta(metadata.as_ref())
+                    .map(|e| e.to_string())
+                    .unwrap_or_default();
                 let content = String::from_utf8_lossy(&data);
                 results.push((item_path, etag, content.to_string()));
                 continue;

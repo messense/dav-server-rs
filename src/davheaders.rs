@@ -444,7 +444,8 @@ impl TryFrom<&HeaderValue> for ETag {
 
 impl Display for ETag {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "\"{}\"", self.tag)
+        // `tag` already carries the `W/` prefix and the quotes.
+        f.write_str(&self.tag)
     }
 }
 
@@ -926,6 +927,8 @@ mod tests {
         assert!(t1 != t2);
         assert!(t2 != t3);
         assert!(t3 == t4);
+        assert_eq!(t1.to_string(), r#"W/"12345""#);
+        assert_eq!(t3.to_string(), r#""12346""#);
     }
 
     #[test]

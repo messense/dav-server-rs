@@ -732,3 +732,94 @@ mod win32_mtime_localfs_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+#[cfg(feature = "memfs")]
+mod getetag_tests {
+    use dav_server::{DavHandler, body::Body, fakels::FakeLs, memfs::MemFs};
+    use http::{Request, StatusCode};
+
+    fn setup() -> DavHandler {
+        DavHandler::builder()
+            .filesystem(MemFs::new())
+            .locksystem(FakeLs::new())
+            .build_handler()
+    }
+
+    async fn resp_to_string(mut resp: http::Response<Body>) -> String {
+        use futures_util::StreamExt;
+
+        let mut data = Vec::new();
+        let body = resp.body_mut();
+
+        while let Some(chunk) = body.next().await {
+            match chunk {
+                Ok(bytes) => data.extend_from_slice(&bytes),
+                Err(e) => panic!("Error reading body stream: {}", e),
+            }
+        }
+
+        String::from_utf8(data).unwrap_or_else(|_| "".to_string())
+    }
+
+    async fn put(server: &DavHandler, uri: &str, if_match: Option<&str>) -> StatusCode {
+        let mut req = Request::builder().method("PUT").uri(uri);
+        if let Some(tag) = if_match {
+            req = req.header("If-Match", tag);
+        }
+        let req = req.body(Body::from("hello")).unwrap();
+        server.handle(req).await.status()
+    }
+
+    async fn propfind_getetag(server: &DavHandler, uri: &str) -> String {
+        let req = Request::builder()
+            .method("PROPFIND")
+            .uri(uri)
+            .header("Depth", "0")
+            .body(Body::from(
+                r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:">
+  <D:prop>
+    <D:getetag/>
+  </D:prop>
+</D:propfind>"#,
+            ))
+            .unwrap();
+        let resp = server.handle(req).await;
+        assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
+        let body = resp_to_string(resp).await;
+        let start = body.find("<D:getetag>").expect("getetag missing") + "<D:getetag>".len();
+        let end = body[start..].find("</D:getetag>").unwrap() + start;
+        body[start..end].to_string()
+    }
+
+    #[tokio::test]
+    async fn propfind_getetag_is_quoted_and_round_trips_as_if_match() {
+        let server = setup();
+        assert_eq!(put(&server, "/file.txt", None).await, StatusCode::CREATED);
+
+        let getetag = propfind_getetag(&server, "/file.txt").await;
+        assert!(
+            getetag.len() > 2 && getetag.starts_with('"') && getetag.ends_with('"'),
+            "getetag is not a quoted entity-tag: {getetag}"
+        );
+
+        let req = Request::builder()
+            .method("HEAD")
+            .uri("/file.txt")
+            .body(Body::empty())
+            .unwrap();
+        let resp = server.handle(req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let header_etag = resp.headers().get("etag").unwrap().to_str().unwrap();
+        assert_eq!(getetag, header_etag);
+
+        assert_eq!(
+            put(&server, "/file.txt", Some(&getetag)).await,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            put(&server, "/file.txt", Some("\"stale\"")).await,
+            StatusCode::PRECONDITION_FAILED
+        );
+    }
+}
