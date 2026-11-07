@@ -368,8 +368,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 pw.flush().await?;
             }
 
-            if is_dir && depth != davheaders::Depth::Zero
-            {
+            if is_dir && depth != davheaders::Depth::Zero {
                 self.propfind_directory(&path, depth, &mut pw).await?;
             }
             pw.close().await?;
