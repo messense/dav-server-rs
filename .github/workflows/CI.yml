@@ -84,7 +84,7 @@ jobs:
           curl -O http://www.webdav.org/neon/litmus/litmus-0.13.tar.gz
           tar xf litmus-0.13.tar.gz
           cd litmus-0.13
-          ./configure
+          CFLAGS=-Wno-error=implicit-function-declaration ./configure
           make
       - name: Run litmus protocol compliance test
         run: |
