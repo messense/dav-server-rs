@@ -300,7 +300,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 davheaders::Depth::Infinity
             }
             Some(d) => d,
-            None => davheaders::Depth::Default,
+            None => self.default_depth,
         };
 
         // path and meta
@@ -368,10 +368,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 pw.flush().await?;
             }
 
-            if is_dir
-                && (depth == davheaders::Depth::One
-                    || depth == davheaders::Depth::Default
-                    || depth == davheaders::Depth::Infinity)
+            if is_dir && depth != davheaders::Depth::Zero
             {
                 self.propfind_directory(&path, depth, &mut pw).await?;
             }

@@ -16,7 +16,7 @@ use http_body::Body as HttpBody;
 use http_body_util::BodyExt;
 
 use crate::body::{Body, StreamBody};
-use crate::davheaders;
+use crate::davheaders::{self, Depth};
 use crate::davpath::DavPath;
 use crate::util::{DavMethod, DavMethodSet, dav_method};
 
@@ -211,6 +211,7 @@ pub(crate) struct DavInner<C> {
     pub principal: Option<String>,
     pub hide_symlinks: bool,
     pub allow_infinity_depth: bool,
+    pub default_depth: Depth,
     pub hide_dot_prefix: DavOptionHide,
     pub autoindex: Option<bool>,
     pub indexfile: Option<String>,
@@ -349,6 +350,7 @@ where
             read_buf_size,
             redirect,
         } = cfg;
+		let allow_infinity_depth = allow_infinity_depth.unwrap_or(false);
         Self {
             prefix: prefix.unwrap_or_default(),
             fs: fs.unwrap_or_else(|| VoidFs::<C>::new()),
@@ -356,7 +358,8 @@ where
             allow,
             principal,
             hide_symlinks: hide_symlinks.unwrap_or(false),
-            allow_infinity_depth: allow_infinity_depth.unwrap_or(false),
+            allow_infinity_depth,
+            default_depth: if allow_infinity_depth {Depth::Infinity} else {Depth::Default},
             hide_dot_prefix: hide_dot_prefix.unwrap_or(DavOptionHide::InAutoIndexListings),
             autoindex,
             indexfile,
