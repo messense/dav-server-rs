@@ -1422,12 +1422,18 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         // Get properties one-by-one
         let do_content = self.name != "propname";
         let mut qc = self.q_cache;
+        // Properties requested by name that do not exist. RFC 4918, section 9.1, requires
+        // them in a 404 propstat; `allprop` and `propname` only list what exists. They are
+        // added last, because the code below may still provide some of them.
+        let mut not_found = Vec::new();
         for p in &self.props {
             let res = self
                 .build_prop(p, path, &*meta, &mut qc, do_content, is_principal)
                 .await?;
             if res.status == StatusCode::OK {
                 add_sc_elem(&mut props, res.status, res.element);
+            } else if self.name == "prop" {
+                not_found.push((p, res));
             }
         }
         self.q_cache = qc;
@@ -1441,6 +1447,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                 let elem =
                     create_calendar_home_set(path.prefix(), DEFAULT_CALDAV_DIRECTORY_ENDSLASH);
                 add_sc_elem(&mut props, StatusCode::OK, elem);
+                remove_found(&mut not_found, Some(NS_CALDAV_URI), "calendar-home-set");
             }
         }
 
@@ -1453,6 +1460,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                 let elem =
                     create_addressbook_home_set(path.prefix(), DEFAULT_CARDDAV_DIRECTORY_ENDSLASH);
                 add_sc_elem(&mut props, StatusCode::OK, elem);
+                remove_found(&mut not_found, Some(NS_CARDDAV_URI), "addressbook-home-set");
             }
         }
 
@@ -1460,9 +1468,14 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         if self.fs.have_props(path, &self.credentials).await
             && let Ok(v) = self.fs.get_props(path, true, &self.credentials).await
         {
-            v.into_iter()
-                .map(davprop_to_element)
-                .for_each(|e| add_sc_elem(&mut props, StatusCode::OK, e));
+            for prop in v {
+                remove_found(&mut not_found, prop.namespace.as_deref(), &prop.name);
+                add_sc_elem(&mut props, StatusCode::OK, davprop_to_element(prop));
+            }
+        }
+
+        for (_, res) in not_found {
+            add_sc_elem(&mut props, res.status, res.element);
         }
 
         self.write_propresponse(path, props)
@@ -1633,6 +1646,15 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
 fn add_sc_elem(hm: &mut HashMap<StatusCode, Vec<Element>>, sc: StatusCode, e: Element) {
     hm.entry(sc).or_default();
     hm.get_mut(&sc).unwrap().push(e)
+}
+
+/// Drops the requested property `namespace:name` from `not_found`, it was found after all.
+fn remove_found(
+    not_found: &mut Vec<(&Element, StatusElement)>,
+    namespace: Option<&str>,
+    name: &str,
+) {
+    not_found.retain(|(p, _)| p.namespace.as_deref() != namespace || p.name != name);
 }
 
 /// An empty element in the DAV: namespace.
