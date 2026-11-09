@@ -83,6 +83,11 @@
 //! the same `set_modified` backend. The 207 still reports 200 for that
 //! property so the Windows client keeps working; a malformed value is 409.
 //!
+//! XML bodies parsed into a tree are limited to 64 nested element levels,
+//! counting the document root as one level. Requests exceeding this limit
+//! return `400 Bad Request`. The same limit applies when reading stored DAV
+//! property XML from a filesystem backend.
+//!
 //! ## Backends.
 //!
 //! Included are two filesystems:

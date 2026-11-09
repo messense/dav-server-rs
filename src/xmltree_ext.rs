@@ -1,14 +1,19 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::Write;
 use xml::EmitterConfig;
 use xml::common::XmlVersion;
+use xml::reader::{ParserConfig, XmlEvent};
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
 
 use xmltree::{self, Element, XMLNode};
 
 use crate::{DavError, DavResult};
+
+// Bound recursive tree construction, serialization, cloning, and destruction.
+// The document root counts as one level.
+const MAX_XML_DEPTH: usize = 64;
 
 pub(crate) trait ElementExt {
     /// Builder.
@@ -20,8 +25,8 @@ pub(crate) trait ElementExt {
     fn ns<S: Into<String>>(self, prefix: S, namespace: S) -> Self;
     /// Builder.
     fn text<T: Into<String>>(self, t: T) -> Self;
-    /// Like parse, but returns DavError.
-    fn parse2<R: Read>(r: R) -> Result<Element, DavError>;
+    /// Like parse, but limits element depth to 64 and returns DavError.
+    fn parse2(data: &[u8]) -> Result<Element, DavError>;
     /// Add a child element.
     fn push_element(&mut self, e: Element);
     /// Iterator over the children that are Elements.
@@ -108,8 +113,26 @@ impl ElementExt for Element {
         self.children.iter().find_map(|n| n.as_element()).is_some()
     }
 
-    fn parse2<R: Read>(r: R) -> Result<Element, DavError> {
-        let res = Element::parse(r);
+    fn parse2(data: &[u8]) -> Result<Element, DavError> {
+        // Match xmltree's parser configuration in both passes. Check depth with
+        // the streaming reader before xmltree can recurse, even on invalid XML.
+        let config = ParserConfig::new().ignore_comments(false);
+        let mut depth = 0usize;
+        for event in config.clone().create_reader(data) {
+            match event.map_err(|_| DavError::XmlParseError)? {
+                XmlEvent::StartElement { .. } => {
+                    depth += 1;
+                    if depth > MAX_XML_DEPTH {
+                        return Err(DavError::XmlParseError);
+                    }
+                }
+                XmlEvent::EndElement { .. } => depth -= 1,
+                XmlEvent::EndDocument => break,
+                _ => {}
+            }
+        }
+
+        let res = Element::parse_with_config(data, config);
         match res {
             Ok(elems) => Ok(elems),
             Err(xmltree::ParseError::MalformedXml(_)) => Err(DavError::XmlParseError),
@@ -188,4 +211,81 @@ pub(crate) fn emitter<W: Write>(w: W) -> DavResult<EventWriter<W>> {
         standalone: None,
     })?;
     Ok(emitter)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn nested_xml(depth: usize) -> String {
+        "<a>".repeat(depth) + &"</a>".repeat(depth)
+    }
+
+    #[test]
+    fn accepts_xml_at_depth_limit() {
+        let xml = nested_xml(MAX_XML_DEPTH);
+        let tree = Element::parse2(xml.as_bytes()).unwrap();
+        // Also exercise recursive serialization and destruction at the limit.
+        tree.write_ev(&mut emitter(Vec::new()).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn rejects_xml_above_depth_limit() {
+        for depth in [MAX_XML_DEPTH + 1, 3_000] {
+            let xml = nested_xml(depth);
+            assert!(matches!(
+                Element::parse2(xml.as_bytes()),
+                Err(DavError::XmlParseError)
+            ));
+            let unclosed = "<a>".repeat(depth);
+            assert!(matches!(
+                Element::parse2(unclosed.as_bytes()),
+                Err(DavError::XmlParseError)
+            ));
+        }
+    }
+
+    #[test]
+    fn counts_nesting_rather_than_siblings_or_text() {
+        let xml = format!(
+            "<root><!-- {} --><![CDATA[{}]]>{}</root>",
+            "<a>".repeat(100),
+            "<a>".repeat(100),
+            "<a/>".repeat(100),
+        );
+        let tree = Element::parse2(xml.as_bytes()).unwrap();
+        assert!(matches!(tree.children[0], XMLNode::Comment(_)));
+        assert!(matches!(tree.children[1], XMLNode::CData(_)));
+        assert_eq!(tree.child_elems_iter().count(), 100);
+    }
+
+    #[test]
+    fn enforces_depth_limit_for_utf16() {
+        for depth in [MAX_XML_DEPTH, MAX_XML_DEPTH + 1] {
+            let xml = format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-16\"?>{}",
+                nested_xml(depth)
+            );
+            let data: Vec<u8> = [0xff, 0xfe]
+                .into_iter()
+                .chain(xml.encode_utf16().flat_map(u16::to_le_bytes))
+                .collect();
+            let result = Element::parse2(&data);
+            if depth == MAX_XML_DEPTH {
+                assert!(result.is_ok());
+            } else {
+                assert!(matches!(result, Err(DavError::XmlParseError)));
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_malformed_xml() {
+        for xml in ["", "<a>", "<a></b>", "<a/><b>", "</a>"] {
+            assert!(matches!(
+                Element::parse2(xml.as_bytes()),
+                Err(DavError::XmlParseError)
+            ));
+        }
+    }
 }

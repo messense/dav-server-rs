@@ -310,7 +310,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         let mut root = None;
         if !xmldata.is_empty() {
-            root = match Element::parse(Cursor::new(xmldata)) {
+            root = match Element::parse2(xmldata) {
                 Ok(t) => {
                     if t.name == "propfind" && t.namespace.as_deref() == Some("DAV:") {
                         Some(t)
@@ -622,7 +622,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                std::string::String::from_utf8_lossy(xmldata));
 
         // parse xml
-        let tree = Element::parse2(Cursor::new(xmldata))?;
+        let tree = Element::parse2(xmldata)?;
         if tree.name != "propertyupdate" {
             return Err(DavError::XmlParseError);
         }
@@ -1389,7 +1389,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             // asking for a specific property.
             let dprop = element_to_davprop(prop);
             if let Ok(xml) = self.fs.get_prop(path, dprop, &self.credentials).await
-                && let Ok(e) = Element::parse(Cursor::new(xml))
+                && let Ok(e) = Element::parse2(&xml)
             {
                 return Ok(StatusElement {
                     status: StatusCode::OK,
@@ -1761,7 +1761,7 @@ fn element_to_davprop(elem: &Element) -> DavProp {
 
 fn davprop_to_element(prop: DavProp) -> Element {
     if let Some(xml) = prop.xml {
-        match Element::parse2(Cursor::new(xml)) {
+        match Element::parse2(&xml) {
             Ok(result) => {
                 return result;
             }

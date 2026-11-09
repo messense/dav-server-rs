@@ -2,7 +2,6 @@ use headers::HeaderMapExt;
 use http::StatusCode as SC;
 use http::{Request, Response};
 use std::cmp;
-use std::io::Cursor;
 use std::time::Duration;
 use xmltree::{self, Element};
 
@@ -114,7 +113,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }
 
         // parse xml
-        let tree = xmltree::Element::parse2(Cursor::new(xmldata))?;
+        let tree = xmltree::Element::parse2(xmldata)?;
         if tree.name != "lockinfo" {
             return Err(DavError::XmlParseError);
         }
