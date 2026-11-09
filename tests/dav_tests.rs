@@ -823,3 +823,192 @@ mod getetag_tests {
         );
     }
 }
+
+#[cfg(feature = "memfs")]
+mod propfind_prop_tests {
+    use dav_server::{
+        DavHandler,
+        body::Body,
+        davpath::DavPath,
+        fakels::FakeLs,
+        fs::{
+            DavDirEntry, DavFile, DavFileSystem, DavMetaData, DavProp, FsFuture, FsStream,
+            OpenOptions, ReadDirMeta,
+        },
+        memfs::MemFs,
+    };
+    use futures_util::future::BoxFuture;
+    use http::{Request, StatusCode};
+
+    /// A `MemFs` that serves the property `X:extra` only through `get_props`, like a
+    /// backend that computes its properties in one place. `get_prop` keeps its default,
+    /// which returns `NotImplemented`.
+    #[derive(Clone)]
+    struct GetPropsOnlyFs {
+        inner: MemFs,
+    }
+
+    impl DavFileSystem for GetPropsOnlyFs {
+        fn open<'a>(
+            &'a self,
+            path: &'a DavPath,
+            options: OpenOptions,
+        ) -> FsFuture<'a, Box<dyn DavFile>> {
+            self.inner.open(path, options)
+        }
+
+        fn read_dir<'a>(
+            &'a self,
+            path: &'a DavPath,
+            meta: ReadDirMeta,
+        ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
+            self.inner.read_dir(path, meta)
+        }
+
+        fn metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
+            self.inner.metadata(path)
+        }
+
+        fn symlink_metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
+            self.inner.symlink_metadata(path)
+        }
+
+        fn have_props<'a>(&'a self, _path: &'a DavPath) -> BoxFuture<'a, bool> {
+            Box::pin(async { true })
+        }
+
+        fn get_props<'a>(
+            &'a self,
+            _path: &'a DavPath,
+            _do_content: bool,
+        ) -> FsFuture<'a, Vec<DavProp>> {
+            Box::pin(async {
+                Ok(vec![DavProp::new(
+                    "extra".to_string(),
+                    "X".to_string(),
+                    "http://example.com/ns".to_string(),
+                    "value".to_string(),
+                )])
+            })
+        }
+    }
+
+    /// Returns a server whose `fs` holds the file `/file.txt`.
+    async fn setup(fs: Box<dyn dav_server::fs::GuardedFileSystem<()>>) -> DavHandler {
+        let server = DavHandler::builder()
+            .filesystem(fs)
+            .locksystem(FakeLs::new())
+            .build_handler();
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/file.txt")
+            .body(Body::from("hello"))
+            .unwrap();
+        assert_eq!(server.handle(req).await.status(), StatusCode::CREATED);
+        server
+    }
+
+    async fn resp_to_string(mut resp: http::Response<Body>) -> String {
+        use futures_util::StreamExt;
+
+        let mut data = Vec::new();
+        let body = resp.body_mut();
+
+        while let Some(chunk) = body.next().await {
+            match chunk {
+                Ok(bytes) => data.extend_from_slice(&bytes),
+                Err(e) => panic!("Error reading body stream: {}", e),
+            }
+        }
+
+        String::from_utf8(data).unwrap_or_else(|_| "".to_string())
+    }
+
+    async fn propfind(server: &DavHandler, body: &'static str) -> String {
+        let req = Request::builder()
+            .method("PROPFIND")
+            .uri("/file.txt")
+            .header("Depth", "0")
+            .body(Body::from(body))
+            .unwrap();
+        let resp = server.handle(req).await;
+        assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
+        resp_to_string(resp).await
+    }
+
+    /// Returns the `<D:propstat>` element of `body` with the given status.
+    fn propstat<'a>(body: &'a str, status: &str) -> Option<&'a str> {
+        body.split("<D:propstat>")
+            .skip(1)
+            .find(|p| p.contains(&format!("<D:status>HTTP/1.1 {status}</D:status>")))
+    }
+
+    #[tokio::test]
+    async fn propfind_prop_reports_missing_property_as_404() {
+        let server = setup(MemFs::new()).await;
+
+        let body = propfind(
+            &server,
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:" xmlns:X="http://example.com/ns">
+  <D:prop>
+    <D:getcontentlength/>
+    <X:missing/>
+  </D:prop>
+</D:propfind>"#,
+        )
+        .await;
+
+        let ok = propstat(&body, "200 OK").expect("no 200 propstat");
+        assert!(ok.contains("getcontentlength"), "{body}");
+        assert!(!ok.contains("missing"), "{body}");
+
+        let not_found = propstat(&body, "404 Not Found").expect("no 404 propstat");
+        assert!(not_found.contains("missing"), "{body}");
+        assert!(!not_found.contains("getcontentlength"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn propfind_prop_reports_property_from_get_props_as_200_only() {
+        let server = setup(Box::new(GetPropsOnlyFs {
+            inner: *MemFs::new(),
+        }))
+        .await;
+
+        let body = propfind(
+            &server,
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:" xmlns:X="http://example.com/ns">
+  <D:prop>
+    <X:extra/>
+    <X:missing/>
+  </D:prop>
+</D:propfind>"#,
+        )
+        .await;
+
+        let ok = propstat(&body, "200 OK").expect("no 200 propstat");
+        assert!(ok.contains("extra"), "{body}");
+        assert!(!ok.contains("missing"), "{body}");
+
+        let not_found = propstat(&body, "404 Not Found").expect("no 404 propstat");
+        assert!(not_found.contains("missing"), "{body}");
+        assert!(!not_found.contains("extra"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn propfind_allprop_and_propname_omit_missing_properties() {
+        let server = setup(MemFs::new()).await;
+
+        for request in [
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:"><D:allprop/></D:propfind>"#,
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:"><D:propname/></D:propfind>"#,
+        ] {
+            let body = propfind(&server, request).await;
+            assert!(propstat(&body, "200 OK").is_some(), "{body}");
+            assert!(propstat(&body, "404 Not Found").is_none(), "{body}");
+        }
+    }
+}

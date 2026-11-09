@@ -176,6 +176,24 @@ mod principal_tests {
         resp_to_string(resp).await
     }
 
+    /// Asserts that `prop` (such as `<D:owner`) is in the 404 propstat of `content` and in
+    /// no other: a requested property that does not exist is reported as 404 (RFC4918
+    /// section 9.1).
+    fn assert_not_found(content: &str, prop: &str) {
+        let (not_found, other): (Vec<&str>, Vec<&str>) = content
+            .split("<D:propstat>")
+            .skip(1)
+            .partition(|p| p.contains("<D:status>HTTP/1.1 404 Not Found</D:status>"));
+        assert!(
+            not_found.iter().any(|p| p.contains(prop)),
+            "{prop} not in a 404 propstat: {content}"
+        );
+        assert!(
+            !other.iter().any(|p| p.contains(prop)),
+            "{prop} outside the 404 propstat: {content}"
+        );
+    }
+
     #[tokio::test]
     async fn test_principal_resourcetype() {
         let server = setup();
@@ -215,8 +233,7 @@ mod principal_tests {
             r#"<D:propfind xmlns:D="DAV:"><D:prop><D:owner/></D:prop></D:propfind>"#,
         )
         .await;
-        // Props the resource does not have are left out of the response.
-        assert!(!content.contains("<D:owner>"));
+        assert_not_found(&content, "<D:owner");
     }
 
     #[tokio::test]
@@ -245,7 +262,7 @@ mod principal_tests {
             r#"<D:propfind xmlns:D="DAV:"><D:prop><D:current-user-principal/></D:prop></D:propfind>"#,
         )
         .await;
-        assert!(!content.contains("<D:current-user-principal"));
+        assert_not_found(&content, "<D:current-user-principal");
     }
 
     #[tokio::test]
@@ -286,8 +303,8 @@ mod principal_tests {
         assert_eq!(content.matches("<D:abstract>").count(), 1);
 
         // RFC3744 section 5.4: without a real ACL model there is no exact
-        // per-user privilege set, so this property is not advertised.
-        assert!(!content.contains("<D:current-user-privilege-set"));
+        // per-user privilege set, so this property does not exist.
+        assert_not_found(&content, "<D:current-user-privilege-set");
     }
 
     #[tokio::test]
@@ -501,7 +518,7 @@ mod principal_tests {
             r#"<D:propfind xmlns:D="DAV:"><D:prop><C:calendar-home-set xmlns:C="urn:ietf:params:xml:ns:caldav"/></D:prop></D:propfind>"#,
         )
         .await;
-        assert!(!content.contains("<C:calendar-home-set"));
+        assert_not_found(&content, "<C:calendar-home-set");
     }
 
     #[cfg(feature = "carddav")]
@@ -537,6 +554,6 @@ mod principal_tests {
             r#"<D:propfind xmlns:D="DAV:"><D:prop><CARD:addressbook-home-set xmlns:CARD="urn:ietf:params:xml:ns:carddav"/></D:prop></D:propfind>"#,
         )
         .await;
-        assert!(!content.contains("<CARD:addressbook-home-set"));
+        assert_not_found(&content, "<CARD:addressbook-home-set");
     }
 }
