@@ -661,6 +661,265 @@ mod win32_mtime_tests {
     }
 }
 
+#[cfg(all(feature = "memfs", feature = "proppatch"))]
+mod proppatch_atomic_tests {
+    use std::time::SystemTime;
+
+    use dav_server::{
+        DavHandler,
+        body::Body,
+        davpath::DavPath,
+        fakels::FakeLs,
+        fs::{
+            DavDirEntry, DavFile, DavFileSystem, DavMetaData, DavProp, FsError, FsFuture, FsStream,
+            OpenOptions, ReadDirMeta,
+        },
+        memfs::MemFs,
+    };
+    use futures_util::future::BoxFuture;
+    use http::{Request, StatusCode};
+
+    const MTIME_HTTP: &str = "Tue, 07 Feb 2023 17:06:21 GMT";
+
+    /// A `MemFs` whose `set_modified` and `patch_props` can be made to fail.
+    #[derive(Clone)]
+    struct ScriptedFs {
+        inner: MemFs,
+        set_modified_error: Option<FsError>,
+        refuse_dead_props: bool,
+    }
+
+    impl DavFileSystem for ScriptedFs {
+        fn open<'a>(
+            &'a self,
+            path: &'a DavPath,
+            options: OpenOptions,
+        ) -> FsFuture<'a, Box<dyn DavFile>> {
+            self.inner.open(path, options)
+        }
+
+        fn read_dir<'a>(
+            &'a self,
+            path: &'a DavPath,
+            meta: ReadDirMeta,
+        ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
+            self.inner.read_dir(path, meta)
+        }
+
+        fn metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
+            self.inner.metadata(path)
+        }
+
+        fn symlink_metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
+            self.inner.symlink_metadata(path)
+        }
+
+        fn set_modified<'a>(&'a self, path: &'a DavPath, tm: SystemTime) -> FsFuture<'a, ()> {
+            match self.set_modified_error {
+                Some(err) => Box::pin(async move { Err(err) }),
+                None => self.inner.set_modified(path, tm),
+            }
+        }
+
+        fn have_props<'a>(&'a self, path: &'a DavPath) -> BoxFuture<'a, bool> {
+            self.inner.have_props(path)
+        }
+
+        fn patch_props<'a>(
+            &'a self,
+            path: &'a DavPath,
+            patch: Vec<(bool, DavProp)>,
+        ) -> FsFuture<'a, Vec<(StatusCode, DavProp)>> {
+            if self.refuse_dead_props {
+                let refused = patch
+                    .into_iter()
+                    .map(|(_, prop)| (StatusCode::FORBIDDEN, prop))
+                    .collect();
+                return Box::pin(async move { Ok(refused) });
+            }
+            self.inner.patch_props(path, patch)
+        }
+
+        fn get_props<'a>(
+            &'a self,
+            path: &'a DavPath,
+            do_content: bool,
+        ) -> FsFuture<'a, Vec<DavProp>> {
+            self.inner.get_props(path, do_content)
+        }
+
+        fn get_prop<'a>(&'a self, path: &'a DavPath, prop: DavProp) -> FsFuture<'a, Vec<u8>> {
+            self.inner.get_prop(path, prop)
+        }
+    }
+
+    /// Returns a server whose file system holds `/notes.txt`.
+    async fn setup(set_modified_error: Option<FsError>, refuse_dead_props: bool) -> DavHandler {
+        let server = DavHandler::builder()
+            .filesystem(Box::new(ScriptedFs {
+                inner: *MemFs::new(),
+                set_modified_error,
+                refuse_dead_props,
+            }))
+            .locksystem(FakeLs::new())
+            .build_handler();
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/notes.txt")
+            .body(Body::from("hello"))
+            .unwrap();
+        assert_eq!(server.handle(req).await.status(), StatusCode::CREATED);
+        server
+    }
+
+    async fn resp_to_string(mut resp: http::Response<Body>) -> String {
+        use futures_util::StreamExt;
+
+        let mut data = Vec::new();
+        while let Some(chunk) = resp.body_mut().next().await {
+            data.extend_from_slice(&chunk.unwrap());
+        }
+        String::from_utf8(data).unwrap()
+    }
+
+    async fn request(server: &DavHandler, method: &str, body: String) -> String {
+        let req = Request::builder()
+            .method(method)
+            .uri("/notes.txt")
+            .header("Depth", "0")
+            .body(Body::from(body))
+            .unwrap();
+        let resp = server.handle(req).await;
+        assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
+        resp_to_string(resp).await
+    }
+
+    /// PROPPATCH that sets `Win32LastModifiedTime` and `extra`, a property element in the
+    /// `D:prop` of the request.
+    async fn proppatch(server: &DavHandler, extra: &str) -> String {
+        request(
+            server,
+            "PROPPATCH",
+            format!(
+                r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:schemas-microsoft-com:" xmlns:X="urn:x">
+  <D:set>
+    <D:prop>
+      <Z:Win32LastModifiedTime>{MTIME_HTTP}</Z:Win32LastModifiedTime>
+      {extra}
+    </D:prop>
+  </D:set>
+</D:propertyupdate>"#
+            ),
+        )
+        .await
+    }
+
+    async fn propfind(server: &DavHandler, prop: &str) -> String {
+        request(
+            server,
+            "PROPFIND",
+            format!(
+                r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:" xmlns:X="urn:x"><D:prop>{prop}</D:prop></D:propfind>"#
+            ),
+        )
+        .await
+    }
+
+    /// The status of the propstat in `body` that contains `name`.
+    fn status_of<'a>(body: &'a str, name: &str) -> &'a str {
+        let propstat = body
+            .split("<D:propstat>")
+            .skip(1)
+            .find(|p| p.contains(name))
+            .unwrap_or_else(|| panic!("no propstat with {name} in {body}"));
+        let status = &propstat[propstat.find("<D:status>HTTP/1.1 ").unwrap() + 19..];
+        &status[..status.find("</D:status>").unwrap()]
+    }
+
+    #[tokio::test]
+    async fn refused_property_leaves_the_modification_time_unchanged() {
+        let server = setup(None, false).await;
+        let before = propfind(&server, "<D:getlastmodified/>").await;
+
+        let body = proppatch(&server, r#"<D:getetag>"x"</D:getetag>"#).await;
+        assert_eq!(status_of(&body, "getetag"), "403 Forbidden", "{body}");
+        assert_eq!(
+            status_of(&body, "Win32LastModifiedTime"),
+            "424 Failed Dependency",
+            "{body}"
+        );
+
+        assert_eq!(propfind(&server, "<D:getlastmodified/>").await, before);
+        assert!(!before.contains(MTIME_HTTP), "{before}");
+    }
+
+    #[tokio::test]
+    async fn set_modified_error_is_reported_and_stops_the_dead_properties() {
+        let server = setup(Some(FsError::Forbidden), false).await;
+
+        let body = proppatch(&server, "<X:one>1</X:one>").await;
+        assert_eq!(
+            status_of(&body, "Win32LastModifiedTime"),
+            "403 Forbidden",
+            "{body}"
+        );
+        assert_eq!(status_of(&body, "X:one"), "424 Failed Dependency", "{body}");
+
+        let body = propfind(&server, "<X:one/>").await;
+        assert_eq!(status_of(&body, "X:one"), "404 Not Found", "{body}");
+    }
+
+    #[tokio::test]
+    async fn refused_dead_property_restores_the_modification_time() {
+        let server = setup(None, true).await;
+        let before = propfind(&server, "<D:getlastmodified/>").await;
+
+        let body = proppatch(&server, "<X:one>1</X:one>").await;
+        assert_eq!(status_of(&body, "X:one"), "403 Forbidden", "{body}");
+        assert_eq!(
+            status_of(&body, "Win32LastModifiedTime"),
+            "424 Failed Dependency",
+            "{body}"
+        );
+
+        assert_eq!(propfind(&server, "<D:getlastmodified/>").await, before);
+    }
+
+    #[tokio::test]
+    async fn not_implemented_set_modified_is_still_reported_as_ok() {
+        let server = setup(Some(FsError::NotImplemented), false).await;
+
+        let body = proppatch(&server, "<X:one>1</X:one>").await;
+        assert_eq!(
+            status_of(&body, "Win32LastModifiedTime"),
+            "200 OK",
+            "{body}"
+        );
+        assert_eq!(status_of(&body, "X:one"), "200 OK", "{body}");
+    }
+
+    #[tokio::test]
+    async fn successful_proppatch_sets_both() {
+        let server = setup(None, false).await;
+
+        let body = proppatch(&server, "<X:one>1</X:one>").await;
+        assert_eq!(
+            status_of(&body, "Win32LastModifiedTime"),
+            "200 OK",
+            "{body}"
+        );
+
+        assert!(
+            propfind(&server, "<D:getlastmodified/>")
+                .await
+                .contains(MTIME_HTTP)
+        );
+        assert!(propfind(&server, "<X:one/>").await.contains(">1</X:one>"));
+    }
+}
+
 #[cfg(all(feature = "localfs", feature = "proppatch"))]
 mod win32_mtime_localfs_tests {
     use dav_server::{DavHandler, body::Body, localfs::LocalFs};
