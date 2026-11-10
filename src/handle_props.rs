@@ -293,7 +293,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 if !self.allow_infinity_depth {
                     let ct = "application/xml; charset=utf-8".to_string();
                     res.headers_mut().typed_insert(davheaders::ContentType(ct));
-                    *res.status_mut() = StatusCode::NOT_IMPLEMENTED;
+                    // RFC 4918, section 9.1.1: 403 with the
+                    // propfind-finite-depth precondition code.
+                    *res.status_mut() = StatusCode::FORBIDDEN;
                     *res.body_mut() = dav_xml_error("<D:propfind-finite-depth/>");
                     return Ok(res);
                 }
@@ -362,11 +364,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             pw.set_tx(tx);
             let is_dir = meta.is_dir();
 
-            // Handle Depth::Default case: no target resource, only Depth 1 children
-            if depth != davheaders::Depth::Default {
-                pw.write_props(&path, meta, is_principal).await?;
-                pw.flush().await?;
-            }
+            pw.write_props(&path, meta, is_principal).await?;
+            pw.flush().await?;
 
             if is_dir && depth != davheaders::Depth::Zero {
                 self.propfind_directory(&path, depth, &mut pw).await?;
@@ -450,7 +449,6 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 };
                 propwriter.write_props(&npath, meta, is_principal).await?;
                 propwriter.flush().await?;
-                // For Depth::Default, treat it like Depth::One (no recursion)
                 // Only recurse for Depth::Infinity
                 if depth == davheaders::Depth::Infinity && is_dir {
                     self.propfind_directory(&npath, depth, propwriter).await?;

@@ -160,13 +160,11 @@ fn encode_unix_timestamp(t: SystemTime, values: &mut impl Extend<HeaderValue>) {
 /// - "Depth" header for PROPFIND requests. See the items for its response behaviour
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Depth {
-    /// DEFAULT / no Depth header: no target resource, Depth 1 children
-    Default,
     /// Depth 0: only target resource, no children
     Zero,
     /// Depth 1: target resource, Depth 1 children
     One,
-    /// Infinite depth or `Depth` > 1 are not to be supported and return `NotImplemented` for performance reasons
+    /// Infinite depth: refused with 403 `propfind-finite-depth` unless `allow_infinity_depth` is set
     Infinity,
 }
 
@@ -193,7 +191,6 @@ impl Header for Depth {
         E: Extend<HeaderValue>,
     {
         let value = match *self {
-            Depth::Default => "",
             Depth::Zero => "0",
             Depth::One => "1",
             Depth::Infinity => "Infinity",

@@ -141,6 +141,10 @@ impl<C> DavConfig<C> {
     }
 
     /// sets allow_infinity_depth (default is false)
+    ///
+    /// When false, PROPFIND with `Depth: infinity` is refused with 403 and
+    /// `propfind-finite-depth`, and a PROPFIND without a Depth header is
+    /// handled as `Depth: 1`. When true, both are handled as `Depth: infinity`.
     pub fn allow_infinity_depth(self, allow: bool) -> Self {
         let mut this = self;
         this.allow_infinity_depth = Some(allow);
@@ -359,10 +363,13 @@ where
             principal,
             hide_symlinks: hide_symlinks.unwrap_or(false),
             allow_infinity_depth,
+            // A request without a Depth header is treated as "Depth: infinity"
+            // (RFC 4918, section 9.1) when that is allowed, and as "Depth: 1"
+            // otherwise, as SabreDAV does.
             default_depth: if allow_infinity_depth {
                 Depth::Infinity
             } else {
-                Depth::Default
+                Depth::One
             },
             hide_dot_prefix: hide_dot_prefix.unwrap_or(DavOptionHide::InAutoIndexListings),
             autoindex,
