@@ -1012,3 +1012,116 @@ mod propfind_prop_tests {
         }
     }
 }
+
+#[cfg(feature = "memfs")]
+mod propfind_depth_tests {
+    use dav_server::{DavHandler, body::Body, fakels::FakeLs, memfs::MemFs};
+    use http::{Request, StatusCode};
+
+    const GETCONTENTLENGTH: &str = r#"<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:getcontentlength/></D:prop></D:propfind>"#;
+
+    async fn setup(allow_infinity_depth: bool) -> DavHandler {
+        let server = DavHandler::builder()
+            .filesystem(MemFs::new())
+            .locksystem(FakeLs::new())
+            .allow_infinity_depth(allow_infinity_depth)
+            .build_handler();
+        for (method, uri, body) in [
+            ("MKCOL", "/dir/", ""),
+            ("PUT", "/dir/a.txt", "hello"),
+            ("MKCOL", "/dir/sub/", ""),
+            ("PUT", "/dir/sub/b.txt", "world"),
+        ] {
+            let req = Request::builder()
+                .method(method)
+                .uri(uri)
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            assert!(
+                server.handle(req).await.status().is_success(),
+                "{method} {uri}"
+            );
+        }
+        server
+    }
+
+    async fn resp_to_string(mut resp: http::Response<Body>) -> String {
+        use futures_util::StreamExt;
+
+        let mut data = Vec::new();
+        while let Some(chunk) = resp.body_mut().next().await {
+            data.extend_from_slice(&chunk.unwrap());
+        }
+        String::from_utf8(data).unwrap()
+    }
+
+    async fn propfind(server: &DavHandler, uri: &str, depth: Option<&str>) -> (StatusCode, String) {
+        let mut req = Request::builder().method("PROPFIND").uri(uri);
+        if let Some(depth) = depth {
+            req = req.header("Depth", depth);
+        }
+        let resp = server
+            .handle(req.body(Body::from(GETCONTENTLENGTH)).unwrap())
+            .await;
+        let status = resp.status();
+        (status, resp_to_string(resp).await)
+    }
+
+    fn hrefs(body: &str) -> Vec<&str> {
+        body.split("<D:href>")
+            .skip(1)
+            .map(|rest| &rest[..rest.find("</D:href>").unwrap()])
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn missing_depth_on_a_file_reports_the_file() {
+        let server = setup(false).await;
+        let (status, body) = propfind(&server, "/dir/a.txt", None).await;
+        assert_eq!(status, StatusCode::MULTI_STATUS);
+        assert_eq!(hrefs(&body), ["/dir/a.txt"], "{body}");
+        assert!(
+            body.contains("<D:getcontentlength>5</D:getcontentlength>"),
+            "{body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn missing_depth_on_a_collection_is_depth_one() {
+        let server = setup(false).await;
+        let (status, body) = propfind(&server, "/dir/", None).await;
+        assert_eq!(status, StatusCode::MULTI_STATUS);
+        let mut listed = hrefs(&body);
+        listed.sort_unstable();
+        assert_eq!(listed, ["/dir/", "/dir/a.txt", "/dir/sub/"], "{body}");
+
+        let (_, depth_one) = propfind(&server, "/dir/", Some("1")).await;
+        let mut listed_depth_one = hrefs(&depth_one);
+        listed_depth_one.sort_unstable();
+        assert_eq!(listed, listed_depth_one);
+    }
+
+    #[tokio::test]
+    async fn depth_infinity_is_refused_with_403() {
+        let server = setup(false).await;
+        let (status, body) = propfind(&server, "/dir/", Some("infinity")).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(body.contains("<D:propfind-finite-depth/>"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn missing_depth_is_infinity_when_allowed() {
+        let server = setup(true).await;
+        for depth in [None, Some("infinity")] {
+            let (status, body) = propfind(&server, "/dir/", depth).await;
+            assert_eq!(status, StatusCode::MULTI_STATUS);
+            let mut listed = hrefs(&body);
+            listed.sort_unstable();
+            assert_eq!(
+                listed,
+                ["/dir/", "/dir/a.txt", "/dir/sub/", "/dir/sub/b.txt"],
+                "Depth {depth:?}: {body}"
+            );
+        }
+    }
+}
