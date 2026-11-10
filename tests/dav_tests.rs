@@ -1011,4 +1011,123 @@ mod propfind_prop_tests {
             assert!(propstat(&body, "404 Not Found").is_none(), "{body}");
         }
     }
+
+    /// Sets the dead properties `X:one` = 1 and `X:two` = 2 on `/file.txt`.
+    async fn set_two_dead_properties(server: &DavHandler) {
+        let req = Request::builder()
+            .method("PROPPATCH")
+            .uri("/file.txt")
+            .body(Body::from(
+                r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propertyupdate xmlns:D="DAV:" xmlns:X="urn:x">
+  <D:set><D:prop><X:one>1</X:one><X:two>2</X:two></D:prop></D:set>
+</D:propertyupdate>"#,
+            ))
+            .unwrap();
+        let resp = server.handle(req).await;
+        assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
+        let body = resp_to_string(resp).await;
+        assert!(propstat(&body, "200 OK").is_some(), "{body}");
+    }
+
+    #[tokio::test]
+    async fn propfind_prop_lists_a_requested_dead_property_once_and_no_others() {
+        let server = setup(MemFs::new()).await;
+        set_two_dead_properties(&server).await;
+
+        let body = propfind(
+            &server,
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:" xmlns:X="urn:x"><D:prop><X:one/></D:prop></D:propfind>"#,
+        )
+        .await;
+
+        assert_eq!(body.matches("<X:one").count(), 1, "{body}");
+        assert!(body.contains(">1</X:one>"), "{body}");
+        assert!(!body.contains("two"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn propfind_prop_omits_unrequested_property_from_get_props() {
+        let server = setup(Box::new(GetPropsOnlyFs {
+            inner: *MemFs::new(),
+        }))
+        .await;
+
+        let body = propfind(
+            &server,
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:"><D:prop><D:getcontentlength/></D:prop></D:propfind>"#,
+        )
+        .await;
+
+        assert!(body.contains("getcontentlength"), "{body}");
+        assert!(!body.contains("extra"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn propfind_propname_lists_names_without_values() {
+        let server = setup(MemFs::new()).await;
+        set_two_dead_properties(&server).await;
+
+        let body = propfind(
+            &server,
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:"><D:propname/></D:propfind>"#,
+        )
+        .await;
+
+        assert_eq!(body.matches("<X:one").count(), 1, "{body}");
+        assert_eq!(body.matches("<X:two").count(), 1, "{body}");
+        assert!(!body.contains(">1<") && !body.contains(">2<"), "{body}");
+        assert!(
+            body.contains("<D:supportedlock></D:supportedlock>"),
+            "{body}"
+        );
+        assert!(!body.contains("lockentry"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn propfind_allprop_lists_dead_properties_with_values() {
+        let server = setup(MemFs::new()).await;
+        set_two_dead_properties(&server).await;
+
+        let body = propfind(
+            &server,
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:"><D:allprop/></D:propfind>"#,
+        )
+        .await;
+
+        assert!(body.contains(">1</X:one>"), "{body}");
+        assert!(body.contains(">2</X:two>"), "{body}");
+        assert!(!body.contains("supported-privilege-set"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn propfind_allprop_adds_the_properties_of_include() {
+        let server = setup(MemFs::new()).await;
+
+        for include in ["include", "includes"] {
+            let request = format!(
+                r#"<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:"><D:allprop/><D:{include}><D:supported-privilege-set/></D:{include}></D:propfind>"#
+            );
+            let req = Request::builder()
+                .method("PROPFIND")
+                .uri("/file.txt")
+                .header("Depth", "0")
+                .body(Body::from(request))
+                .unwrap();
+            let resp = server.handle(req).await;
+            assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
+            let body = resp_to_string(resp).await;
+            let ok = propstat(&body, "200 OK").expect("no 200 propstat");
+            assert!(
+                ok.contains("supported-privilege-set"),
+                "<{include}>: {body}"
+            );
+            assert!(ok.contains("getcontentlength"), "<{include}>: {body}");
+        }
+    }
 }
