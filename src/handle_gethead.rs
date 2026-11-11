@@ -72,11 +72,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         // GNOME Online Accounts handler for Nextcloud sends GET /remote.php/webdav/ request only to test its connection and expects 200 OK with empty body
         if !self.autoindex.unwrap_or(false) && !head && path.as_bytes() == b"/remote.php/webdav/" {
-            let mut response = Response::new(Body::empty());
-            let headers = response.headers_mut();
-            headers.insert("Content-Length", "0".parse().unwrap());
-            headers.insert("Accept-Ranges", "bytes".parse().unwrap());
-            return Ok(response);
+            return Ok(empty_ok());
         }
 
         // Principal resources are not retrievable.
@@ -86,6 +82,11 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }
 
         if meta.is_dir() {
+            // Configured to answer like Nextcloud: an empty 200 for every collection.
+            if self.collection_get_empty {
+                return Ok(empty_ok());
+            }
+
             //
             // This is a directory. If the path doesn't end in "/", send a redir.
             // Most webdav clients handle redirect really bad, but a client asking
@@ -558,4 +559,13 @@ fn display_path(path: &DavPath) -> String {
     }
 
     dpath
+}
+
+/// An empty `200 OK`, the answer to GET on a collection where that is wanted.
+fn empty_ok() -> Response<Body> {
+    let mut response = Response::new(Body::empty());
+    let headers = response.headers_mut();
+    headers.insert("Content-Length", "0".parse().unwrap());
+    headers.insert("Accept-Ranges", "bytes".parse().unwrap());
+    response
 }
