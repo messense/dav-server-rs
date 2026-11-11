@@ -253,9 +253,13 @@ pub(crate) struct PropWriter<C> {
 
 #[derive(Default, Clone, Copy)]
 struct QuotaCache {
+    // Filesystem-wide quota from `get_quota`, looked up once per request.
     q_state: u32,
     q_used: u64,
     q_total: Option<u64>,
+    // Quota of the collection being written, from `get_quota_at`. Looked up once per
+    // resource and reset by `write_props`.
+    q_at: Option<FsResult<(u64, Option<u64>)>>,
 }
 
 fn init_staticprop(p: &[&str]) -> Vec<Element> {
@@ -939,8 +943,30 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
     async fn get_quota<'a>(
         &'a self,
         qc: &'a mut QuotaCache,
+        path: &'a DavPath,
         meta: &'a dyn DavMetaData,
     ) -> FsResult<(u64, Option<u64>)> {
+        // A collection can report its own quota.
+        if meta.is_dir() {
+            let at = match qc.q_at {
+                Some(at) => at,
+                None => {
+                    let at = self.fs.get_quota_at(path, &self.credentials).await;
+                    qc.q_at = Some(at);
+                    at
+                }
+            };
+            match at {
+                Ok((used, total)) => {
+                    let avail = total.map(|total| total.saturating_sub(used));
+                    return Ok((used, avail));
+                }
+                // Not provided: use the filesystem-wide quota below.
+                Err(FsError::NotImplemented) => {}
+                Err(e) => return Err(e),
+            }
+        }
+
         // do lookup only once.
         match qc.q_state {
             0 => match self.fs.get_quota(&self.credentials).await {
@@ -1205,12 +1231,12 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         });
                     }
                     "quota-available-bytes" => {
-                        if let Ok((_, Some(avail))) = self.get_quota(qc, meta).await {
+                        if let Ok((_, Some(avail))) = self.get_quota(qc, path, meta).await {
                             return self.build_elem(docontent, pfx, prop, avail.to_string());
                         }
                     }
                     "quota-used-bytes" => {
-                        if let Ok((used, _)) = self.get_quota(qc, meta).await {
+                        if let Ok((used, _)) = self.get_quota(qc, path, meta).await {
                             let used = if self.useragent.contains("WebDAVFS") {
                                 // Need this on MacOs, otherwise the value is off
                                 // by a factor of 10 or so .. ?!?!!?
@@ -1454,6 +1480,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         // Get properties one-by-one
         let do_content = self.name != "propname";
         let mut qc = self.q_cache;
+        qc.q_at = None;
         // Properties requested by name that do not exist. RFC 4918, section 9.1, requires
         // them in a 404 propstat; `allprop` and `propname` only list what exists. They are
         // added last, because the code below may still provide some of them.
