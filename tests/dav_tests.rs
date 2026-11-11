@@ -360,6 +360,44 @@ mod oc_timestamp_tests {
     }
 
     #[tokio::test]
+    async fn put_oc_mtime_with_fraction_is_truncated() {
+        let server = setup();
+
+        // NextcloudKit (the Nextcloud iOS app) sends the timestamps with a fraction.
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/ios.txt")
+            .header("X-OC-MTime", format!("{MTIME}.123456"))
+            .header("X-OC-CTime", format!("{CTIME}.5"))
+            .body(Body::from("hello"))
+            .unwrap();
+        let resp = server.handle(req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        assert_eq!(
+            resp.headers()
+                .get("x-oc-mtime")
+                .and_then(|v| v.to_str().ok()),
+            Some("accepted")
+        );
+        assert_eq!(
+            resp.headers()
+                .get("x-oc-ctime")
+                .and_then(|v| v.to_str().ok()),
+            Some("accepted")
+        );
+
+        let body = propfind_body(&server, "/ios.txt").await;
+        assert!(
+            body.contains(MTIME_HTTP),
+            "getlastmodified missing in {body}"
+        );
+        assert!(
+            body.contains(CTIME_RFC3339),
+            "creationdate missing in {body}"
+        );
+    }
+
+    #[tokio::test]
     async fn put_without_oc_headers_has_no_accepted() {
         let server = setup();
 
