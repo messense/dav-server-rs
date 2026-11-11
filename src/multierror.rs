@@ -64,9 +64,12 @@ fn write_response(
     Ok(())
 }
 
-/// `pfx` is the prefix for the DAV: namespace.
+/// Answers with the statuses from `status_stream`: a plain status when there is only
+/// one, for `req_path` or for `dest` (the destination of a COPY or MOVE), and a 207
+/// Multi-Status otherwise. `pfx` is the prefix for the DAV: namespace.
 pub(crate) async fn multi_error<S>(
     req_path: DavPath,
+    dest: Option<DavPath>,
     pfx: String,
     status_stream: S,
 ) -> Result<Response<Body>, DavError>
@@ -86,8 +89,8 @@ where
 
     let mut items = Vec::new();
 
-    if path == req_path {
-        // the first path/status item was for the request path.
+    if path == req_path || dest.as_ref() == Some(&path) {
+        // the first path/status item was for the request path or the destination.
         // see if there is a next item.
         match status_stream.next().await {
             None => {
@@ -180,7 +183,7 @@ mod tests {
             DavPath::new("/dir/locked.txt").unwrap(),
             StatusCode::LOCKED,
         ))]);
-        let mut resp = multi_error(DavPath::new("/dir/").unwrap(), "d".to_string(), items)
+        let mut resp = multi_error(DavPath::new("/dir/").unwrap(), None, "d".to_string(), items)
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::MULTI_STATUS);

@@ -272,6 +272,8 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }
 
         let req_path = path.clone();
+        // A failure of only the destination itself is answered with a plain status.
+        let dest_path = dest.clone();
 
         let dav_prefix = self.dav_prefix.clone();
         let items = AsyncStream::new(|tx| {
@@ -350,6 +352,6 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             }
         });
 
-        multi_error(req_path, dav_prefix, items).await
+        multi_error(req_path, Some(dest_path), dav_prefix, items).await
     }
 }

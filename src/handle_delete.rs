@@ -192,6 +192,6 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             }
         });
 
-        multi_error(req_path, dav_prefix, items).await
+        multi_error(req_path, None, dav_prefix, items).await
     }
 }
