@@ -247,6 +247,20 @@ pub trait DavFileSystem {
         notimplemented_fut!("rename")
     }
 
+    /// Rename a file or directory onto an existing destination, replacing it.
+    ///
+    /// MOVE with `Overwrite: T` onto an existing resource calls this. The destination
+    /// can be of another type than the source (a file replacing a collection, or the
+    /// other way around). If it returns [`FsError::NotImplemented`] (the default),
+    /// dav-server removes the destination first and then calls [`rename`](Self::rename),
+    /// as before, so a failed rename leaves the destination removed. Implementing this
+    /// lets a file system replace the destination in one step, so that a failed MOVE
+    /// keeps it.
+    #[allow(unused_variables)]
+    fn rename_replace<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
+        notimplemented_fut!("rename_replace")
+    }
+
     /// Copy a file.
     ///
     /// Should also copy the DAV properties, if properties
@@ -483,6 +497,25 @@ where
         notimplemented_fut!("rename")
     }
 
+    /// Rename a file or directory onto an existing destination, replacing it.
+    ///
+    /// MOVE with `Overwrite: T` onto an existing resource calls this. The destination
+    /// can be of another type than the source (a file replacing a collection, or the
+    /// other way around). If it returns [`FsError::NotImplemented`] (the default),
+    /// dav-server removes the destination first and then calls [`rename`](Self::rename),
+    /// as before, so a failed rename leaves the destination removed. Implementing this
+    /// lets a file system replace the destination in one step, so that a failed MOVE
+    /// keeps it.
+    #[allow(unused_variables)]
+    fn rename_replace<'a>(
+        &'a self,
+        from: &'a DavPath,
+        to: &'a DavPath,
+        credentials: &'a C,
+    ) -> FsFuture<'a, ()> {
+        notimplemented_fut!("rename_replace")
+    }
+
     /// Copy a file.
     ///
     /// Should also copy the DAV properties, if properties
@@ -674,6 +707,15 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         _credentials: &(),
     ) -> FsFuture<'a, ()> {
         DavFileSystem::rename(self, from, to)
+    }
+
+    fn rename_replace<'a>(
+        &'a self,
+        from: &'a DavPath,
+        to: &'a DavPath,
+        _credentials: &(),
+    ) -> FsFuture<'a, ()> {
+        DavFileSystem::rename_replace(self, from, to)
     }
 
     fn copy<'a>(

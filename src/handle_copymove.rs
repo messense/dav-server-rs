@@ -264,6 +264,30 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             async move {
                 let mut multierror = MultiError::new(tx);
 
+                // MOVE onto an existing destination: the file system may replace it
+                // in one step.
+                if method == DavMethod::Move && overwrite && exists {
+                    match self
+                        .fs
+                        .rename_replace(&path, &dest, &self.credentials)
+                        .await
+                    {
+                        Ok(()) => {
+                            if let Some(ref locksystem) = self.ls {
+                                let _ = locksystem.delete(&dest).await;
+                                locksystem.delete(&path).await.ok();
+                            }
+                            let _ = multierror.add_status(&path, StatusCode::NO_CONTENT).await;
+                            return Ok(());
+                        }
+                        Err(FsError::NotImplemented) => {}
+                        Err(e) => {
+                            let _ = add_status(&mut multierror, &path, e).await;
+                            return Ok(());
+                        }
+                    }
+                }
+
                 // see if we need to delete the destination first.
                 if overwrite && exists && (depth != Depth::Zero || dest_is_file) {
                     trace!("handle_copymove: deleting destination {dest}");
