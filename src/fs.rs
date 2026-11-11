@@ -258,6 +258,31 @@ pub trait DavFileSystem {
         notimplemented_fut!("copy")
     }
 
+    /// Remove a collection and everything in it, in one step.
+    ///
+    /// DELETE of a collection calls this first, and so does COPY or MOVE with
+    /// `Overwrite: T` when it removes an existing destination collection. If it returns
+    /// [`FsError::NotImplemented`] (the default), dav-server walks the collection and
+    /// calls `remove_file` and `remove_dir` for every member, as before. Another error
+    /// is reported as the status of the collection.
+    #[allow(unused_variables)]
+    fn remove_tree<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
+        notimplemented_fut!("remove_tree")
+    }
+
+    /// Copy a collection and everything in it, in one step.
+    ///
+    /// COPY of a collection with `Depth: infinity` calls this first, unless the
+    /// destination is inside the source. The destination does not exist: an existing
+    /// one has already been removed. Like [`copy`](Self::copy), it should also copy the
+    /// DAV properties. If it returns [`FsError::NotImplemented`] (the default),
+    /// dav-server walks the collection and calls `create_dir` and `copy` for every
+    /// member, as before. Another error is reported as the status of the collection.
+    #[allow(unused_variables)]
+    fn copy_tree<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
+        notimplemented_fut!("copy_tree")
+    }
+
     /// Set the access time of a file / directory.
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
@@ -499,6 +524,36 @@ where
         notimplemented_fut!("copy")
     }
 
+    /// Remove a collection and everything in it, in one step.
+    ///
+    /// DELETE of a collection calls this first, and so does COPY or MOVE with
+    /// `Overwrite: T` when it removes an existing destination collection. If it returns
+    /// [`FsError::NotImplemented`] (the default), dav-server walks the collection and
+    /// calls `remove_file` and `remove_dir` for every member, as before. Another error
+    /// is reported as the status of the collection.
+    #[allow(unused_variables)]
+    fn remove_tree<'a>(&'a self, path: &'a DavPath, credentials: &'a C) -> FsFuture<'a, ()> {
+        notimplemented_fut!("remove_tree")
+    }
+
+    /// Copy a collection and everything in it, in one step.
+    ///
+    /// COPY of a collection with `Depth: infinity` calls this first, unless the
+    /// destination is inside the source. The destination does not exist: an existing
+    /// one has already been removed. Like [`copy`](Self::copy), it should also copy the
+    /// DAV properties. If it returns [`FsError::NotImplemented`] (the default),
+    /// dav-server walks the collection and calls `create_dir` and `copy` for every
+    /// member, as before. Another error is reported as the status of the collection.
+    #[allow(unused_variables)]
+    fn copy_tree<'a>(
+        &'a self,
+        from: &'a DavPath,
+        to: &'a DavPath,
+        credentials: &'a C,
+    ) -> FsFuture<'a, ()> {
+        notimplemented_fut!("copy_tree")
+    }
+
     /// Set the access time of a file / directory.
     ///
     /// The default implementation returns [`FsError::NotImplemented`].
@@ -683,6 +738,19 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
         _credentials: &(),
     ) -> FsFuture<'a, ()> {
         DavFileSystem::copy(self, from, to)
+    }
+
+    fn remove_tree<'a>(&'a self, path: &'a DavPath, _credentials: &()) -> FsFuture<'a, ()> {
+        DavFileSystem::remove_tree(self, path)
+    }
+
+    fn copy_tree<'a>(
+        &'a self,
+        from: &'a DavPath,
+        to: &'a DavPath,
+        _credentials: &(),
+    ) -> FsFuture<'a, ()> {
+        DavFileSystem::copy_tree(self, from, to)
     }
 
     fn set_accessed<'a>(
