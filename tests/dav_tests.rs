@@ -1384,3 +1384,82 @@ mod propfind_depth_tests {
         }
     }
 }
+
+#[cfg(feature = "memfs")]
+mod lock_owner_tests {
+    use dav_server::{
+        DavHandler, body::Body, davpath::DavPath, ls::DavLockSystem, memfs::MemFs, memls::MemLs,
+    };
+    use http::{Request, StatusCode};
+
+    async fn lock_with_owner(lockinfo: &'static str) -> xmltree::Element {
+        let ls = MemLs::new();
+        let server = DavHandler::builder()
+            .filesystem(MemFs::new())
+            .locksystem(ls.clone())
+            .build_handler();
+        let put = Request::builder()
+            .method("PUT")
+            .uri("/file.txt")
+            .body(Body::from("hello"))
+            .unwrap();
+        assert_eq!(server.handle(put).await.status(), StatusCode::CREATED);
+        let lock = Request::builder()
+            .method("LOCK")
+            .uri("/file.txt")
+            .header("Content-Type", "application/xml")
+            .body(Body::from(lockinfo))
+            .unwrap();
+        assert_eq!(server.handle(lock).await.status(), StatusCode::OK);
+
+        let path = DavPath::new("/file.txt").unwrap();
+        let mut locks = ls.discover(&path).await;
+        assert_eq!(locks.len(), 1);
+        *locks.remove(0).owner.expect("the lock has an owner")
+    }
+
+    /// A lock system that stores the owner as XML of its own must be able to parse it again.
+    fn round_trip(owner: &xmltree::Element) -> xmltree::Element {
+        let mut xml = Vec::new();
+        owner.write(&mut xml).unwrap();
+        xmltree::Element::parse(&xml[..]).unwrap_or_else(|err| {
+            panic!("{err}: {}", String::from_utf8_lossy(&xml));
+        })
+    }
+
+    #[tokio::test]
+    async fn owner_with_a_default_namespace_round_trips() {
+        let owner = lock_with_owner(
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<lockinfo xmlns="DAV:">
+  <lockscope><exclusive/></lockscope>
+  <locktype><write/></locktype>
+  <owner><href>http://example.com/~user</href></owner>
+</lockinfo>"#,
+        )
+        .await;
+        let parsed = round_trip(&owner);
+        assert_eq!(parsed.name, "owner");
+        assert_eq!(parsed.namespace.as_deref(), Some("DAV:"));
+        let href = parsed.get_child("href").expect("href child");
+        assert_eq!(href.namespace.as_deref(), Some("DAV:"));
+        assert_eq!(href.get_text().as_deref(), Some("http://example.com/~user"));
+    }
+
+    #[tokio::test]
+    async fn owner_with_a_prefix_round_trips() {
+        let owner = lock_with_owner(
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<a:lockinfo xmlns:a="DAV:">
+  <a:lockscope><a:exclusive/></a:lockscope>
+  <a:locktype><a:write/></a:locktype>
+  <a:owner>Jane Doe</a:owner>
+</a:lockinfo>"#,
+        )
+        .await;
+        let parsed = round_trip(&owner);
+        assert_eq!(parsed.name, "owner");
+        assert_eq!(parsed.namespace.as_deref(), Some("DAV:"));
+        assert_eq!(parsed.get_text().as_deref(), Some("Jane Doe"));
+    }
+}

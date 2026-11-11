@@ -3,6 +3,7 @@ use http::StatusCode as SC;
 use http::{Request, Response};
 use std::cmp;
 use std::time::Duration;
+use xml::namespace::Namespace;
 use xmltree::{self, Element};
 
 use crate::body::Body;
@@ -141,8 +142,16 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     }
                 }
                 "owner" => {
+                    // The owner is written back in the D prefix. Declare that
+                    // prefix on the element itself, so that a lock system
+                    // that stores the element as XML of its own can parse it
+                    // again, whatever prefix the request used.
                     let mut o = elem.clone();
                     o.prefix = Some("D".to_owned());
+                    o.namespace = Some("DAV:".to_owned());
+                    o.namespaces
+                        .get_or_insert_with(Namespace::empty)
+                        .force_put("D", "DAV:");
                     owner = Some(o);
                 }
                 _ => return Err(DavError::XmlParseError),
