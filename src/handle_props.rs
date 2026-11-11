@@ -556,23 +556,33 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         }
     }
 
+    /// The time in a `Win32LastModifiedTime` PROPPATCH, or the status of the
+    /// property when the value is malformed.
     #[cfg(feature = "proppatch")]
-    async fn apply_win32_last_modified(&self, path: &DavPath, prop: &Element) -> StatusCode {
+    fn parse_win32_last_modified(prop: &Element) -> Result<std::time::SystemTime, StatusCode> {
         let Some(text) = prop.get_text() else {
-            return StatusCode::CONFLICT;
+            return Err(StatusCode::CONFLICT);
         };
         if prop.has_child_elems() {
-            return StatusCode::CONFLICT;
+            return Err(StatusCode::CONFLICT);
         }
-        let Some(tm) = httpdate_to_systemtime(text.trim()) else {
-            return StatusCode::CONFLICT;
-        };
+        httpdate_to_systemtime(text.trim()).ok_or(StatusCode::CONFLICT)
+    }
+
+    /// Sets the modification time for `Win32LastModifiedTime`. A filesystem
+    /// that cannot set it still reports success, as the Windows client
+    /// expects.
+    #[cfg(feature = "proppatch")]
+    async fn apply_win32_last_modified(
+        &self,
+        path: &DavPath,
+        tm: std::time::SystemTime,
+    ) -> StatusCode {
         match self.fs.set_modified(path, tm, &self.credentials).await {
-            Ok(()) => StatusCode::OK,
-            Err(FsError::NotImplemented) => StatusCode::OK,
+            Ok(()) | Err(FsError::NotImplemented) => StatusCode::OK,
             Err(e) => {
                 debug!("failed to apply Win32LastModifiedTime: {e:?}");
-                StatusCode::OK
+                DavError::FsError(e).statuscode()
             }
         }
     }
@@ -627,6 +637,9 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         let mut patch = Vec::new();
         let mut ret = Vec::new();
+        // Win32LastModifiedTime values, applied once all instructions are checked.
+        let mut mtimes = Vec::new();
+        let original_mtime = meta.modified().ok();
         let can_deadprop = self.fs.have_props(&path, &self.credentials).await;
 
         // Collect before awaiting so the xmltree iterator (not Send) is dropped.
@@ -649,8 +662,10 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     if n.namespace.as_deref() == Some(NS_MS_URI)
                         && n.name == "Win32LastModifiedTime"
                     {
-                        let s = self.apply_win32_last_modified(&path, n).await;
-                        ret.push((s, element_to_davprop(n)));
+                        match Self::parse_win32_last_modified(n) {
+                            Ok(tm) => mtimes.push((tm, element_to_davprop(n))),
+                            Err(s) => ret.push((s, element_to_davprop(n))),
+                        }
                     } else {
                         match self.liveprop_set(n, can_deadprop) {
                             StatusCode::CONTINUE => patch.push((true, element_to_davprop_full(n))),
@@ -666,30 +681,49 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             }
         }
 
-        // if any set/remove failed, stop processing here.
-        if ret.iter().any(|(s, _)| s != &StatusCode::OK) {
-            ret = ret
-                .into_iter()
-                .map(|(s, p)| {
-                    if s == StatusCode::OK {
-                        (StatusCode::FAILED_DEPENDENCY, p)
-                    } else {
-                        (s, p)
-                    }
-                })
-                .collect::<Vec<_>>();
+        // RFC 4918, section 9.2: the instructions are executed all or none.
+        // Nothing has been changed so far. The modification time is set
+        // before the dead properties, because it can be restored if they fail.
+        let mut failed = ret.iter().any(|(s, _)| s != &StatusCode::OK);
+        let mut mtime_changed = false;
+        for (tm, prop) in mtimes {
+            if failed {
+                ret.push((StatusCode::FAILED_DEPENDENCY, prop));
+                continue;
+            }
+            let s = self.apply_win32_last_modified(&path, tm).await;
+            if s == StatusCode::OK {
+                mtime_changed = true;
+            } else {
+                failed = true;
+            }
+            ret.push((s, prop));
+        }
+
+        if failed {
+            // if any set/remove failed, stop processing here.
+            ret = failed_dependency(ret);
             ret.extend(
                 patch
                     .into_iter()
                     .map(|(_, p)| (StatusCode::FAILED_DEPENDENCY, p)),
             );
         } else if !patch.is_empty() {
-            // hmmm ... we assume nothing goes wrong here at the
-            // moment. if it does, we should roll back the earlier
-            // made changes to live props, but come on, we're not
-            // builing a transaction engine here.
             let deadret = self.fs.patch_props(&path, patch, &self.credentials).await?;
+            if deadret.iter().any(|(s, _)| s != &StatusCode::OK) {
+                failed = true;
+                ret = failed_dependency(ret);
+            }
             ret.extend(deadret);
+        }
+
+        // Undo a modification time that was set when a later step failed.
+        if failed
+            && mtime_changed
+            && let Some(tm) = original_mtime
+            && let Err(e) = self.fs.set_modified(&path, tm, &self.credentials).await
+        {
+            debug!("failed to restore the modification time: {e:?}");
         }
 
         // group by statuscode.
@@ -1644,6 +1678,21 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
 fn add_sc_elem(hm: &mut HashMap<StatusCode, Vec<Element>>, sc: StatusCode, e: Element) {
     hm.entry(sc).or_default();
     hm.get_mut(&sc).unwrap().push(e)
+}
+
+/// Reports the properties that succeeded as `424 Failed Dependency`, for a
+/// PROPPATCH in which another instruction failed.
+#[cfg(feature = "proppatch")]
+fn failed_dependency(ret: Vec<(StatusCode, DavProp)>) -> Vec<(StatusCode, DavProp)> {
+    ret.into_iter()
+        .map(|(s, p)| {
+            if s == StatusCode::OK {
+                (StatusCode::FAILED_DEPENDENCY, p)
+            } else {
+                (s, p)
+            }
+        })
+        .collect()
 }
 
 /// Drops the requested property `namespace:name` from `not_found`, it was found after all.
