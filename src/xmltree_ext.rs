@@ -196,6 +196,12 @@ impl ElementExt for Element {
     }
 }
 
+/// An element in the DAV: namespace, written with the prefix `pfx`
+/// (`D`, unless [`DavConfig::dav_prefix`](crate::DavConfig::dav_prefix) is set).
+pub(crate) fn dav_elem(pfx: &str, name: &str) -> Element {
+    Element::new3(pfx, name, Vec::new())
+}
+
 pub(crate) fn emitter<W: Write>(w: W) -> DavResult<EventWriter<W>> {
     let mut emitter = EventWriter::new_with_config(
         w,
