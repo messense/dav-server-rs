@@ -58,8 +58,12 @@ fn write_response(w: &mut XmlWriter, path: &DavPath, sc: StatusCode) -> Result<(
     Ok(())
 }
 
+/// Answers with the statuses from `status_stream`: a plain status when there is only
+/// one, for `req_path` or for `dest` (the destination of a COPY or MOVE), and a 207
+/// Multi-Status otherwise.
 pub(crate) async fn multi_error<S>(
     req_path: DavPath,
+    dest: Option<DavPath>,
     status_stream: S,
 ) -> Result<Response<Body>, DavError>
 where
@@ -78,8 +82,8 @@ where
 
     let mut items = Vec::new();
 
-    if path == req_path {
-        // the first path/status item was for the request path.
+    if path == req_path || dest.as_ref() == Some(&path) {
+        // the first path/status item was for the request path or the destination.
         // see if there is a next item.
         match status_stream.next().await {
             None => {
