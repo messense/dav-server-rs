@@ -733,9 +733,16 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // group by statuscode.
         let mut hm = HashMap::new();
         for (code, prop) in ret.into_iter() {
-            hm.entry(code).or_insert_with(Vec::new);
-            let v = hm.get_mut(&code).unwrap();
-            v.push(davprop_to_element(prop));
+            let mut elem = davprop_to_element(prop);
+            // Name DAV: properties with the prefix of the response, not with the one
+            // of the request. Their content is kept as it is.
+            if elem.namespace.as_deref() == Some(NS_DAV_URI)
+                && let Some(fixed) =
+                    PropWriter::<C>::fix_prop_namespace_prefix(&elem, &self.dav_prefix, NS_DAV_URI)
+            {
+                elem = fixed;
+            }
+            hm.entry(code).or_insert_with(Vec::new).push(elem);
         }
 
         // And reply.
@@ -993,16 +1000,15 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             return None;
         }
 
+        // Bind `prefix` first: `Namespace::put` keeps an existing binding, so a request
+        // that binds the same prefix to another namespace (`xmlns:d="urn:x"` next to
+        // `xmlns:z="DAV:"`) cannot take its place. The other bindings are copied over.
         let mut new_namespace = Namespace::empty();
-        for (vk, vvalue) in namespaces.iter().map(|(k, ns)| {
-            // copy all namespaces over, but fix the prefix for the requested one
-            if ns == namespace {
-                (prefix, ns)
-            } else {
-                (k, ns)
+        new_namespace.put(prefix, namespace);
+        for (k, ns) in namespaces.iter() {
+            if ns != namespace {
+                new_namespace.put(k, ns);
             }
-        }) {
-            new_namespace.put(vk, vvalue);
         }
 
         let mut cln = prop.clone();

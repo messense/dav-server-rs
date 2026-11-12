@@ -229,6 +229,61 @@ mod dav_prefix_tests {
         assert!(lower.contains("<d:prop"), "{lower}");
     }
 
+    /// A request may bind the prefix of the response to another namespace. The
+    /// properties, and the elements written inside them, stay in DAV:.
+    #[tokio::test]
+    async fn request_binds_the_dav_prefix_to_another_namespace() {
+        let servers = handlers();
+        setup(&servers.1).await;
+        for (server, prefix) in [(&servers.0, "D"), (&servers.1, "d")] {
+            let body = format!(
+                r#"<?xml version="1.0" encoding="utf-8"?>
+<P:propfind xmlns:P="DAV:" xmlns:{prefix}="urn:x">
+  <P:prop><P:resourcetype/><P:no-such-property/></P:prop>
+</P:propfind>"#
+            );
+            let (status, _, resp) =
+                send(server, "PROPFIND", "/dir/", &[("Depth", "0")], &body).await;
+            assert_eq!(status, StatusCode::MULTI_STATUS);
+            let tree = Element::parse(resp.as_bytes()).unwrap_or_else(|e| panic!("{e} in {resp}"));
+            let tree = canonical(&tree);
+            assert!(
+                tree.contains("<{DAV:}resourcetype><{DAV:}collection></></>"),
+                "{tree}"
+            );
+            assert!(tree.contains("<{DAV:}no-such-property></>"), "{tree}");
+            assert!(!tree.contains("urn:x"), "{tree}");
+        }
+    }
+
+    /// PROPPATCH answers DAV: properties with the prefix of the response, not the one
+    /// of the request.
+    #[tokio::test]
+    async fn proppatch_answers_with_the_dav_prefix() {
+        let servers = handlers();
+        setup(&servers.1).await;
+        // A refused live property fails the whole request, then a dead property in
+        // DAV: is set and removed.
+        for (instruction, prop) in [
+            (
+                "set",
+                "<P:getetag>x</P:getetag><P:displayname>n</P:displayname>",
+            ),
+            ("set", "<P:displayname>n</P:displayname>"),
+            ("remove", "<P:displayname/>"),
+        ] {
+            let body = format!(
+                r#"<?xml version="1.0" encoding="utf-8"?>
+<P:propertyupdate xmlns:P="DAV:">
+  <P:{instruction}><P:prop>{prop}</P:prop></P:{instruction}>
+</P:propertyupdate>"#
+            );
+            let lower = compare(&servers, "PROPPATCH", "/dir/", &[], &body).await;
+            assert!(lower.contains("<d:displayname"), "{lower}");
+            assert!(!lower.contains("<P:"), "{lower}");
+        }
+    }
+
     #[cfg(feature = "caldav")]
     #[tokio::test]
     async fn dav_prefix_in_caldav_properties() {
