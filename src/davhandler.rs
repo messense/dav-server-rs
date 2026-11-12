@@ -77,6 +77,8 @@ pub struct DavConfig<C = ()> {
     pub(crate) read_buf_size: Option<usize>,
     // Does GET on a file return 302 redirect.
     pub(crate) redirect: Option<bool>,
+    // Does GET on a collection return an empty 200. Default: `false`.
+    pub(crate) collection_get_empty: Option<bool>,
 }
 
 impl<C> DavConfig<C> {
@@ -185,6 +187,18 @@ impl<C> DavConfig<C> {
         this
     }
 
+    /// Answer GET and HEAD on a collection with an empty `200 OK` (default is false).
+    ///
+    /// This is what Nextcloud does for every folder, and some clients send such a GET
+    /// to test the connection. When set, it takes the place of the redirect to the path
+    /// with a trailing slash, the index file and the autoindex page. When not set, those
+    /// apply as before, or `405 Method Not Allowed` when none of them does.
+    pub fn collection_get_empty(self, empty: bool) -> Self {
+        let mut this = self;
+        this.collection_get_empty = Some(empty);
+        this
+    }
+
     fn merge(&self, new: Self) -> Self {
         Self {
             prefix: new.prefix.or_else(|| self.prefix.clone()),
@@ -199,6 +213,7 @@ impl<C> DavConfig<C> {
             indexfile: new.indexfile.or_else(|| self.indexfile.clone()),
             read_buf_size: new.read_buf_size.or(self.read_buf_size),
             redirect: new.redirect.or(self.redirect),
+            collection_get_empty: new.collection_get_empty.or(self.collection_get_empty),
         }
     }
 }
@@ -221,6 +236,7 @@ pub(crate) struct DavInner<C> {
     pub indexfile: Option<String>,
     pub read_buf_size: Option<usize>,
     pub redirect: Option<bool>,
+    pub collection_get_empty: bool,
     pub credentials: C,
 }
 
@@ -353,6 +369,7 @@ where
             indexfile,
             read_buf_size,
             redirect,
+            collection_get_empty,
         } = cfg;
         let allow_infinity_depth = allow_infinity_depth.unwrap_or(false);
         Self {
@@ -376,6 +393,7 @@ where
             indexfile,
             read_buf_size,
             redirect,
+            collection_get_empty: collection_get_empty.unwrap_or(false),
             credentials,
         }
     }
