@@ -102,10 +102,16 @@ pub fn create_supported_address_data() -> Element {
 }
 
 pub fn create_addressbook_home_set(prefix: &str, path: &str) -> Element {
+    addressbook_home_set(prefix, path, "D")
+}
+
+/// Like [`create_addressbook_home_set`], with `dav_pfx` as the prefix of the DAV: namespace.
+pub(crate) fn addressbook_home_set(prefix: &str, path: &str, dav_pfx: &str) -> Element {
     let mut elem = Element::new("CARD:addressbook-home-set");
     elem.namespace = Some(NS_CARDDAV_URI.to_string());
 
-    let mut href = Element::new("D:href");
+    let mut href = Element::new("href");
+    href.prefix = Some(dav_pfx.to_string());
     href.namespace = Some("DAV:".to_string());
     href.children
         .push(xmltree::XMLNode::Text(format!("{prefix}{path}")));

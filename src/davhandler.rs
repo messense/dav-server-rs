@@ -79,6 +79,34 @@ pub struct DavConfig<C = ()> {
     pub(crate) redirect: Option<bool>,
     // Does GET on a collection return an empty 200. Default: `false`.
     pub(crate) collection_get_empty: Option<bool>,
+    // Namespace prefix for DAV: in XML responses. Default: `D`.
+    pub(crate) dav_prefix: Option<String>,
+}
+
+/// Prefixes that dav-server declares for other namespaces in its responses.
+const RESERVED_PREFIXES: [&str; 6] = ["A", "Z", "C", "CARD", "oc", "nc"];
+
+/// Checks that `prefix` can be used for the DAV: namespace: an XML namespace prefix
+/// (ASCII only) that is not reserved by XML and not used by dav-server for another
+/// namespace.
+fn check_dav_prefix(prefix: &str) -> Result<(), String> {
+    let mut chars = prefix.chars();
+    let valid = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+    if !valid {
+        return Err(format!("{prefix:?} is not a valid XML namespace prefix"));
+    }
+    if prefix.to_ascii_lowercase().starts_with("xml") {
+        return Err(format!("{prefix:?} is reserved by XML"));
+    }
+    if RESERVED_PREFIXES.contains(&prefix) {
+        return Err(format!(
+            "{prefix:?} is used by dav-server for another namespace"
+        ));
+    }
+    Ok(())
 }
 
 impl<C> DavConfig<C> {
@@ -199,6 +227,28 @@ impl<C> DavConfig<C> {
         this
     }
 
+    /// Namespace prefix for the `DAV:` namespace in XML responses (default is `D`).
+    ///
+    /// The prefix does not change the meaning of a response, but some clients look up
+    /// elements by their literal names. The Nextcloud iOS app, for example, only finds
+    /// `d:multistatus`, `d:response` and so on, as Nextcloud writes them, so a server for
+    /// those clients needs `dav_prefix("d")`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `prefix` is not a valid XML namespace prefix (ASCII only), starts with
+    /// `xml`, or is one of the prefixes dav-server uses for other namespaces: `A`, `Z`,
+    /// `C`, `CARD`, `oc` and `nc`.
+    pub fn dav_prefix(self, prefix: impl Into<String>) -> Self {
+        let prefix = prefix.into();
+        if let Err(e) = check_dav_prefix(&prefix) {
+            panic!("DavConfig::dav_prefix: {e}");
+        }
+        let mut this = self;
+        this.dav_prefix = Some(prefix);
+        this
+    }
+
     fn merge(&self, new: Self) -> Self {
         Self {
             prefix: new.prefix.or_else(|| self.prefix.clone()),
@@ -214,6 +264,7 @@ impl<C> DavConfig<C> {
             read_buf_size: new.read_buf_size.or(self.read_buf_size),
             redirect: new.redirect.or(self.redirect),
             collection_get_empty: new.collection_get_empty.or(self.collection_get_empty),
+            dav_prefix: new.dav_prefix.or_else(|| self.dav_prefix.clone()),
         }
     }
 }
@@ -237,6 +288,7 @@ pub(crate) struct DavInner<C> {
     pub read_buf_size: Option<usize>,
     pub redirect: Option<bool>,
     pub collection_get_empty: bool,
+    pub dav_prefix: String,
     pub credentials: C,
 }
 
@@ -370,6 +422,7 @@ where
             read_buf_size,
             redirect,
             collection_get_empty,
+            dav_prefix,
         } = cfg;
         let allow_infinity_depth = allow_infinity_depth.unwrap_or(false);
         Self {
@@ -394,6 +447,7 @@ where
             read_buf_size,
             redirect,
             collection_get_empty: collection_get_empty.unwrap_or(false),
+            dav_prefix: dav_prefix.unwrap_or_else(|| "D".to_string()),
             credentials,
         }
     }
@@ -655,6 +709,24 @@ where
             DavMethod::MkCalendar => Err(DavError::StatusClose(StatusCode::NOT_IMPLEMENTED)),
             #[cfg(not(feature = "carddav"))]
             DavMethod::MkAddressbook => Err(DavError::StatusClose(StatusCode::NOT_IMPLEMENTED)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::check_dav_prefix;
+
+    #[test]
+    fn dav_prefix_check() {
+        for ok in ["d", "D", "dav", "_x", "a1.b-c"] {
+            assert!(check_dav_prefix(ok).is_ok(), "{ok:?}");
+        }
+        for bad in [
+            "", "1d", "-d", ".d", "a:b", "d d", "d\u{e9}", "xml", "XMLfoo", "A", "Z", "C", "CARD",
+            "oc", "nc",
+        ] {
+            assert!(check_dav_prefix(bad).is_err(), "{bad:?}");
         }
     }
 }

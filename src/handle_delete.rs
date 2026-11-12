@@ -172,6 +172,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
 
         let req_path = path.clone();
 
+        let dav_prefix = self.dav_prefix.clone();
         let items = AsyncStream::new(|tx| {
             async move {
                 // turn the Sink into something easier to pass around.
@@ -191,6 +192,6 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             }
         });
 
-        multi_error(req_path, items).await
+        multi_error(req_path, dav_prefix, items).await
     }
 }

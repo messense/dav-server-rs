@@ -5,6 +5,7 @@ use futures_util::{Stream, StreamExt};
 use http::{Response, StatusCode};
 use xml::EmitterConfig;
 use xml::common::XmlVersion;
+use xml::name::Name;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
 
@@ -49,17 +50,24 @@ where
     Ok(())
 }
 
-fn write_response(w: &mut XmlWriter, path: &DavPath, sc: StatusCode) -> Result<(), DavError> {
-    w.write(XmlWEvent::start_element("D:response"))?;
+fn write_response(
+    w: &mut XmlWriter,
+    pfx: &str,
+    path: &DavPath,
+    sc: StatusCode,
+) -> Result<(), DavError> {
+    w.write(XmlWEvent::start_element(Name::prefixed("response", pfx)))?;
     let p = path.with_prefix().as_url_string();
-    write_elem(w, "D:href", &p)?;
-    write_elem(w, "D:status", &format!("HTTP/1.1 {sc}"))?;
+    write_elem(w, Name::prefixed("href", pfx), &p)?;
+    write_elem(w, Name::prefixed("status", pfx), &format!("HTTP/1.1 {sc}"))?;
     w.write(XmlWEvent::end_element())?;
     Ok(())
 }
 
+/// `pfx` is the prefix for the DAV: namespace.
 pub(crate) async fn multi_error<S>(
     req_path: DavPath,
+    pfx: String,
     status_stream: S,
 ) -> Result<Response<Body>, DavError>
 where
@@ -118,8 +126,11 @@ where
                 standalone: None,
             })
             .map_err(DavError::from)?;
-            xw.write(XmlWEvent::start_element("D:multistatus").ns("D", "DAV:"))
-                .map_err(DavError::from)?;
+            xw.write(
+                XmlWEvent::start_element(Name::prefixed("multistatus", &pfx))
+                    .ns(pfx.as_str(), "DAV:"),
+            )
+            .map_err(DavError::from)?;
             let data = xw.inner_mut().take();
             tx.send(data).await;
 
@@ -132,7 +143,7 @@ where
                 } else {
                     status
                 };
-                write_response(&mut xw, &path, status)?;
+                write_response(&mut xw, &pfx, &path, status)?;
                 let data = xw.inner_mut().take();
                 tx.send(data).await;
             }
@@ -153,4 +164,39 @@ where
         .body(Body::from(body))
         .unwrap();
     Ok(resp)
+}
+
+#[cfg(test)]
+mod tests {
+    use futures_util::StreamExt;
+    use http::StatusCode;
+
+    use super::multi_error;
+    use crate::davpath::DavPath;
+
+    #[tokio::test]
+    async fn multi_error_uses_the_dav_prefix() {
+        let items = futures_util::stream::iter(vec![Ok((
+            DavPath::new("/dir/locked.txt").unwrap(),
+            StatusCode::LOCKED,
+        ))]);
+        let mut resp = multi_error(DavPath::new("/dir/").unwrap(), "d".to_string(), items)
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::MULTI_STATUS);
+        let mut body = Vec::new();
+        while let Some(chunk) = resp.body_mut().next().await {
+            body.extend_from_slice(&chunk.unwrap());
+        }
+        let body = String::from_utf8(body).unwrap();
+        let tree = xmltree::Element::parse(body.as_bytes()).unwrap();
+        assert_eq!(tree.namespace.as_deref(), Some("DAV:"), "{body}");
+        assert!(body.contains(r#"<d:multistatus xmlns:d="DAV:">"#), "{body}");
+        assert!(body.contains("<d:href>/dir/locked.txt</d:href>"), "{body}");
+        assert!(
+            body.contains("<d:status>HTTP/1.1 423 Locked</d:status>"),
+            "{body}"
+        );
+        assert!(!body.contains("D:"), "{body}");
+    }
 }
