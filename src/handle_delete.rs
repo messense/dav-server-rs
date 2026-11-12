@@ -58,6 +58,13 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 };
             }
 
+            // The file system may remove the whole collection at once.
+            match self.fs.remove_tree(path, &self.credentials).await {
+                Ok(()) => return Ok(()),
+                Err(FsError::NotImplemented) => {}
+                Err(e) => return Err(add_status(res, path, e).await),
+            }
+
             // walk over all entries.
             let mut entries = match self
                 .fs

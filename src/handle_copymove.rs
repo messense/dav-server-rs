@@ -58,6 +58,19 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                 };
             }
 
+            // The file system may copy the whole collection at once, unless the
+            // destination is inside it.
+            if depth == Depth::Infinity && !topdest.as_bytes().starts_with(source.as_bytes()) {
+                match self.fs.copy_tree(source, dest, &self.credentials).await {
+                    Ok(()) => return Ok(()),
+                    Err(FsError::NotImplemented) => {}
+                    Err(e) => {
+                        debug!("do_copy: self.fs.copy_tree error: {e:?}");
+                        return add_status(multierror, source, e).await;
+                    }
+                }
+            }
+
             // Copying a directory onto an existing directory with Depth 0
             // is not an error. It means "only copy properties" (which
             // we do not do yet).
