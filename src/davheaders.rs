@@ -132,17 +132,23 @@ impl Header for XOcCTime {
     }
 }
 
-/// Parse a Unix timestamp (seconds since epoch) as a decimal integer.
-/// Non-digit characters are rejected, matching Apache `DavHonorMtimeHeader`.
+/// Parse a Unix timestamp (seconds since epoch): decimal digits, optionally followed by a
+/// fractional part (`.` and at least one digit), which is truncated to whole seconds.
+///
+/// Nextcloud clients built on NextcloudKit (the iOS app) send the fraction, for example
+/// `1700000000.123456`. Apache `DavHonorMtimeHeader` rejects that form; it is accepted here
+/// so that those clients can upload. Signs, whitespace and exponents are still rejected.
 fn decode_unix_timestamp<'i, I>(values: &mut I) -> Result<SystemTime, headers::Error>
 where
     I: Iterator<Item = &'i HeaderValue>,
 {
     let raw = one(values)?.to_str().map_err(map_invalid)?;
-    if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
+    let (whole, fraction) = raw.split_once('.').unwrap_or((raw, "0"));
+    let all_digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    if !all_digits(whole) || !all_digits(fraction) {
         return Err(invalid());
     }
-    let secs = raw.parse::<u64>().map_err(map_invalid)?;
+    let secs = whole.parse::<u64>().map_err(map_invalid)?;
     UNIX_EPOCH
         .checked_add(Duration::from_secs(secs))
         .ok_or_else(invalid)
@@ -935,7 +941,37 @@ mod tests {
         let hdr = XOcMTime::decode(&mut iter).unwrap();
         assert_eq!(hdr.0, UNIX_EPOCH + Duration::from_secs(1675789581));
 
-        for invalid_val in ["", "not-a-time", "-1", "12.5", "+1", " 1"] {
+        // A fractional part is accepted and truncated to whole seconds.
+        for (val, secs) in [
+            ("1675789581.123456", 1675789581),
+            ("1675789581.999", 1675789581),
+            ("12.5", 12),
+            ("0.0", 0),
+        ] {
+            let hdrval = HeaderValue::from_static(val);
+            let mut iter = std::iter::once(&hdrval);
+            let hdr = XOcMTime::decode(&mut iter).unwrap();
+            assert_eq!(hdr.0, UNIX_EPOCH + Duration::from_secs(secs), "{val:?}");
+            let mut iter = std::iter::once(&hdrval);
+            let hdr = XOcCTime::decode(&mut iter).unwrap();
+            assert_eq!(hdr.0, UNIX_EPOCH + Duration::from_secs(secs), "{val:?}");
+        }
+
+        for invalid_val in [
+            "",
+            "not-a-time",
+            "-1",
+            "+1",
+            " 1",
+            "1 ",
+            "12.",
+            ".5",
+            "1.2.3",
+            "-1.5",
+            "1e9",
+            "1.5e3",
+            "12.5s",
+        ] {
             let hdrval = HeaderValue::from_static(invalid_val);
             let mut iter = std::iter::once(&hdrval);
             assert!(

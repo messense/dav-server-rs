@@ -71,7 +71,9 @@ The ownCloud/Nextcloud `X-OC-MTime` and `X-OC-CTime` request headers are
 honored on `PUT` and `MKCOL` so sync clients can preserve original
 modification and creation times. When the filesystem backend accepts a
 timestamp, the response includes `X-OC-MTime: accepted` and/or
-`X-OC-CTime: accepted`. A malformed timestamp yields `400 Bad Request`.
+`X-OC-CTime: accepted`. Timestamps are Unix seconds; a fractional part, as
+sent by the Nextcloud iOS app, is accepted and truncated. A malformed
+timestamp yields `400 Bad Request`.
 
 `PROPPATCH` of Windows Explorer's `Win32LastModifiedTime` is applied via
 the same `set_modified` backend. The 207 still reports 200 for that
