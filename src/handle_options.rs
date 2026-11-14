@@ -69,7 +69,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             mm(&mut v, "OPTIONS", DavMethod::Options);
             mm(&mut v, "PROPFIND", DavMethod::PropFind);
             mm(&mut v, "COPY", DavMethod::Copy);
-            if path.as_url_string() != "/" {
+            if path.as_bytes() != b"/" {
                 mm(&mut v, "MOVE", DavMethod::Move);
                 mm(&mut v, "DELETE", DavMethod::Delete);
             }

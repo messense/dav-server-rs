@@ -201,6 +201,12 @@ impl DavPath {
         DavPathRef::new(&self.fullpath)
     }
 
+    /// Return the full URL path, URL encoded, including the configured prefix.
+    pub fn as_url_string(&self) -> String {
+        let p = encode_path(&self.fullpath);
+        std::string::String::from_utf8(p).unwrap()
+    }
+
     /// from URL encoded path and non-encoded prefix.
     pub(crate) fn from_str_and_prefix(src: &str, prefix: &str) -> Result<DavPath, ParseError> {
         let path = normalize_path(src.as_bytes())?;
@@ -429,5 +435,32 @@ impl DavPathRef {
             return t;
         }
         "application/octet-stream"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DavPath;
+
+    #[test]
+    fn as_url_string_includes_prefix() {
+        let path = DavPath::from_str_and_prefix(
+            "/remote.php/dav/calendars/Admin (User)/event.ics",
+            "/remote.php/dav",
+        )
+        .unwrap();
+
+        assert_eq!(
+            path.as_url_string(),
+            "/remote.php/dav/calendars/Admin%20%28User%29/event.ics"
+        );
+        assert_eq!(
+            path.with_prefix().as_url_string(),
+            "/remote.php/dav/calendars/Admin%20%28User%29/event.ics"
+        );
+        assert_eq!(
+            path.as_bytes(),
+            b"/calendars/Admin (User)/event.ics".as_slice()
+        );
     }
 }
