@@ -327,8 +327,11 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         let (name, props) = match root {
             None => ("allprop", Vec::new()),
             Some(mut elem) => {
+                // RFC 4918 names the element <include>; <includes> is still
+                // accepted, as earlier versions read only that name.
                 let includes = elem
-                    .take_child("includes")
+                    .take_child("include")
+                    .or_else(|| elem.take_child("includes"))
                     .map_or(Vec::new(), |n| n.take_child_elems());
                 match elem
                     .child_elems_into_iter()
@@ -1193,12 +1196,18 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         });
                     }
                     "supportedlock" => {
+                        if !docontent {
+                            return self.build_elem(false, pfx, prop, "");
+                        }
                         return Ok(StatusElement {
                             status: StatusCode::OK,
                             element: list_supportedlock(self.ls.as_ref()),
                         });
                     }
                     "lockdiscovery" => {
+                        if !docontent {
+                            return self.build_elem(false, pfx, prop, "");
+                        }
                         return Ok(StatusElement {
                             status: StatusCode::OK,
                             element: list_lockdiscovery(self.ls.as_ref(), path).await,
@@ -1496,12 +1505,18 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             }
         }
 
-        // and list props of the filesystem driver if it supports DAV properties
+        // and list props of the filesystem driver if it supports DAV properties:
+        // all of them for allprop (with values) and propname (names only), and for
+        // prop only those that were requested and not found above, since a
+        // filesystem may provide some properties through get_props only.
         if self.fs.have_props(path, &self.credentials).await
-            && let Ok(v) = self.fs.get_props(path, true, &self.credentials).await
+            && let Ok(v) = self.fs.get_props(path, do_content, &self.credentials).await
         {
             for prop in v {
-                remove_found(&mut not_found, prop.namespace.as_deref(), &prop.name);
+                let requested = remove_found(&mut not_found, prop.namespace.as_deref(), &prop.name);
+                if self.name == "prop" && !requested {
+                    continue;
+                }
                 add_sc_elem(&mut props, StatusCode::OK, davprop_to_element(prop));
             }
         }
@@ -1696,12 +1711,15 @@ fn failed_dependency(ret: Vec<(StatusCode, DavProp)>) -> Vec<(StatusCode, DavPro
 }
 
 /// Drops the requested property `namespace:name` from `not_found`, it was found after all.
+/// Removes the property from `not_found`. Returns whether it was there.
 fn remove_found(
     not_found: &mut Vec<(&Element, StatusElement)>,
     namespace: Option<&str>,
     name: &str,
-) {
+) -> bool {
+    let before = not_found.len();
     not_found.retain(|(p, _)| p.namespace.as_deref() != namespace || p.name != name);
+    not_found.len() != before
 }
 
 /// An empty element in the DAV: namespace.
