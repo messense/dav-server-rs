@@ -365,6 +365,21 @@ pub trait DavFileSystem {
     fn get_quota(&'_ self) -> FsFuture<'_, (u64, Option<u64>)> {
         notimplemented_fut!("get_quota")
     }
+
+    /// Get the quota of the collection at `path` (used/total space).
+    ///
+    /// This is used for the `quota-used-bytes` and `quota-available-bytes` properties
+    /// of collections. The first value returned is the amount of space used by the
+    /// collection and its members, the second optional value is that amount plus the
+    /// space still available to the collection.
+    ///
+    /// The default implementation returns [`FsError::NotImplemented`]. Collections then
+    /// report the filesystem-wide values from [`get_quota`](Self::get_quota), which is
+    /// called at most once per request.
+    #[allow(unused_variables)]
+    fn get_quota_at<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, (u64, Option<u64>)> {
+        notimplemented_fut!("get_quota_at")
+    }
 }
 
 /// File system with access control. Type parameter `C` (credentials) represents
@@ -663,6 +678,25 @@ where
     fn get_quota<'a>(&'a self, credentials: &'a C) -> FsFuture<'a, (u64, Option<u64>)> {
         notimplemented_fut!("get_quota")
     }
+
+    /// Get the quota of the collection at `path` (used/total space).
+    ///
+    /// This is used for the `quota-used-bytes` and `quota-available-bytes` properties
+    /// of collections. The first value returned is the amount of space used by the
+    /// collection and its members, the second optional value is that amount plus the
+    /// space still available to the collection.
+    ///
+    /// The default implementation returns [`FsError::NotImplemented`]. Collections then
+    /// report the filesystem-wide values from [`get_quota`](Self::get_quota), which is
+    /// called at most once per request.
+    #[allow(unused_variables)]
+    fn get_quota_at<'a>(
+        &'a self,
+        path: &'a DavPath,
+        credentials: &'a C,
+    ) -> FsFuture<'a, (u64, Option<u64>)> {
+        notimplemented_fut!("get_quota_at")
+    }
 }
 
 clone_trait_object! {<C> GuardedFileSystem<C>}
@@ -818,6 +852,14 @@ impl<Fs: DavFileSystem + Clone + Send + Sync> GuardedFileSystem<()> for Fs {
 
     fn get_quota(&'_ self, _credentials: &()) -> FsFuture<'_, (u64, Option<u64>)> {
         DavFileSystem::get_quota(self)
+    }
+
+    fn get_quota_at<'a>(
+        &'a self,
+        path: &'a DavPath,
+        _credentials: &(),
+    ) -> FsFuture<'a, (u64, Option<u64>)> {
+        DavFileSystem::get_quota_at(self, path)
     }
 }
 
