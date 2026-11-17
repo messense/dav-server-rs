@@ -13,10 +13,12 @@ mod copymove_dest_status_tests {
         },
         memfs::MemFs,
     };
+    use futures_util::StreamExt;
     use http::{Request, StatusCode};
 
     /// A `MemFs` that refuses to create `/refused/`, to remove `/keep.txt`, and to copy
-    /// to `/new/bad.txt`.
+    /// to `/new/bad.txt`. In a directory listing of `/full/`, the metadata of
+    /// `broken.txt` cannot be read.
     #[derive(Clone)]
     struct RefuseFs {
         inner: MemFs,
@@ -24,6 +26,19 @@ mod copymove_dest_status_tests {
 
     fn refuse<'a>() -> FsFuture<'a, ()> {
         Box::pin(async { Err(FsError::Forbidden) })
+    }
+
+    /// A directory entry whose metadata cannot be read.
+    struct BrokenEntry(Box<dyn DavDirEntry>);
+
+    impl DavDirEntry for BrokenEntry {
+        fn name(&self) -> Vec<u8> {
+            self.0.name()
+        }
+
+        fn metadata(&'_ self) -> FsFuture<'_, Box<dyn DavMetaData>> {
+            Box::pin(async { Err(FsError::Forbidden) })
+        }
     }
 
     impl DavFileSystem for RefuseFs {
@@ -40,7 +55,22 @@ mod copymove_dest_status_tests {
             path: &'a DavPath,
             meta: ReadDirMeta,
         ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
-            self.inner.read_dir(path, meta)
+            Box::pin(async move {
+                let entries = self.inner.read_dir(path, meta).await?;
+                if path.as_url_string() != "/full/" {
+                    return Ok(entries);
+                }
+                let entries = entries.map(|entry| {
+                    entry.map(|e| {
+                        if e.name() == b"broken.txt" {
+                            Box::new(BrokenEntry(e)) as Box<dyn DavDirEntry>
+                        } else {
+                            e
+                        }
+                    })
+                });
+                Ok(Box::pin(entries) as FsStream<Box<dyn DavDirEntry>>)
+            })
         }
 
         fn metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
@@ -73,7 +103,8 @@ mod copymove_dest_status_tests {
         }
     }
 
-    /// A server with `/a.txt`, `/keep.txt`, `/dir/bad.txt` and `/dir/good.txt`.
+    /// A server with `/a.txt`, `/keep.txt`, `/dir/bad.txt`, `/dir/good.txt`,
+    /// `/full/broken.txt` and `/full/ok.txt`.
     async fn setup() -> DavHandler {
         let server = DavHandler::builder()
             .filesystem(Box::new(RefuseFs {
@@ -87,6 +118,9 @@ mod copymove_dest_status_tests {
             ("MKCOL", "/dir/"),
             ("PUT", "/dir/bad.txt"),
             ("PUT", "/dir/good.txt"),
+            ("MKCOL", "/full/"),
+            ("PUT", "/full/broken.txt"),
+            ("PUT", "/full/ok.txt"),
         ] {
             let req = Request::builder()
                 .method(method)
@@ -135,5 +169,27 @@ mod copymove_dest_status_tests {
             request(&server, "COPY", "/dir/", "/new/").await,
             StatusCode::MULTI_STATUS
         );
+    }
+
+    /// When a member of an existing destination cannot be removed, the destination is
+    /// left partly removed, so the answer is a 207 for that member. DELETE answers the
+    /// same way.
+    #[tokio::test]
+    async fn a_failed_member_of_the_destination_answers_207() {
+        for method in ["COPY", "MOVE"] {
+            let server = setup().await;
+            assert_eq!(
+                request(&server, method, "/dir/", "/full/").await,
+                StatusCode::MULTI_STATUS,
+                "{method}"
+            );
+        }
+        let server = setup().await;
+        let req = Request::builder()
+            .method("DELETE")
+            .uri("/full/")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(server.handle(req).await.status(), StatusCode::MULTI_STATUS);
     }
 }

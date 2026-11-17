@@ -85,18 +85,19 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     }
                 };
 
-                // if metadata() fails, skip to next entry.
+                let mut npath = path.clone();
+                npath.push_segment(&dirent.name());
+
+                // if metadata() fails, skip to next entry. The error is reported for
+                // the entry, not for this collection: other entries may be removed.
                 // NOTE: dirent.metadata == symlink_metadata (!)
                 let meta = match dirent.metadata().await {
                     Ok(m) => m,
                     Err(e) => {
-                        result = Err(add_status(res, path, e).await);
+                        result = Err(add_status(res, &npath, e).await);
                         continue;
                     }
                 };
-
-                let mut npath = path.clone();
-                npath.push_segment(&dirent.name());
                 npath.add_slash_if(meta.is_dir());
 
                 // do the actual work. If this fails with a non-fs related error,
