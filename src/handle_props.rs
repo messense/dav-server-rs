@@ -11,6 +11,7 @@ use http::{Request, Response, StatusCode};
 use crate::{DavOptionHide, xmltree_ext::*};
 use xml::EmitterConfig;
 use xml::common::XmlVersion;
+use xml::name::Name;
 use xml::namespace::Namespace;
 use xml::writer::EventWriter;
 use xml::writer::XmlEvent as XmlWEvent;
@@ -249,6 +250,8 @@ pub(crate) struct PropWriter<C> {
     q_cache: QuotaCache,
     credentials: C,
     principal: Option<String>,
+    // Prefix for the DAV: namespace.
+    dav_pfx: String,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -300,7 +303,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
                     // RFC 4918, section 9.1.1: 403 with the
                     // propfind-finite-depth precondition code.
                     *res.status_mut() = StatusCode::FORBIDDEN;
-                    *res.body_mut() = dav_xml_error("<D:propfind-finite-depth/>");
+                    *res.body_mut() = dav_xml_error(&self.dav_prefix, "propfind-finite-depth");
                     return Ok(res);
                 }
                 davheaders::Depth::Infinity
@@ -363,6 +366,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             self.ls.as_ref(),
             self.principal.clone(),
             self.credentials.clone(),
+            &self.dav_prefix,
             #[cfg(any(feature = "caldav", feature = "carddav"))]
             &path,
         )?;
@@ -736,9 +740,16 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
         // group by statuscode.
         let mut hm = HashMap::new();
         for (code, prop) in ret.into_iter() {
-            hm.entry(code).or_insert_with(Vec::new);
-            let v = hm.get_mut(&code).unwrap();
-            v.push(davprop_to_element(prop));
+            let mut elem = davprop_to_element(prop);
+            // Name DAV: properties with the prefix of the response, not with the one
+            // of the request. Their content is kept as it is.
+            if elem.namespace.as_deref() == Some(NS_DAV_URI)
+                && let Some(fixed) =
+                    PropWriter::<C>::fix_prop_namespace_prefix(&elem, &self.dav_prefix, NS_DAV_URI)
+            {
+                elem = fixed;
+            }
+            hm.entry(code).or_insert_with(Vec::new).push(elem);
         }
 
         // And reply.
@@ -751,6 +762,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             None,
             self.principal.clone(),
             self.credentials,
+            &self.dav_prefix,
             #[cfg(any(feature = "caldav", feature = "carddav"))]
             &path,
         )?;
@@ -777,6 +789,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         ls: Option<&Box<dyn DavLockSystem>>,
         principal: Option<String>,
         credentials: C,
+        dav_pfx: &str,
         #[cfg(any(feature = "caldav", feature = "carddav"))] dav_path: &DavPath,
     ) -> DavResult<Self> {
         let contenttype = "application/xml; charset=utf-8".parse().unwrap();
@@ -828,7 +841,8 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
 
         // check the prop namespaces to see what namespaces
         // we need to put in the preamble.
-        let mut ev = XmlWEvent::start_element("D:multistatus").ns("D", NS_DAV_URI);
+        let mut ev = XmlWEvent::start_element(Name::prefixed("multistatus", dav_pfx))
+            .ns(dav_pfx, NS_DAV_URI);
         if name != "propertyupdate" {
             let mut a = false;
             let mut m = false;
@@ -896,11 +910,19 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             q_cache: Default::default(),
             credentials,
             principal,
+            dav_pfx: dav_pfx.to_string(),
         })
     }
 
     pub fn set_tx(&mut self, tx: Sender) {
         self.tx = Some(tx)
+    }
+
+    /// Writes the start tag of the DAV: element `name`, with the configured prefix.
+    fn start_dav(&mut self, name: &str) -> Result<(), DavError> {
+        let name = Name::prefixed(name, &self.dav_pfx);
+        self.emitter.write(XmlWEvent::start_element(name))?;
+        Ok(())
     }
 
     /// Is `path` the URL of the current user's principal resource?
@@ -1007,16 +1029,15 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             return None;
         }
 
+        // Bind `prefix` first: `Namespace::put` keeps an existing binding, so a request
+        // that binds the same prefix to another namespace (`xmlns:d="urn:x"` next to
+        // `xmlns:z="DAV:"`) cannot take its place. The other bindings are copied over.
         let mut new_namespace = Namespace::empty();
-        for (vk, vvalue) in namespaces.iter().map(|(k, ns)| {
-            // copy all namespaces over, but fix the prefix for the requested one
-            if ns == namespace {
-                (prefix, ns)
-            } else {
-                (k, ns)
+        new_namespace.put(prefix, namespace);
+        for (k, ns) in namespaces.iter() {
+            if ns != namespace {
+                new_namespace.put(k, ns);
             }
-        }) {
-            new_namespace.put(vk, vvalue);
         }
 
         let mut cln = prop.clone();
@@ -1041,7 +1062,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
 
         match prop.namespace.as_deref() {
             Some(NS_DAV_URI) => {
-                pfx = "D";
+                pfx = self.dav_pfx.as_str();
 
                 // prop may come from the document the client sent, so it may contain different
                 // namespace prefixs than we are using.
@@ -1051,6 +1072,12 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                 let prop =
                     if let Some(new_ele) = Self::fix_prop_namespace_prefix(prop, pfx, NS_DAV_URI) {
                         cln = new_ele;
+                        &cln
+                    } else if prop.prefix.as_deref() != Some(pfx) {
+                        // The allprop and propname lists use `D`.
+                        let mut c = prop.clone();
+                        c.prefix = Some(pfx.to_string());
+                        cln = c;
                         &cln
                     } else {
                         prop
@@ -1065,26 +1092,26 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         return Ok(StatusElement {
                             status: StatusCode::OK,
                             element: Element {
-                                prefix: Some("D".to_string()),
+                                prefix: Some(pfx.to_string()),
                                 namespace: None,
                                 namespaces: Some(ns),
                                 name: "supported-report-set".to_string(),
                                 attributes: HashMap::new(),
                                 children: vec![
                                     Element::new3(
-                                        "D",
+                                        pfx,
                                         "supported-report",
                                         vec![Element::new3(
-                                            "D",
+                                            pfx,
                                             "report",
                                             vec![Element::new3("C", "calendar-query", vec![])],
                                         )],
                                     ),
                                     Element::new3(
-                                        "D",
+                                        pfx,
                                         "supported-report",
                                         vec![Element::new3(
-                                            "D",
+                                            pfx,
                                             "report",
                                             vec![Element::new3("C", "calendar-multiget", vec![])],
                                         )],
@@ -1140,7 +1167,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                     "resourcetype" => {
                         let mut elem = prop.clone();
                         if meta.is_dir() && docontent {
-                            let dir = Element::new2("D:collection");
+                            let dir = dav_elem(pfx, "collection");
                             elem.children.push(XMLNode::Element(dir));
 
                             #[cfg(feature = "caldav")]
@@ -1157,7 +1184,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
 
                             // RFC3744 principal resource.
                             if is_principal {
-                                let principal = Element::new2("D:principal");
+                                let principal = dav_elem(pfx, "principal");
                                 elem.children.push(XMLNode::Element(principal));
                             }
                         }
@@ -1172,7 +1199,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                     "current-user-principal" => {
                         if let Some(pr) = &self.principal {
                             let mut elem = prop.clone();
-                            let mut principal_href = Element::new2("D:href");
+                            let mut principal_href = dav_elem(pfx, "href");
                             principal_href = principal_href.text(pr.clone());
                             elem.children
                                 .push(xmltree::XMLNode::Element(principal_href));
@@ -1188,7 +1215,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             return self.build_elem(false, pfx, prop, "");
                         }
                         let mut elem = prop.clone();
-                        let mut href = Element::new2("D:href");
+                        let mut href = dav_elem(pfx, "href");
                         href = href.text(path.with_prefix().as_url_string());
                         elem.children.push(xmltree::XMLNode::Element(href));
                         return Ok(StatusElement {
@@ -1202,7 +1229,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                             return self.build_elem(false, pfx, prop, "");
                         }
                         let mut elem = prop.clone();
-                        let mut href = Element::new2("D:href");
+                        let mut href = dav_elem(pfx, "href");
                         href = href.text(path.with_prefix().as_url_string());
                         elem.children.push(xmltree::XMLNode::Element(href));
                         return Ok(StatusElement {
@@ -1218,7 +1245,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         }
                         return Ok(StatusElement {
                             status: StatusCode::OK,
-                            element: create_supported_privilege_set(),
+                            element: create_supported_privilege_set(pfx),
                         });
                     }
                     "supportedlock" => {
@@ -1227,7 +1254,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         }
                         return Ok(StatusElement {
                             status: StatusCode::OK,
-                            element: list_supportedlock(self.ls.as_ref()),
+                            element: list_supportedlock(self.ls.as_ref(), pfx),
                         });
                     }
                     "lockdiscovery" => {
@@ -1236,7 +1263,7 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                         }
                         return Ok(StatusElement {
                             status: StatusCode::OK,
-                            element: list_lockdiscovery(self.ls.as_ref(), path).await,
+                            element: list_lockdiscovery(self.ls.as_ref(), path, pfx).await,
                         });
                     }
                     "quota-available-bytes" => {
@@ -1280,9 +1307,10 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                 {
                     return Ok(StatusElement {
                         status: StatusCode::OK,
-                        element: create_calendar_home_set(
+                        element: calendar_home_set(
                             path.prefix(),
                             DEFAULT_CALDAV_DIRECTORY_ENDSLASH,
+                            &self.dav_pfx,
                         ),
                     });
                 }
@@ -1354,9 +1382,10 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
                 {
                     return Ok(StatusElement {
                         status: StatusCode::OK,
-                        element: create_addressbook_home_set(
+                        element: addressbook_home_set(
                             path.prefix(),
                             DEFAULT_CARDDAV_DIRECTORY_ENDSLASH,
+                            &self.dav_pfx,
                         ),
                     });
                 }
@@ -1512,8 +1541,11 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             if path_string == DEFAULT_CALDAV_DIRECTORY
                 || path_string == DEFAULT_CALDAV_DIRECTORY_ENDSLASH
             {
-                let elem =
-                    create_calendar_home_set(path.prefix(), DEFAULT_CALDAV_DIRECTORY_ENDSLASH);
+                let elem = calendar_home_set(
+                    path.prefix(),
+                    DEFAULT_CALDAV_DIRECTORY_ENDSLASH,
+                    &self.dav_pfx,
+                );
                 add_sc_elem(&mut props, StatusCode::OK, elem);
                 remove_found(&mut not_found, Some(NS_CALDAV_URI), "calendar-home-set");
             }
@@ -1525,8 +1557,11 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
             if path_string == DEFAULT_CARDDAV_DIRECTORY
                 || path_string == DEFAULT_CARDDAV_DIRECTORY_ENDSLASH
             {
-                let elem =
-                    create_addressbook_home_set(path.prefix(), DEFAULT_CARDDAV_DIRECTORY_ENDSLASH);
+                let elem = addressbook_home_set(
+                    path.prefix(),
+                    DEFAULT_CARDDAV_DIRECTORY_ENDSLASH,
+                    &self.dav_pfx,
+                );
                 add_sc_elem(&mut props, StatusCode::OK, elem);
                 remove_found(&mut not_found, Some(NS_CARDDAV_URI), "addressbook-home-set");
             }
@@ -1560,9 +1595,9 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         path: &DavPath,
         props: HashMap<StatusCode, Vec<Element>>,
     ) -> Result<(), DavError> {
-        self.emitter.write(XmlWEvent::start_element("D:response"))?;
+        self.start_dav("response")?;
         let p = path.with_prefix().as_url_string();
-        Element::new2("D:href")
+        dav_elem(&self.dav_pfx, "href")
             .text(p)
             .write_ev(&mut self.emitter)?;
 
@@ -1570,13 +1605,13 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         keys.sort();
         for status in keys {
             let v = props.get(status).unwrap();
-            self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
-            self.emitter.write(XmlWEvent::start_element("D:prop"))?;
+            self.start_dav("propstat")?;
+            self.start_dav("prop")?;
             for i in v.iter() {
                 i.write_ev(&mut self.emitter)?;
             }
             self.emitter.write(XmlWEvent::end_element())?;
-            Element::new2("D:status")
+            dav_elem(&self.dav_pfx, "status")
                 .text("HTTP/1.1 ".to_string() + &status.to_string())
                 .write_ev(&mut self.emitter)?;
             self.emitter.write(XmlWEvent::end_element())?;
@@ -1605,15 +1640,15 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         etag: &str,
         calendar_data: &str,
     ) -> DavResult<()> {
-        self.emitter.write(XmlWEvent::start_element("D:response"))?;
+        self.start_dav("response")?;
 
         let p = href.as_url_string();
-        Element::new2("D:href")
+        dav_elem(&self.dav_pfx, "href")
             .text(p)
             .write_ev(&mut self.emitter)?;
 
-        self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
-        self.emitter.write(XmlWEvent::start_element("D:prop"))?;
+        self.start_dav("propstat")?;
+        self.start_dav("prop")?;
 
         // Write calendar-data element with content
         let mut elem = Element::new2("C:calendar-data").ns("C", NS_CALDAV_URI);
@@ -1621,13 +1656,13 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         elem.write_ev(&mut self.emitter)?;
 
         // Write getetag element
-        Element::new2("D:getetag")
+        dav_elem(&self.dav_pfx, "getetag")
             .text(etag)
             .write_ev(&mut self.emitter)?;
 
         self.emitter.write(XmlWEvent::end_element())?; // D:prop
 
-        Element::new2("D:status")
+        dav_elem(&self.dav_pfx, "status")
             .text("HTTP/1.1 200 OK".to_string())
             .write_ev(&mut self.emitter)?;
 
@@ -1639,15 +1674,15 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
 
     #[cfg(feature = "caldav")]
     pub(crate) fn write_calendar_not_found_response(&mut self, href: &str) -> DavResult<()> {
-        self.emitter.write(XmlWEvent::start_element("D:response"))?;
+        self.start_dav("response")?;
 
-        Element::new2("D:href")
+        dav_elem(&self.dav_pfx, "href")
             .text(href.to_string())
             .write_ev(&mut self.emitter)?;
 
-        self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
+        self.start_dav("propstat")?;
 
-        Element::new2("D:status")
+        dav_elem(&self.dav_pfx, "status")
             .text("HTTP/1.1 404 Not Found".to_string())
             .write_ev(&mut self.emitter)?;
 
@@ -1664,15 +1699,15 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         etag: &str,
         vcard_data: &str,
     ) -> DavResult<()> {
-        self.emitter.write(XmlWEvent::start_element("D:response"))?;
+        self.start_dav("response")?;
 
         let p = href.as_url_string();
-        Element::new2("D:href")
+        dav_elem(&self.dav_pfx, "href")
             .text(p)
             .write_ev(&mut self.emitter)?;
 
-        self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
-        self.emitter.write(XmlWEvent::start_element("D:prop"))?;
+        self.start_dav("propstat")?;
+        self.start_dav("prop")?;
 
         // Write address-data element with content
         let mut elem = Element::new2("CARD:address-data").ns("CARD", NS_CARDDAV_URI);
@@ -1680,13 +1715,13 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
         elem.write_ev(&mut self.emitter)?;
 
         // Write getetag element
-        Element::new2("D:getetag")
+        dav_elem(&self.dav_pfx, "getetag")
             .text(etag)
             .write_ev(&mut self.emitter)?;
 
         self.emitter.write(XmlWEvent::end_element())?; // D:prop
 
-        Element::new2("D:status")
+        dav_elem(&self.dav_pfx, "status")
             .text("HTTP/1.1 200 OK".to_string())
             .write_ev(&mut self.emitter)?;
 
@@ -1698,15 +1733,15 @@ impl<C: Clone + Send + Sync + 'static> PropWriter<C> {
 
     #[cfg(feature = "carddav")]
     pub(crate) fn write_vcard_not_found_response(&mut self, href: &str) -> DavResult<()> {
-        self.emitter.write(XmlWEvent::start_element("D:response"))?;
+        self.start_dav("response")?;
 
-        Element::new2("D:href")
+        dav_elem(&self.dav_pfx, "href")
             .text(href.to_string())
             .write_ev(&mut self.emitter)?;
 
-        self.emitter.write(XmlWEvent::start_element("D:propstat"))?;
+        self.start_dav("propstat")?;
 
-        Element::new2("D:status")
+        dav_elem(&self.dav_pfx, "status")
             .text("HTTP/1.1 404 Not Found".to_string())
             .write_ev(&mut self.emitter)?;
 
@@ -1749,18 +1784,11 @@ fn remove_found(
     not_found.len() != before
 }
 
-/// An empty element in the DAV: namespace.
-fn dav_empty(name: &str) -> Element {
-    let mut e = Element::new(name);
-    e.prefix = Some("D".to_string());
-    e
-}
-
 /// A `<D:privilege>` element containing the named privileges.
-fn dav_privilege(names: &[&str]) -> Element {
-    let mut e = dav_empty("privilege");
+fn dav_privilege(pfx: &str, names: &[&str]) -> Element {
+    let mut e = dav_elem(pfx, "privilege");
     for n in names {
-        e.children.push(XMLNode::Element(dav_empty(n)));
+        e.children.push(XMLNode::Element(dav_elem(pfx, n)));
     }
     e
 }
@@ -1768,8 +1796,8 @@ fn dav_privilege(names: &[&str]) -> Element {
 /// A `<D:description>` element with the language required by RFC3744
 /// section 5.3 ("Servers MUST indicate the human language ... using the
 /// xml:lang attribute").
-fn dav_description(text: &str) -> Element {
-    let mut e = dav_empty("description");
+fn dav_description(pfx: &str, text: &str) -> Element {
+    let mut e = dav_elem(pfx, "description");
     e.attributes
         .insert("xml:lang".to_string(), "en".to_string());
     e.text(text)
@@ -1780,14 +1808,15 @@ fn dav_description(text: &str) -> Element {
 ///
 /// Element order follows RFC3744 section 5.3:
 /// `(privilege, abstract?, description, supported-privilege*)`.
-fn dav_supported_privilege(name: &str, description: &str, is_abstract: bool) -> Element {
-    let mut e = dav_empty("supported-privilege");
-    e.children.push(XMLNode::Element(dav_privilege(&[name])));
+fn dav_supported_privilege(pfx: &str, name: &str, description: &str, is_abstract: bool) -> Element {
+    let mut e = dav_elem(pfx, "supported-privilege");
+    e.children
+        .push(XMLNode::Element(dav_privilege(pfx, &[name])));
     if is_abstract {
-        e.children.push(XMLNode::Element(dav_empty("abstract")));
+        e.children.push(XMLNode::Element(dav_elem(pfx, "abstract")));
     }
     e.children
-        .push(XMLNode::Element(dav_description(description)));
+        .push(XMLNode::Element(dav_description(pfx, description)));
     e
 }
 
@@ -1795,10 +1824,10 @@ fn dav_supported_privilege(name: &str, description: &str, is_abstract: bool) -> 
 ///
 /// This describes which privileges exist on a resource; it does not say
 /// anything about the privileges of the current user.
-fn create_supported_privilege_set() -> Element {
+fn create_supported_privilege_set(pfx: &str) -> Element {
     // RFC3744 section 3.12: DAV:write MUST contain DAV:bind, DAV:unbind,
     // DAV:write-properties and DAV:write-content.
-    let mut write = dav_supported_privilege("write", "Write any object", false);
+    let mut write = dav_supported_privilege(pfx, "write", "Write any object", false);
     for (name, description) in [
         ("bind", "Add a member to a collection"),
         ("unbind", "Remove a member from a collection"),
@@ -1808,6 +1837,7 @@ fn create_supported_privilege_set() -> Element {
         write
             .children
             .push(XMLNode::Element(dav_supported_privilege(
+                pfx,
                 name,
                 description,
                 false,
@@ -1816,15 +1846,16 @@ fn create_supported_privilege_set() -> Element {
 
     // DAV:all is an aggregate privilege. Marking it abstract keeps clients
     // from trying to grant it in an ACE (RFC3744 section 3.11).
-    let mut all = dav_supported_privilege("all", "Any operation", true);
+    let mut all = dav_supported_privilege(pfx, "all", "Any operation", true);
     all.children.push(XMLNode::Element(dav_supported_privilege(
+        pfx,
         "read",
         "Read any object",
         false,
     )));
     all.children.push(XMLNode::Element(write));
 
-    let mut e = dav_empty("supported-privilege-set");
+    let mut e = dav_elem(pfx, "supported-privilege-set");
     e.children.push(XMLNode::Element(all));
     e
 }

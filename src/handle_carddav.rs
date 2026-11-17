@@ -486,6 +486,7 @@ impl<C: Clone + Send + Sync + 'static> DavInner<C> {
             self.ls.as_ref(),
             self.principal.clone(),
             self.credentials.clone(),
+            &self.dav_prefix,
             &empty_path,
         )?;
 

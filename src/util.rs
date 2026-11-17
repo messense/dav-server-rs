@@ -148,13 +148,12 @@ impl DavMethodSet {
     }
 }
 
-pub(crate) fn dav_xml_error(body: &str) -> Body {
+/// A `DAV:error` body with the empty precondition element `condition`, written with the
+/// DAV: prefix `pfx`.
+pub(crate) fn dav_xml_error(pfx: &str, condition: &str) -> Body {
     let xml = format!(
-        "{}\n{}\n{}\n{}\n",
+        "{}\n<{pfx}:error xmlns:{pfx}=\"DAV:\">\n<{pfx}:{condition}/>\n</{pfx}:error>\n",
         r#"<?xml version="1.0" encoding="utf-8" ?>"#,
-        r#"<D:error xmlns:D="DAV:">"#,
-        body,
-        r#"</D:error>"#
     );
     Body::from(xml)
 }

@@ -183,10 +183,16 @@ pub fn create_supported_calendar_data() -> Element {
 }
 
 pub fn create_calendar_home_set(prefix: &str, path: &str) -> Element {
+    calendar_home_set(prefix, path, "D")
+}
+
+/// Like [`create_calendar_home_set`], with `dav_pfx` as the prefix of the DAV: namespace.
+pub(crate) fn calendar_home_set(prefix: &str, path: &str, dav_pfx: &str) -> Element {
     let mut elem = Element::new("C:calendar-home-set");
     elem.namespace = Some(NS_CALDAV_URI.to_string());
 
-    let mut href = Element::new("D:href");
+    let mut href = Element::new("href");
+    href.prefix = Some(dav_pfx.to_string());
     href.namespace = Some("DAV:".to_string());
     href.children
         .push(xmltree::XMLNode::Text(format!("{prefix}{path}")));
