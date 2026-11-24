@@ -11,8 +11,6 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::mem;
 #[cfg(target_vendor = "apple")]
 use std::os::darwin::fs::FileTimesExt;
-#[cfg(target_os = "freebsd")]
-use std::os::unix::fs::FileTimesExt;
 #[cfg(unix)]
 use std::os::unix::{
     ffi::OsStrExt,
@@ -517,12 +515,12 @@ impl DavFileSystem for LocalFs {
     }
 
     fn set_created<'a>(&'a self, davpath: &'a DavPath, tm: SystemTime) -> FsFuture<'a, ()> {
-        #[cfg(not(any(windows, target_vendor = "apple", target_os = "freebsd")))]
+        #[cfg(not(any(windows, target_vendor = "apple")))]
         {
             let _ = (self, davpath, tm);
             Box::pin(future::ready(Err(FsError::NotImplemented)))
         }
-        #[cfg(any(windows, target_vendor = "apple", target_os = "freebsd"))]
+        #[cfg(any(windows, target_vendor = "apple"))]
         {
             async move {
                 trace!("FS: set_created {:?}", self.fspath_dbg(davpath));
